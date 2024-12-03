@@ -1,37 +1,41 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Container,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
+  Box,
+  Typography,
   Button,
+  Grid,
+  Paper,
+  Chip,
+  IconButton,
+  TableContainer,
+  Table,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
+  Tabs,
+  Tab,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   TextField,
-  IconButton,
-  Typography,
-  Grid,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
-  Chip,
-  Tabs,
-  Tab,
-  Box,
-  Card,
-  CardContent,
 } from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import PaymentIcon from '@mui/icons-material/Payment';
-import HistoryIcon from '@mui/icons-material/History';
+import {
+  Add as AddIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+  Payment as PaymentIcon,
+  History as HistoryIcon,
+  AccountBalance as LoanIcon,
+  Payments as RepaymentIcon,
+  Warning as AlertIcon,
+  Groups as BorrowersIcon,
+} from '@mui/icons-material';
 import axios from 'axios';
 
 const TabPanel = (props) => {
@@ -267,78 +271,131 @@ const LoanBook = () => {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+    <Box sx={{ flexGrow: 1, p: 3 }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+        <Typography variant="h4" sx={{ fontWeight: 600 }}>
+          Loan Management
+        </Typography>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => handleOpenLoanDialog()}
+        >
+          New Loan
+        </Button>
+      </Box>
+
       {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
-                Total Loaned
-              </Typography>
-              <Typography variant="h5" component="div">
-                ${summary.totalLoaned.toFixed(2)}
-              </Typography>
-            </CardContent>
-          </Card>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              background: (theme) => 
+                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(25, 118, 210, 0.05) 100%)`,
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <LoanIcon sx={{ color: 'primary.main', mr: 1 }} />
+              <Typography color="textSecondary">Total Loaned</Typography>
+            </Box>
+            <Typography variant="h4">
+              ${summary.totalLoaned.toFixed(2)}
+            </Typography>
+          </Paper>
         </Grid>
+
         <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
-                Total Repaid
-              </Typography>
-              <Typography variant="h5" component="div" color="success.main">
-                ${summary.totalRepaid.toFixed(2)}
-              </Typography>
-            </CardContent>
-          </Card>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              background: (theme) => 
+                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(76, 175, 80, 0.05) 100%)`,
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <RepaymentIcon sx={{ color: 'success.main', mr: 1 }} />
+              <Typography color="textSecondary">Total Repaid</Typography>
+            </Box>
+            <Typography variant="h4" sx={{ color: 'success.main' }}>
+              ${summary.totalRepaid.toFixed(2)}
+            </Typography>
+          </Paper>
         </Grid>
+
         <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
-                Outstanding Amount
-              </Typography>
-              <Typography variant="h5" component="div" color="error.main">
-                ${summary.outstandingAmount.toFixed(2)}
-              </Typography>
-            </CardContent>
-          </Card>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              background: (theme) => 
+                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(244, 67, 54, 0.05) 100%)`,
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <AlertIcon sx={{ color: 'error.main', mr: 1 }} />
+              <Typography color="textSecondary">Outstanding Amount</Typography>
+            </Box>
+            <Typography variant="h4" sx={{ color: 'error.main' }}>
+              ${summary.outstandingAmount.toFixed(2)}
+            </Typography>
+          </Paper>
         </Grid>
+
         <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
-                Active Loans
-              </Typography>
-              <Typography variant="h5" component="div">
-                {summary.activeLoans}
-              </Typography>
-            </CardContent>
-          </Card>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              background: (theme) => 
+                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(156, 39, 176, 0.05) 100%)`,
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <BorrowersIcon sx={{ color: 'secondary.main', mr: 1 }} />
+              <Typography color="textSecondary">Active Loans</Typography>
+            </Box>
+            <Typography variant="h4">
+              {summary.activeLoans}
+            </Typography>
+          </Paper>
         </Grid>
       </Grid>
 
-      <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column' }}>
-        <Tabs value={tabValue} onChange={handleTabChange}>
+      <Paper 
+        elevation={0} 
+        sx={{ 
+          border: '1px solid',
+          borderColor: 'divider'
+        }}
+      >
+        <Tabs 
+          value={tabValue} 
+          onChange={handleTabChange}
+          sx={{ 
+            borderBottom: 1, 
+            borderColor: 'divider',
+            px: 2,
+            pt: 2
+          }}
+        >
           <Tab label="Active Loans" />
           <Tab label="Payment History" />
         </Tabs>
 
-        {/* Loans Tab */}
+        {/* Active Loans Tab */}
         <TabPanel value={tabValue} index={0}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-            <Typography variant="h6">Loan Management</Typography>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={() => handleOpenLoanDialog()}
-            >
-              New Loan
-            </Button>
-          </div>
-
           <TableContainer>
             <Table>
               <TableHead>
@@ -388,9 +445,8 @@ const LoanBook = () => {
           </TableContainer>
         </TabPanel>
 
-        {/* Payments Tab */}
+        {/* Payment History Tab */}
         <TabPanel value={tabValue} index={1}>
-          <Typography variant="h6" sx={{ mb: 2 }}>Payment History</Typography>
           <TableContainer>
             <Table>
               <TableHead>
@@ -418,298 +474,298 @@ const LoanBook = () => {
             </Table>
           </TableContainer>
         </TabPanel>
+      </Paper>
 
-        {/* Loan Dialog */}
-        <Dialog 
-          open={openLoanDialog} 
-          onClose={handleCloseLoanDialog}
-          maxWidth="md"
-          fullWidth
-        >
-          <DialogTitle>
-            {selectedLoan ? 'Edit Loan' : 'New Loan'}
-          </DialogTitle>
-          <DialogContent>
-            <Grid container spacing={2} sx={{ mt: 1 }}>
-              <Grid item xs={6}>
-                <TextField
-                  name="borrowerName"
-                  label="Borrower Name"
-                  fullWidth
-                  value={loanFormData.borrowerName}
-                  onChange={handleLoanInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="borrowerContact"
-                  label="Contact Information"
-                  fullWidth
-                  value={loanFormData.borrowerContact}
-                  onChange={handleLoanInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="amount"
-                  label="Loan Amount"
-                  type="number"
-                  fullWidth
-                  value={loanFormData.amount}
-                  onChange={handleLoanInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="interestRate"
-                  label="Interest Rate (%)"
-                  type="number"
-                  fullWidth
-                  value={loanFormData.interestRate}
-                  onChange={handleLoanInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="term"
-                  label="Loan Term (months)"
-                  type="number"
-                  fullWidth
-                  value={loanFormData.term}
-                  onChange={handleLoanInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Payment Frequency</InputLabel>
-                  <Select
-                    name="paymentFrequency"
-                    value={loanFormData.paymentFrequency}
-                    label="Payment Frequency"
-                    onChange={handleLoanInputChange}
-                  >
-                    <MenuItem value="weekly">Weekly</MenuItem>
-                    <MenuItem value="monthly">Monthly</MenuItem>
-                    <MenuItem value="quarterly">Quarterly</MenuItem>
-                    <MenuItem value="annually">Annually</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="startDate"
-                  label="Start Date"
-                  type="date"
-                  fullWidth
-                  InputLabelProps={{ shrink: true }}
-                  value={loanFormData.startDate}
-                  onChange={handleLoanInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="endDate"
-                  label="End Date"
-                  type="date"
-                  fullWidth
-                  InputLabelProps={{ shrink: true }}
-                  value={loanFormData.endDate}
-                  onChange={handleLoanInputChange}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  name="purpose"
-                  label="Loan Purpose"
-                  fullWidth
-                  multiline
-                  rows={2}
-                  value={loanFormData.purpose}
-                  onChange={handleLoanInputChange}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  name="collateral"
-                  label="Collateral Details"
-                  fullWidth
-                  multiline
-                  rows={2}
-                  value={loanFormData.collateral}
-                  onChange={handleLoanInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Status</InputLabel>
-                  <Select
-                    name="status"
-                    value={loanFormData.status}
-                    label="Status"
-                    onChange={handleLoanInputChange}
-                  >
-                    <MenuItem value="active">Active</MenuItem>
-                    <MenuItem value="completed">Completed</MenuItem>
-                    <MenuItem value="overdue">Overdue</MenuItem>
-                    <MenuItem value="defaulted">Defaulted</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  name="notes"
-                  label="Additional Notes"
-                  fullWidth
-                  multiline
-                  rows={2}
-                  value={loanFormData.notes}
-                  onChange={handleLoanInputChange}
-                />
-              </Grid>
+      {/* Loan Dialog */}
+      <Dialog 
+        open={openLoanDialog} 
+        onClose={handleCloseLoanDialog}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          {selectedLoan ? 'Edit Loan' : 'New Loan'}
+        </DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={6}>
+              <TextField
+                name="borrowerName"
+                label="Borrower Name"
+                fullWidth
+                value={loanFormData.borrowerName}
+                onChange={handleLoanInputChange}
+              />
             </Grid>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleCloseLoanDialog}>Cancel</Button>
-            <Button onClick={handleLoanSubmit} color="primary">
-              {selectedLoan ? 'Update Loan' : 'Create Loan'}
-            </Button>
-          </DialogActions>
-        </Dialog>
+            <Grid item xs={6}>
+              <TextField
+                name="borrowerContact"
+                label="Contact Information"
+                fullWidth
+                value={loanFormData.borrowerContact}
+                onChange={handleLoanInputChange}
+              />
+            </Grid>
+            <Grid item xs={6}>
+              <TextField
+                name="amount"
+                label="Loan Amount"
+                type="number"
+                fullWidth
+                value={loanFormData.amount}
+                onChange={handleLoanInputChange}
+              />
+            </Grid>
+            <Grid item xs={6}>
+              <TextField
+                name="interestRate"
+                label="Interest Rate (%)"
+                type="number"
+                fullWidth
+                value={loanFormData.interestRate}
+                onChange={handleLoanInputChange}
+              />
+            </Grid>
+            <Grid item xs={6}>
+              <TextField
+                name="term"
+                label="Loan Term (months)"
+                type="number"
+                fullWidth
+                value={loanFormData.term}
+                onChange={handleLoanInputChange}
+              />
+            </Grid>
+            <Grid item xs={6}>
+              <FormControl fullWidth>
+                <InputLabel>Payment Frequency</InputLabel>
+                <Select
+                  name="paymentFrequency"
+                  value={loanFormData.paymentFrequency}
+                  label="Payment Frequency"
+                  onChange={handleLoanInputChange}
+                >
+                  <MenuItem value="weekly">Weekly</MenuItem>
+                  <MenuItem value="monthly">Monthly</MenuItem>
+                  <MenuItem value="quarterly">Quarterly</MenuItem>
+                  <MenuItem value="annually">Annually</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={6}>
+              <TextField
+                name="startDate"
+                label="Start Date"
+                type="date"
+                fullWidth
+                InputLabelProps={{ shrink: true }}
+                value={loanFormData.startDate}
+                onChange={handleLoanInputChange}
+              />
+            </Grid>
+            <Grid item xs={6}>
+              <TextField
+                name="endDate"
+                label="End Date"
+                type="date"
+                fullWidth
+                InputLabelProps={{ shrink: true }}
+                value={loanFormData.endDate}
+                onChange={handleLoanInputChange}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                name="purpose"
+                label="Loan Purpose"
+                fullWidth
+                multiline
+                rows={2}
+                value={loanFormData.purpose}
+                onChange={handleLoanInputChange}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                name="collateral"
+                label="Collateral Details"
+                fullWidth
+                multiline
+                rows={2}
+                value={loanFormData.collateral}
+                onChange={handleLoanInputChange}
+              />
+            </Grid>
+            <Grid item xs={6}>
+              <FormControl fullWidth>
+                <InputLabel>Status</InputLabel>
+                <Select
+                  name="status"
+                  value={loanFormData.status}
+                  label="Status"
+                  onChange={handleLoanInputChange}
+                >
+                  <MenuItem value="active">Active</MenuItem>
+                  <MenuItem value="completed">Completed</MenuItem>
+                  <MenuItem value="overdue">Overdue</MenuItem>
+                  <MenuItem value="defaulted">Defaulted</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                name="notes"
+                label="Additional Notes"
+                fullWidth
+                multiline
+                rows={2}
+                value={loanFormData.notes}
+                onChange={handleLoanInputChange}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseLoanDialog}>Cancel</Button>
+          <Button onClick={handleLoanSubmit} color="primary">
+            {selectedLoan ? 'Update Loan' : 'Create Loan'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
-        {/* Payment Dialog */}
-        <Dialog 
-          open={openPaymentDialog} 
-          onClose={handleClosePaymentDialog}
-          maxWidth="sm"
-          fullWidth
-        >
-          <DialogTitle>Record Payment</DialogTitle>
-          <DialogContent>
+      {/* Payment Dialog */}
+      <Dialog 
+        open={openPaymentDialog} 
+        onClose={handleClosePaymentDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Record Payment</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <Typography variant="subtitle1">
+                Borrower: {selectedLoan?.borrowerName}
+              </Typography>
+              <Typography variant="subtitle2">
+                Remaining Amount: ${selectedLoan ? calculateRemainingAmount(selectedLoan) : 0}
+              </Typography>
+            </Grid>
+            <Grid item xs={6}>
+              <TextField
+                name="amount"
+                label="Payment Amount"
+                type="number"
+                fullWidth
+                value={paymentFormData.amount}
+                onChange={handlePaymentInputChange}
+              />
+            </Grid>
+            <Grid item xs={6}>
+              <TextField
+                name="date"
+                label="Payment Date"
+                type="date"
+                fullWidth
+                InputLabelProps={{ shrink: true }}
+                value={paymentFormData.date}
+                onChange={handlePaymentInputChange}
+              />
+            </Grid>
+            <Grid item xs={6}>
+              <TextField
+                name="paymentMethod"
+                label="Payment Method"
+                fullWidth
+                value={paymentFormData.paymentMethod}
+                onChange={handlePaymentInputChange}
+              />
+            </Grid>
+            <Grid item xs={6}>
+              <TextField
+                name="reference"
+                label="Reference Number"
+                fullWidth
+                value={paymentFormData.reference}
+                onChange={handlePaymentInputChange}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                name="notes"
+                label="Notes"
+                fullWidth
+                multiline
+                rows={2}
+                value={paymentFormData.notes}
+                onChange={handlePaymentInputChange}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClosePaymentDialog}>Cancel</Button>
+          <Button onClick={handlePaymentSubmit} color="primary">
+            Record Payment
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* History Dialog */}
+      <Dialog
+        open={openHistoryDialog}
+        onClose={handleCloseHistoryDialog}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Payment History</DialogTitle>
+        <DialogContent>
+          {selectedLoan && (
             <Grid container spacing={2} sx={{ mt: 1 }}>
               <Grid item xs={12}>
                 <Typography variant="subtitle1">
-                  Borrower: {selectedLoan?.borrowerName}
+                  Borrower: {selectedLoan.borrowerName}
                 </Typography>
                 <Typography variant="subtitle2">
-                  Remaining Amount: ${selectedLoan ? calculateRemainingAmount(selectedLoan) : 0}
+                  Loan Amount: ${selectedLoan.amount}
                 </Typography>
               </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="amount"
-                  label="Payment Amount"
-                  type="number"
-                  fullWidth
-                  value={paymentFormData.amount}
-                  onChange={handlePaymentInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="date"
-                  label="Payment Date"
-                  type="date"
-                  fullWidth
-                  InputLabelProps={{ shrink: true }}
-                  value={paymentFormData.date}
-                  onChange={handlePaymentInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="paymentMethod"
-                  label="Payment Method"
-                  fullWidth
-                  value={paymentFormData.paymentMethod}
-                  onChange={handlePaymentInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="reference"
-                  label="Reference Number"
-                  fullWidth
-                  value={paymentFormData.reference}
-                  onChange={handlePaymentInputChange}
-                />
-              </Grid>
               <Grid item xs={12}>
-                <TextField
-                  name="notes"
-                  label="Notes"
-                  fullWidth
-                  multiline
-                  rows={2}
-                  value={paymentFormData.notes}
-                  onChange={handlePaymentInputChange}
-                />
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Date</TableCell>
+                        <TableCell>Amount</TableCell>
+                        <TableCell>Method</TableCell>
+                        <TableCell>Reference</TableCell>
+                        <TableCell>Notes</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {payments
+                        .filter(payment => payment.loanId === selectedLoan._id)
+                        .map((payment) => (
+                          <TableRow key={payment._id}>
+                            <TableCell>{new Date(payment.date).toLocaleDateString()}</TableCell>
+                            <TableCell>${payment.amount}</TableCell>
+                            <TableCell>{payment.paymentMethod}</TableCell>
+                            <TableCell>{payment.reference}</TableCell>
+                            <TableCell>{payment.notes}</TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
               </Grid>
             </Grid>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleClosePaymentDialog}>Cancel</Button>
-            <Button onClick={handlePaymentSubmit} color="primary">
-              Record Payment
-            </Button>
-          </DialogActions>
-        </Dialog>
-
-        {/* History Dialog */}
-        <Dialog
-          open={openHistoryDialog}
-          onClose={handleCloseHistoryDialog}
-          maxWidth="md"
-          fullWidth
-        >
-          <DialogTitle>Payment History</DialogTitle>
-          <DialogContent>
-            {selectedLoan && (
-              <Grid container spacing={2} sx={{ mt: 1 }}>
-                <Grid item xs={12}>
-                  <Typography variant="subtitle1">
-                    Borrower: {selectedLoan.borrowerName}
-                  </Typography>
-                  <Typography variant="subtitle2">
-                    Loan Amount: ${selectedLoan.amount}
-                  </Typography>
-                </Grid>
-                <Grid item xs={12}>
-                  <TableContainer>
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Date</TableCell>
-                          <TableCell>Amount</TableCell>
-                          <TableCell>Method</TableCell>
-                          <TableCell>Reference</TableCell>
-                          <TableCell>Notes</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {payments
-                          .filter(payment => payment.loanId === selectedLoan._id)
-                          .map((payment) => (
-                            <TableRow key={payment._id}>
-                              <TableCell>{new Date(payment.date).toLocaleDateString()}</TableCell>
-                              <TableCell>${payment.amount}</TableCell>
-                              <TableCell>{payment.paymentMethod}</TableCell>
-                              <TableCell>{payment.reference}</TableCell>
-                              <TableCell>{payment.notes}</TableCell>
-                            </TableRow>
-                          ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </Grid>
-              </Grid>
-            )}
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleCloseHistoryDialog}>Close</Button>
-          </DialogActions>
-        </Dialog>
-      </Paper>
-    </Container>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseHistoryDialog}>Close</Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
   );
 };
 

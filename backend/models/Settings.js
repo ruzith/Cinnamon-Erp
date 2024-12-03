@@ -1,100 +1,68 @@
 const mongoose = require('mongoose');
 
-const settingsSchema = new mongoose.Schema({
-  general: {
-    companyName: String,
-    email: String,
-    phone: String,
-    address: String,
-    taxNumber: String,
-    currency: {
-      type: String,
-      default: 'USD'
-    },
-    dateFormat: {
-      type: String,
-      default: 'MM/DD/YYYY'
-    },
-    timezone: {
-      type: String,
-      default: 'UTC'
-    },
-    fiscalYearStart: String,
-    logo: String
+const currencySchema = new mongoose.Schema({
+  code: {
+    type: String,
+    required: true,
+    unique: true,
+    uppercase: true
   },
-  notifications: {
-    emailNotifications: {
-      type: Boolean,
-      default: true
-    },
-    lowStockAlerts: {
-      type: Boolean,
-      default: true
-    },
-    paymentReminders: {
-      type: Boolean,
-      default: true
-    },
-    taskDeadlines: {
-      type: Boolean,
-      default: true
-    },
-    maintenanceAlerts: {
-      type: Boolean,
-      default: true
-    },
-    loanDueAlerts: {
-      type: Boolean,
-      default: true
-    }
-  },
-  backup: {
-    autoBackup: {
-      type: Boolean,
-      default: true
-    },
-    backupFrequency: {
-      type: String,
-      default: 'daily'
-    },
-    retentionPeriod: {
-      type: Number,
-      default: 30
-    },
-    backupLocation: {
-      type: String,
-      default: 'cloud'
-    }
-  },
-  preferences: {
-    theme: {
-      type: String,
-      default: 'light'
-    },
-    language: {
-      type: String,
-      default: 'en'
-    },
-    dashboardLayout: {
-      type: String,
-      default: 'default'
-    },
-    itemsPerPage: {
-      type: Number,
-      default: 10
-    },
-    defaultView: {
-      type: String,
-      default: 'list'
-    }
-  },
-  lastUpdatedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
+  name: {
+    type: String,
     required: true
+  },
+  symbol: {
+    type: String,
+    required: true
+  },
+  rate: {
+    type: Number,
+    required: true,
+    default: 1
   }
-}, {
-  timestamps: true
+});
+
+const settingsSchema = new mongoose.Schema({
+  companyName: {
+    type: String,
+    required: true
+  },
+  companyAddress: {
+    type: String,
+    required: true
+  },
+  companyPhone: {
+    type: String,
+    required: true
+  },
+  vatNumber: {
+    type: String
+  },
+  taxNumber: {
+    type: String
+  },
+  logo: {
+    type: String // URL to the logo image
+  },
+  language: {
+    type: String,
+    enum: ['en', 'si'],
+    default: 'en'
+  },
+  currencies: [currencySchema],
+  defaultCurrency: {
+    type: String,
+    ref: 'currencies.code',
+    default: 'USD'
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now
+  }
 });
 
 module.exports = mongoose.model('Settings', settingsSchema); 

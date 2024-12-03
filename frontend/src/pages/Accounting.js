@@ -1,37 +1,41 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Container,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
+  Box,
+  Typography,
   Button,
+  Grid,
+  Paper,
+  Chip,
+  IconButton,
+  TableContainer,
+  Table,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
+  Tabs,
+  Tab,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   TextField,
-  IconButton,
-  Typography,
-  Grid,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
-  Chip,
-  Tabs,
-  Tab,
-  Box,
-  Card,
-  CardContent,
 } from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import ReceiptIcon from '@mui/icons-material/Receipt';
+import {
+  Add as AddIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+  VisibilityIcon,
+  Receipt as ReceiptIcon,
+  AccountBalance as AccountIcon,
+  TrendingUp as IncomeIcon,
+  TrendingDown as ExpenseIcon,
+  Balance as BalanceIcon,
+} from '@mui/icons-material';
 import axios from 'axios';
 
 const TabPanel = (props) => {
@@ -302,178 +306,266 @@ const Accounting = () => {
     }
   };
 
+  const getAccountTypeColor = (type) => {
+    switch (type) {
+      case 'asset':
+        return 'primary';
+      case 'liability':
+        return 'error';
+      case 'equity':
+        return 'success';
+      case 'revenue':
+        return 'info';
+      case 'expense':
+        return 'warning';
+      default:
+        return 'default';
+    }
+  };
+
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      {/* Financial Summary Cards */}
+    <Box sx={{ flexGrow: 1, p: 3 }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+        <Typography variant="h4" sx={{ fontWeight: 600 }}>
+          Accounting & Finance
+        </Typography>
+      </Box>
+
+      {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} md={4}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
-                Total Income
-              </Typography>
-              <Typography variant="h5" component="div" color="success.main">
-                ${summary.profitLoss.revenue.toFixed(2)}
-              </Typography>
-            </CardContent>
-          </Card>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              background: (theme) => 
+                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(76, 175, 80, 0.05) 100%)`,
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <IncomeIcon sx={{ color: 'success.main', mr: 1 }} />
+              <Typography color="textSecondary">Total Income</Typography>
+            </Box>
+            <Typography variant="h4" sx={{ color: 'success.main' }}>
+              ${summary.profitLoss.revenue.toFixed(2)}
+            </Typography>
+          </Paper>
         </Grid>
+
         <Grid item xs={12} md={4}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
-                Total Expenses
-              </Typography>
-              <Typography variant="h5" component="div" color="error.main">
-                ${summary.profitLoss.expenses.toFixed(2)}
-              </Typography>
-            </CardContent>
-          </Card>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              background: (theme) => 
+                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(244, 67, 54, 0.05) 100%)`,
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <ExpenseIcon sx={{ color: 'error.main', mr: 1 }} />
+              <Typography color="textSecondary">Total Expenses</Typography>
+            </Box>
+            <Typography variant="h4" sx={{ color: 'error.main' }}>
+              ${summary.profitLoss.expenses.toFixed(2)}
+            </Typography>
+          </Paper>
         </Grid>
+
         <Grid item xs={12} md={4}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
-                Net Income
-              </Typography>
-              <Typography 
-                variant="h5" 
-                component="div" 
-                color={summary.profitLoss.netProfit >= 0 ? 'success.main' : 'error.main'}
-              >
-                ${summary.profitLoss.netProfit.toFixed(2)}
-              </Typography>
-            </CardContent>
-          </Card>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              background: (theme) => 
+                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(25, 118, 210, 0.05) 100%)`,
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <BalanceIcon sx={{ color: 'primary.main', mr: 1 }} />
+              <Typography color="textSecondary">Net Income</Typography>
+            </Box>
+            <Typography 
+              variant="h4" 
+              sx={{ 
+                color: summary.profitLoss.netProfit >= 0 ? 'success.main' : 'error.main'
+              }}
+            >
+              ${summary.profitLoss.netProfit.toFixed(2)}
+            </Typography>
+          </Paper>
         </Grid>
       </Grid>
 
-      <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column' }}>
-        <Tabs value={tabValue} onChange={handleTabChange}>
+      {/* Main Content */}
+      <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
+        <Tabs 
+          value={tabValue} 
+          onChange={handleTabChange}
+          sx={{ borderBottom: 1, borderColor: 'divider', px: 2, pt: 2 }}
+        >
           <Tab label="Transactions" />
           <Tab label="Accounts" />
         </Tabs>
 
         {/* Transactions Tab */}
         <TabPanel value={tabValue} index={0}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-            <Typography variant="h6">Financial Transactions</Typography>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={() => handleOpenTransactionDialog()}
-            >
-              New Transaction
-            </Button>
-          </div>
+          <Box sx={{ p: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                Financial Transactions
+              </Typography>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => handleOpenTransactionDialog()}
+              >
+                New Transaction
+              </Button>
+            </Box>
 
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Date</TableCell>
-                  <TableCell>Type</TableCell>
-                  <TableCell>Description</TableCell>
-                  <TableCell>Account</TableCell>
-                  <TableCell>Amount</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {transactions.map((transaction) => (
-                  <TableRow key={transaction._id}>
-                    <TableCell>{new Date(transaction.date).toLocaleDateString()}</TableCell>
-                    <TableCell>
-                      <Chip 
-                        label={transaction.type}
-                        color={getTransactionTypeColor(transaction.type)}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell>{transaction.description}</TableCell>
-                    <TableCell>{transaction.account?.name}</TableCell>
-                    <TableCell>
-                      <Typography
-                        color={transaction.type === 'income' ? 'success.main' : 'error.main'}
-                      >
-                        ${transaction.amount}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Chip 
-                        label={transaction.status}
-                        color={getStatusColor(transaction.status)}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <IconButton onClick={() => handleOpenTransactionDialog(transaction)}>
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton onClick={() => handleDeleteTransaction(transaction._id)}>
-                        <DeleteIcon />
-                      </IconButton>
-                    </TableCell>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Date</TableCell>
+                    <TableCell>Type</TableCell>
+                    <TableCell>Description</TableCell>
+                    <TableCell>Account</TableCell>
+                    <TableCell>Amount</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell align="right">Actions</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                </TableHead>
+                <TableBody>
+                  {transactions.map((transaction) => (
+                    <TableRow key={transaction._id} hover>
+                      <TableCell>{new Date(transaction.date).toLocaleDateString()}</TableCell>
+                      <TableCell>{transaction.type}</TableCell>
+                      <TableCell>{transaction.description}</TableCell>
+                      <TableCell>{transaction.account}</TableCell>
+                      <TableCell 
+                        sx={{ 
+                          color: transaction.type === 'income' ? 'success.main' : 'error.main'
+                        }}
+                      >
+                        ${transaction.amount.toFixed(2)}
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={transaction.status}
+                          color={getStatusColor(transaction.status)}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell align="right">
+                        <IconButton 
+                          size="small"
+                          onClick={() => handleOpenTransactionDialog(transaction)}
+                          sx={{ color: 'primary.main' }}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                        <IconButton 
+                          size="small"
+                          onClick={() => handleDeleteTransaction(transaction._id)}
+                          sx={{ color: 'error.main', ml: 1 }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
         </TabPanel>
 
         {/* Accounts Tab */}
         <TabPanel value={tabValue} index={1}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-            <Typography variant="h6">Chart of Accounts</Typography>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={() => handleOpenAccountDialog()}
-            >
-              New Account
-            </Button>
-          </div>
+          <Box sx={{ p: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                Chart of Accounts
+              </Typography>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => handleOpenAccountDialog()}
+              >
+                New Account
+              </Button>
+            </Box>
 
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Account Number</TableCell>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Type</TableCell>
-                  <TableCell>Balance</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {accounts.map((account) => (
-                  <TableRow key={account._id}>
-                    <TableCell>{account.number}</TableCell>
-                    <TableCell>{account.name}</TableCell>
-                    <TableCell>{account.type}</TableCell>
-                    <TableCell>${account.balance}</TableCell>
-                    <TableCell>
-                      <Chip 
-                        label={account.status}
-                        color={getStatusColor(account.status)}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <IconButton onClick={() => handleOpenAccountDialog(account)}>
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton onClick={() => handleDeleteAccount(account._id)}>
-                        <DeleteIcon />
-                      </IconButton>
-                    </TableCell>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Account Code</TableCell>
+                    <TableCell>Name</TableCell>
+                    <TableCell>Type</TableCell>
+                    <TableCell>Category</TableCell>
+                    <TableCell>Balance</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell align="right">Actions</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                </TableHead>
+                <TableBody>
+                  {accounts.map((account) => (
+                    <TableRow key={account._id} hover>
+                      <TableCell>{account.code}</TableCell>
+                      <TableCell>{account.name}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={account.type}
+                          color={getAccountTypeColor(account.type)}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell>{account.category}</TableCell>
+                      <TableCell 
+                        sx={{ 
+                          color: account.balance >= 0 ? 'success.main' : 'error.main'
+                        }}
+                      >
+                        ${Math.abs(account.balance).toFixed(2)}
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={account.status}
+                          color={getStatusColor(account.status)}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell align="right">
+                        <IconButton 
+                          size="small"
+                          onClick={() => handleOpenAccountDialog(account)}
+                          sx={{ color: 'primary.main' }}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                        <IconButton 
+                          size="small"
+                          onClick={() => handleDeleteAccount(account._id)}
+                          sx={{ color: 'error.main', ml: 1 }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
         </TabPanel>
 
         {/* Transaction Dialog */}
@@ -707,7 +799,7 @@ const Accounting = () => {
           </DialogActions>
         </Dialog>
       </Paper>
-    </Container>
+    </Box>
   );
 };
 

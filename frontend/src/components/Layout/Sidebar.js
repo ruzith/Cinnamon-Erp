@@ -1,129 +1,194 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  Drawer,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Collapse,
-  Typography,
-  Box
+    List,
+    ListItem,
+    ListItemIcon,
+    ListItemText,
+    ListItemButton,
+    Box,
+    Typography,
+    Divider,
+    Collapse,
+    alpha,
+    Toolbar
 } from '@mui/material';
-import {
-  Dashboard,
-  Terrain,
-  People,
-  Assignment,
-  LocalFlorist,
-  Inventory,
-  ShoppingCart,
-  Business,
-  AccountBalance,
-  Book,
-  Assessment,
-  Settings,
-  ExpandLess,
-  ExpandMore
-} from '@mui/icons-material';
-import { useState } from 'react';
+import ExpandLess from '@mui/icons-material/ExpandLess';
+import ExpandMore from '@mui/icons-material/ExpandMore';
+import { menuItems } from './SidebarMenu';
 
-const menuItems = [
-  { path: '/', icon: <Dashboard />, label: 'Dashboard' },
-  { path: '/lands', icon: <Terrain />, label: 'Land Management' },
-  { path: '/users', icon: <People />, label: 'User Management' },
-  { path: '/employees', icon: <People />, label: 'Employee Management' },
-  { path: '/tasks', icon: <Assignment />, label: 'Task Management' },
-  {
-    label: 'Operations',
-    icon: <LocalFlorist />,
-    children: [
-      { path: '/cutting', label: 'Cutting Management' },
-      { path: '/manufacturing', label: 'Manufacturing' }
-    ]
-  },
-  { path: '/inventory', icon: <Inventory />, label: 'Inventory' },
-  { path: '/sales', icon: <ShoppingCart />, label: 'Sales' },
-  { path: '/assets', icon: <Business />, label: 'Asset Management' },
-  { path: '/accounting', icon: <AccountBalance />, label: 'Accounting' },
-  { path: '/loans', icon: <Book />, label: 'Loan Book' },
-  { path: '/reports', icon: <Assessment />, label: 'Reports' },
-  { path: '/settings', icon: <Settings />, label: 'Settings' }
-];
+const Sidebar = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
+    const [open, setOpen] = React.useState({});
 
-const Sidebar = ({ width = 240 }) => {
-  const location = useLocation();
-  const [openSubmenu, setOpenSubmenu] = useState('');
+    const handleClick = (path) => {
+        navigate(path);
+    };
 
-  const handleSubmenuClick = (label) => {
-    setOpenSubmenu(openSubmenu === label ? '' : label);
-  };
+    const handleCollapse = (itemId) => {
+        setOpen(prev => ({
+            ...prev,
+            [itemId]: !prev[itemId]
+        }));
+    };
 
-  const renderMenuItem = (item) => {
-    if (item.children) {
-      return (
-        <div key={item.label}>
-          <ListItem button onClick={() => handleSubmenuClick(item.label)}>
-            <ListItemIcon>{item.icon}</ListItemIcon>
-            <ListItemText primary={item.label} />
-            {openSubmenu === item.label ? <ExpandLess /> : <ExpandMore />}
-          </ListItem>
-          <Collapse in={openSubmenu === item.label} timeout="auto" unmountOnExit>
-            <List component="div" disablePadding>
-              {item.children.map((child) => (
+    const renderMenuItem = (item, depth = 0) => {
+        const isSelected = location.pathname === item.path;
+        const hasSubItems = item.subItems && item.subItems.length > 0;
+
+        return (
+            <React.Fragment key={item.text}>
                 <ListItem
-                  button
-                  key={child.path}
-                  component={Link}
-                  to={child.path}
-                  selected={location.pathname === child.path}
-                  sx={{ pl: 4 }}
+                    disablePadding
+                    sx={{
+                        display: 'block',
+                        mb: 0.5,
+                        height: 72,
+                    }}
                 >
-                  <ListItemText primary={child.label} />
+                    <ListItemButton
+                        onClick={() => hasSubItems ? handleCollapse(item.text) : handleClick(item.path)}
+                        sx={{
+                            height: '100%',
+                            px: 2.5,
+                            ml: depth * 2,
+                            borderRadius: '12px',
+                            position: 'relative',
+                            '&:hover': {
+                                backgroundColor: (theme) =>
+                                    alpha(theme.palette.primary.main, 0.08),
+                            },
+                            ...(isSelected && {
+                                backgroundColor: (theme) =>
+                                    alpha(theme.palette.primary.main, 0.12),
+                                '&:hover': {
+                                    backgroundColor: (theme) =>
+                                        alpha(theme.palette.primary.main, 0.16),
+                                },
+                                '&::before': {
+                                    content: '""',
+                                    position: 'absolute',
+                                    left: 0,
+                                    top: '50%',
+                                    transform: 'translateY(-50%)',
+                                    height: '60%',
+                                    width: '4px',
+                                    backgroundColor: 'primary.main',
+                                    borderRadius: '0 4px 4px 0',
+                                },
+                            }),
+                        }}
+                    >
+                        <ListItemIcon
+                            sx={{
+                                minWidth: 40,
+                                color: isSelected ? 'primary.main' : 'inherit',
+                                '& svg': {
+                                    fontSize: 24,
+                                    transition: '0.2s',
+                                    ...(isSelected && {
+                                        transform: 'scale(1.1)',
+                                    }),
+                                },
+                            }}
+                        >
+                            {item.icon}
+                        </ListItemIcon>
+                        <ListItemText
+                            primary={item.text}
+                            primaryTypographyProps={{
+                                fontSize: '0.875rem',
+                                fontWeight: isSelected ? 600 : 400,
+                                color: isSelected ? 'primary.main' : 'text.primary',
+                            }}
+                        />
+                        {hasSubItems && (
+                            open[item.text] ? <ExpandLess /> : <ExpandMore />
+                        )}
+                    </ListItemButton>
                 </ListItem>
-              ))}
-            </List>
-          </Collapse>
-        </div>
-      );
-    }
+
+                {hasSubItems && (
+                    <Collapse in={open[item.text]} timeout="auto" unmountOnExit>
+                        <List component="div" disablePadding>
+                            {item.subItems.map((subItem) =>
+                                renderMenuItem(subItem, depth + 1)
+                            )}
+                        </List>
+                    </Collapse>
+                )}
+            </React.Fragment>
+        );
+    };
 
     return (
-      <ListItem
-        button
-        key={item.path}
-        component={Link}
-        to={item.path}
-        selected={location.pathname === item.path}
-      >
-        <ListItemIcon>{item.icon}</ListItemIcon>
-        <ListItemText primary={item.label} />
-      </ListItem>
-    );
-  };
+        <Box
+            sx={{
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+            }}
+        >
+            <Box
+                sx={{
+                    flex: 1,
+                    px: 2,
+                    overflowY: 'auto',
+                    '&::-webkit-scrollbar': {
+                        width: '6px',
+                        background: 'transparent',
+                    },
+                    '&::-webkit-scrollbar-thumb': {
+                        background: (theme) =>
+                            theme.palette.mode === 'light'
+                                ? 'rgba(0, 0, 0, 0.2)'
+                                : 'rgba(255, 255, 255, 0.2)',
+                        borderRadius: '3px',
+                        '&:hover': {
+                            background: (theme) =>
+                                theme.palette.mode === 'light'
+                                    ? 'rgba(0, 0, 0, 0.3)'
+                                    : 'rgba(255, 255, 255, 0.3)',
+                        },
+                    },
+                    '&::-webkit-scrollbar-track': {
+                        background: 'transparent',
+                    },
+                    scrollbarWidth: 'thin',
+                    scrollbarColor: (theme) => `
+            ${theme.palette.mode === 'light'
+                            ? 'rgba(0, 0, 0, 0.2)'
+                            : 'rgba(255, 255, 255, 0.2)'}
+            transparent`,
+                }}
+            >
+                <List sx={{ px: 1 }}>
+                    {menuItems.map((item) => renderMenuItem(item))}
+                </List>
+            </Box>
 
-  return (
-    <Drawer
-      variant="permanent"
-      sx={{
-        width: width,
-        flexShrink: 0,
-        '& .MuiDrawer-paper': {
-          width: width,
-          boxSizing: 'border-box',
-        },
-      }}
-    >
-      <Box sx={{ p: 2 }}>
-        <Typography variant="h6" component="div">
-          Cinnamon ERP
-        </Typography>
-      </Box>
-      <List>
-        {menuItems.map((item) => renderMenuItem(item))}
-      </List>
-    </Drawer>
-  );
+            <Divider sx={{ mt: 2 }} />
+
+            <Box
+                sx={{
+                    p: 2,
+                    textAlign: 'center',
+                }}
+            >
+                <Typography
+                    variant="caption"
+                    sx={{
+                        color: 'text.secondary',
+                        fontSize: '0.75rem',
+                    }}
+                >
+                    © 2024 Cinnamon ERP
+                </Typography>
+            </Box>
+        </Box>
+    );
 };
 
 export default Sidebar; 

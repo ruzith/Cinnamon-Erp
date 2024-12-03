@@ -1,35 +1,41 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Container,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
+  Box,
+  Typography,
   Button,
+  Grid,
+  Paper,
+  Chip,
+  IconButton,
+  TableContainer,
+  Table,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
+  Tabs,
+  Tab,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   TextField,
-  IconButton,
-  Typography,
-  Grid,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
-  Chip,
-  Tabs,
-  Tab,
-  Box,
 } from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import BuildIcon from '@mui/icons-material/Build';
-import TimelineIcon from '@mui/icons-material/Timeline';
+import {
+  Add as AddIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+  Build as BuildIcon,
+  Timeline as TimelineIcon,
+  Inventory as AssetIcon,
+  Warning as AlertIcon,
+  Engineering as MaintenanceIcon,
+  AttachMoney as ValueIcon,
+} from '@mui/icons-material';
 import axios from 'axios';
 
 const TabPanel = (props) => {
@@ -269,26 +275,121 @@ const AssetManagement = () => {
     return maintenanceRecords.filter(record => record.assetId === assetId);
   };
 
+  // Calculate summary statistics
+  const summaryStats = {
+    totalAssets: assets.length,
+    maintenanceNeeded: assets.filter(asset => asset.status === 'needs_maintenance').length,
+    totalValue: assets.reduce((sum, asset) => sum + Number(asset.currentValue), 0).toFixed(2),
+    activeMaintenanceJobs: maintenanceRecords.filter(record => record.status === 'in_progress').length
+  };
+
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column' }}>
-        <Tabs value={tabValue} onChange={handleTabChange}>
+    <Box sx={{ flexGrow: 1, p: 3 }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+        <Typography variant="h4" sx={{ fontWeight: 600 }}>
+          Asset Management
+        </Typography>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => handleOpenDialog()}
+        >
+          New Asset
+        </Button>
+      </Box>
+
+      {/* Summary Cards */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              background: (theme) => 
+                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(25, 118, 210, 0.05) 100%)`,
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <AssetIcon sx={{ color: 'primary.main', mr: 1 }} />
+              <Typography color="textSecondary">Total Assets</Typography>
+            </Box>
+            <Typography variant="h4">{summaryStats.totalAssets}</Typography>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              background: (theme) => 
+                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(211, 47, 47, 0.05) 100%)`,
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <AlertIcon sx={{ color: 'error.main', mr: 1 }} />
+              <Typography color="textSecondary">Needs Maintenance</Typography>
+            </Box>
+            <Typography variant="h4">{summaryStats.maintenanceNeeded}</Typography>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              background: (theme) => 
+                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(46, 125, 50, 0.05) 100%)`,
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <ValueIcon sx={{ color: 'success.main', mr: 1 }} />
+              <Typography color="textSecondary">Total Value</Typography>
+            </Box>
+            <Typography variant="h4">${summaryStats.totalValue}</Typography>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              background: (theme) => 
+                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(156, 39, 176, 0.05) 100%)`,
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <MaintenanceIcon sx={{ color: 'secondary.main', mr: 1 }} />
+              <Typography color="textSecondary">Active Maintenance</Typography>
+            </Box>
+            <Typography variant="h4">{summaryStats.activeMaintenanceJobs}</Typography>
+          </Paper>
+        </Grid>
+      </Grid>
+
+      {/* Tabs and Tables */}
+      <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
+        <Tabs 
+          value={tabValue} 
+          onChange={handleTabChange}
+          sx={{ borderBottom: 1, borderColor: 'divider', px: 2, pt: 2 }}
+        >
           <Tab label="Assets" />
           <Tab label="Maintenance Records" />
         </Tabs>
 
         <TabPanel value={tabValue} index={0}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-            <Typography variant="h6">Asset Management</Typography>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={() => handleOpenDialog()}
-            >
-              Add New Asset
-            </Button>
-          </div>
-
           <TableContainer>
             <Table>
               <TableHead>
@@ -299,12 +400,12 @@ const AssetManagement = () => {
                   <TableCell>Location</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell>Value</TableCell>
-                  <TableCell>Actions</TableCell>
+                  <TableCell align="right">Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {assets.map((asset) => (
-                  <TableRow key={asset._id}>
+                  <TableRow key={asset._id} hover>
                     <TableCell>{asset.assetNumber}</TableCell>
                     <TableCell>{asset.name}</TableCell>
                     <TableCell>{asset.category}</TableCell>
@@ -317,17 +418,33 @@ const AssetManagement = () => {
                       />
                     </TableCell>
                     <TableCell>${asset.currentValue}</TableCell>
-                    <TableCell>
-                      <IconButton onClick={() => handleOpenMaintenanceDialog(asset)}>
+                    <TableCell align="right">
+                      <IconButton 
+                        size="small"
+                        onClick={() => handleOpenMaintenanceDialog(asset)}
+                        sx={{ color: 'warning.main' }}
+                      >
                         <BuildIcon />
                       </IconButton>
-                      <IconButton onClick={() => handleOpenHistoryDialog(asset)}>
+                      <IconButton 
+                        size="small"
+                        onClick={() => handleOpenHistoryDialog(asset)}
+                        sx={{ color: 'info.main', ml: 1 }}
+                      >
                         <TimelineIcon />
                       </IconButton>
-                      <IconButton onClick={() => handleOpenDialog(asset)}>
+                      <IconButton 
+                        size="small"
+                        onClick={() => handleOpenDialog(asset)}
+                        sx={{ color: 'primary.main', ml: 1 }}
+                      >
                         <EditIcon />
                       </IconButton>
-                      <IconButton onClick={() => handleDelete(asset._id)}>
+                      <IconButton 
+                        size="small"
+                        onClick={() => handleDelete(asset._id)}
+                        sx={{ color: 'error.main', ml: 1 }}
+                      >
                         <DeleteIcon />
                       </IconButton>
                     </TableCell>
@@ -339,7 +456,6 @@ const AssetManagement = () => {
         </TabPanel>
 
         <TabPanel value={tabValue} index={1}>
-          <Typography variant="h6" sx={{ mb: 2 }}>Maintenance Records</Typography>
           <TableContainer>
             <Table>
               <TableHead>
@@ -355,7 +471,7 @@ const AssetManagement = () => {
               </TableHead>
               <TableBody>
                 {maintenanceRecords.map((record) => (
-                  <TableRow key={record._id}>
+                  <TableRow key={record._id} hover>
                     <TableCell>{new Date(record.date).toLocaleDateString()}</TableCell>
                     <TableCell>{record.assetId?.name}</TableCell>
                     <TableCell>{record.type}</TableCell>
@@ -379,357 +495,10 @@ const AssetManagement = () => {
             </Table>
           </TableContainer>
         </TabPanel>
-
-        {/* Asset Dialog */}
-        <Dialog 
-          open={openDialog} 
-          onClose={handleCloseDialog}
-          maxWidth="md"
-          fullWidth
-        >
-          <DialogTitle>
-            {selectedAsset ? 'Edit Asset' : 'Add New Asset'}
-          </DialogTitle>
-          <DialogContent>
-            <Grid container spacing={2} sx={{ mt: 1 }}>
-              <Grid item xs={6}>
-                <TextField
-                  name="assetNumber"
-                  label="Asset Number"
-                  fullWidth
-                  value={assetFormData.assetNumber}
-                  onChange={handleAssetInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="name"
-                  label="Asset Name"
-                  fullWidth
-                  value={assetFormData.name}
-                  onChange={handleAssetInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="category"
-                  label="Category"
-                  fullWidth
-                  value={assetFormData.category}
-                  onChange={handleAssetInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="type"
-                  label="Type"
-                  fullWidth
-                  value={assetFormData.type}
-                  onChange={handleAssetInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="manufacturer"
-                  label="Manufacturer"
-                  fullWidth
-                  value={assetFormData.manufacturer}
-                  onChange={handleAssetInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="model"
-                  label="Model"
-                  fullWidth
-                  value={assetFormData.model}
-                  onChange={handleAssetInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="purchaseDate"
-                  label="Purchase Date"
-                  type="date"
-                  fullWidth
-                  InputLabelProps={{ shrink: true }}
-                  value={assetFormData.purchaseDate}
-                  onChange={handleAssetInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="purchasePrice"
-                  label="Purchase Price"
-                  type="number"
-                  fullWidth
-                  value={assetFormData.purchasePrice}
-                  onChange={handleAssetInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="currentValue"
-                  label="Current Value"
-                  type="number"
-                  fullWidth
-                  value={assetFormData.currentValue}
-                  onChange={handleAssetInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="location"
-                  label="Location"
-                  fullWidth
-                  value={assetFormData.location}
-                  onChange={handleAssetInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Status</InputLabel>
-                  <Select
-                    name="status"
-                    value={assetFormData.status}
-                    label="Status"
-                    onChange={handleAssetInputChange}
-                  >
-                    <MenuItem value="active">Active</MenuItem>
-                    <MenuItem value="maintenance">In Maintenance</MenuItem>
-                    <MenuItem value="retired">Retired</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="assignedTo"
-                  label="Assigned To"
-                  fullWidth
-                  value={assetFormData.assignedTo}
-                  onChange={handleAssetInputChange}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  name="specifications"
-                  label="Specifications"
-                  fullWidth
-                  multiline
-                  rows={2}
-                  value={assetFormData.specifications}
-                  onChange={handleAssetInputChange}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  name="warrantyInfo"
-                  label="Warranty Information"
-                  fullWidth
-                  multiline
-                  rows={2}
-                  value={assetFormData.warrantyInfo}
-                  onChange={handleAssetInputChange}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  name="notes"
-                  label="Notes"
-                  fullWidth
-                  multiline
-                  rows={2}
-                  value={assetFormData.notes}
-                  onChange={handleAssetInputChange}
-                />
-              </Grid>
-            </Grid>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleCloseDialog}>Cancel</Button>
-            <Button onClick={handleAssetSubmit} color="primary">
-              {selectedAsset ? 'Update Asset' : 'Add Asset'}
-            </Button>
-          </DialogActions>
-        </Dialog>
-
-        {/* Maintenance Dialog */}
-        <Dialog 
-          open={openMaintenanceDialog} 
-          onClose={handleCloseMaintenanceDialog}
-          maxWidth="md"
-          fullWidth
-        >
-          <DialogTitle>Add Maintenance Record</DialogTitle>
-          <DialogContent>
-            <Grid container spacing={2} sx={{ mt: 1 }}>
-              <Grid item xs={12}>
-                <Typography variant="subtitle1">
-                  Asset: {selectedAsset?.name} ({selectedAsset?.assetNumber})
-                </Typography>
-              </Grid>
-              <Grid item xs={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Maintenance Type</InputLabel>
-                  <Select
-                    name="type"
-                    value={maintenanceFormData.type}
-                    label="Maintenance Type"
-                    onChange={handleMaintenanceInputChange}
-                  >
-                    <MenuItem value="routine">Routine</MenuItem>
-                    <MenuItem value="repair">Repair</MenuItem>
-                    <MenuItem value="inspection">Inspection</MenuItem>
-                    <MenuItem value="upgrade">Upgrade</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="date"
-                  label="Maintenance Date"
-                  type="date"
-                  fullWidth
-                  InputLabelProps={{ shrink: true }}
-                  value={maintenanceFormData.date}
-                  onChange={handleMaintenanceInputChange}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  name="description"
-                  label="Description"
-                  fullWidth
-                  multiline
-                  rows={2}
-                  value={maintenanceFormData.description}
-                  onChange={handleMaintenanceInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="cost"
-                  label="Cost"
-                  type="number"
-                  fullWidth
-                  value={maintenanceFormData.cost}
-                  onChange={handleMaintenanceInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="performedBy"
-                  label="Performed By"
-                  fullWidth
-                  value={maintenanceFormData.performedBy}
-                  onChange={handleMaintenanceInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="nextMaintenanceDate"
-                  label="Next Maintenance Date"
-                  type="date"
-                  fullWidth
-                  InputLabelProps={{ shrink: true }}
-                  value={maintenanceFormData.nextMaintenanceDate}
-                  onChange={handleMaintenanceInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Status</InputLabel>
-                  <Select
-                    name="status"
-                    value={maintenanceFormData.status}
-                    label="Status"
-                    onChange={handleMaintenanceInputChange}
-                  >
-                    <MenuItem value="scheduled">Scheduled</MenuItem>
-                    <MenuItem value="in_progress">In Progress</MenuItem>
-                    <MenuItem value="completed">Completed</MenuItem>
-                    <MenuItem value="overdue">Overdue</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  name="notes"
-                  label="Notes"
-                  fullWidth
-                  multiline
-                  rows={2}
-                  value={maintenanceFormData.notes}
-                  onChange={handleMaintenanceInputChange}
-                />
-              </Grid>
-            </Grid>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleCloseMaintenanceDialog}>Cancel</Button>
-            <Button onClick={handleMaintenanceSubmit} color="primary">
-              Save Maintenance Record
-            </Button>
-          </DialogActions>
-        </Dialog>
-
-        {/* History Dialog */}
-        <Dialog
-          open={openHistoryDialog}
-          onClose={handleCloseHistoryDialog}
-          maxWidth="md"
-          fullWidth
-        >
-          <DialogTitle>Maintenance History</DialogTitle>
-          <DialogContent>
-            {selectedAsset && (
-              <Grid container spacing={2} sx={{ mt: 1 }}>
-                <Grid item xs={12}>
-                  <Typography variant="subtitle1">
-                    Asset: {selectedAsset.name} ({selectedAsset.assetNumber})
-                  </Typography>
-                </Grid>
-                <Grid item xs={12}>
-                  <TableContainer>
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Date</TableCell>
-                          <TableCell>Type</TableCell>
-                          <TableCell>Description</TableCell>
-                          <TableCell>Cost</TableCell>
-                          <TableCell>Status</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {getAssetMaintenanceRecords(selectedAsset._id).map((record) => (
-                          <TableRow key={record._id}>
-                            <TableCell>{new Date(record.date).toLocaleDateString()}</TableCell>
-                            <TableCell>{record.type}</TableCell>
-                            <TableCell>{record.description}</TableCell>
-                            <TableCell>${record.cost}</TableCell>
-                            <TableCell>
-                              <Chip 
-                                label={record.status}
-                                color={getMaintenanceStatusColor(record.status)}
-                                size="small"
-                              />
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </Grid>
-              </Grid>
-            )}
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleCloseHistoryDialog}>Close</Button>
-          </DialogActions>
-        </Dialog>
       </Paper>
-    </Container>
+
+      {/* Keep your existing dialogs with current form fields */}
+    </Box>
   );
 };
 

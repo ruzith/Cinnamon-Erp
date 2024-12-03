@@ -32,7 +32,17 @@ const Layout = ({ children, darkMode, toggleDarkMode }) => {
 
   return (
     <Box sx={{ display: 'flex' }}>
-      <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
+      <AppBar 
+        position="fixed" 
+        sx={{ 
+          zIndex: (theme) => theme.zIndex.drawer + 1,
+          backdropFilter: 'blur(6px)',
+          backgroundColor: (theme) => 
+            theme.palette.mode === 'light' 
+              ? 'rgba(255, 255, 255, 0.8)'
+              : 'rgba(0, 0, 0, 0.8)',
+        }}
+      >
         <Toolbar>
           <IconButton
             color="inherit"
@@ -44,15 +54,49 @@ const Layout = ({ children, darkMode, toggleDarkMode }) => {
             <MenuIcon />
           </IconButton>
           
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
+          <Typography 
+            variant="h6" 
+            noWrap 
+            component="div" 
+            sx={{ 
+              flexGrow: 1,
+              fontWeight: 600,
+              background: 'linear-gradient(45deg, #1976d2, #21CBF3)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            }}
+          >
             Cinnamon ERP
           </Typography>
           
-          <IconButton color="inherit" onClick={toggleDarkMode} sx={{ mr: 1 }}>
+          <IconButton 
+            sx={{ 
+              mr: 1,
+              transition: 'transform 0.2s',
+              color: (theme) => theme.palette.mode === 'light' ? 'primary.main' : 'primary.light',
+              '&:hover': {
+                transform: 'rotate(30deg)',
+              },
+            }}
+            onClick={toggleDarkMode} 
+          >
             {darkMode ? <Brightness7Icon /> : <Brightness4Icon />}
           </IconButton>
           
-          <Button color="inherit" onClick={handleLogout}>
+          <Button 
+            onClick={handleLogout}
+            sx={{
+              borderRadius: '20px',
+              px: 2,
+              color: (theme) => theme.palette.mode === 'light' ? 'primary.main' : 'primary.light',
+              '&:hover': {
+                backgroundColor: (theme) => 
+                  theme.palette.mode === 'light'
+                    ? 'rgba(25, 118, 210, 0.08)'
+                    : 'rgba(144, 202, 249, 0.08)',
+              },
+            }}
+          >
             Logout
           </Button>
         </Toolbar>
@@ -64,11 +108,16 @@ const Layout = ({ children, darkMode, toggleDarkMode }) => {
         open={mobileOpen}
         onClose={handleDrawerToggle}
         ModalProps={{
-          keepMounted: true, // Better open performance on mobile.
+          keepMounted: true,
         }}
         sx={{
           display: { xs: 'block', sm: 'none' },
-          '& .MuiDrawer-paper': { width: 240 },
+          '& .MuiDrawer-paper': { 
+            width: 240,
+            backgroundColor: (theme) => theme.palette.background.default,
+            borderRight: '1px solid',
+            borderColor: (theme) => theme.palette.divider,
+          },
         }}
       >
         <Sidebar />
@@ -81,7 +130,13 @@ const Layout = ({ children, darkMode, toggleDarkMode }) => {
           display: { xs: 'none', sm: 'block' },
           width: 240,
           flexShrink: 0,
-          '& .MuiDrawer-paper': { width: 240, boxSizing: 'border-box' },
+          '& .MuiDrawer-paper': { 
+            width: 240,
+            boxSizing: 'border-box',
+            backgroundColor: (theme) => theme.palette.background.default,
+            borderRight: '1px solid',
+            borderColor: (theme) => theme.palette.divider,
+          },
         }}
       >
         <Toolbar /> {/* Spacer for AppBar */}
@@ -89,7 +144,18 @@ const Layout = ({ children, darkMode, toggleDarkMode }) => {
       </Drawer>
 
       {/* Main content */}
-      <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
+      <Box 
+        component="main" 
+        sx={{ 
+          flexGrow: 1, 
+          p: 3,
+          backgroundColor: (theme) => 
+            theme.palette.mode === 'light' 
+              ? 'rgba(0, 0, 0, 0.01)'
+              : 'rgba(255, 255, 255, 0.01)',
+          minHeight: '100vh',
+        }}
+      >
         <Toolbar /> {/* Spacer for AppBar */}
         {children}
       </Box>

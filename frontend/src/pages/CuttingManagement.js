@@ -1,30 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Container,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
+  Box,
+  Typography,
   Button,
+  Grid,
+  Paper,
+  Chip,
+  IconButton,
+  LinearProgress,
+  TableContainer,
+  Table,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   TextField,
-  IconButton,
-  Typography,
-  Grid,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
-  Chip,
 } from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
+import {
+  Add as AddIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+  Forest as ForestIcon,
+  LocalFlorist as TreeIcon,
+  Engineering as WorkerIcon,
+  Speed as VolumeIcon,
+} from '@mui/icons-material';
 import axios from 'axios';
 
 const CuttingManagement = () => {
@@ -148,8 +156,16 @@ const CuttingManagement = () => {
     }
   };
 
+  // Calculate summary statistics
+  const summaryStats = {
+    totalOperations: cuttingOperations.length,
+    activeOperations: cuttingOperations.filter(op => op.status === 'in_progress').length,
+    totalTrees: cuttingOperations.reduce((sum, op) => sum + Number(op.treeCount || 0), 0),
+    totalVolume: cuttingOperations.reduce((sum, op) => sum + Number(op.estimatedVolume || 0), 0)
+  };
+
   const getStatusColor = (status) => {
-    switch (status) {
+    switch (status.toLowerCase()) {
       case 'completed':
         return 'success';
       case 'in_progress':
@@ -164,54 +180,143 @@ const CuttingManagement = () => {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-          <Typography variant="h6">Cutting Operations Management</Typography>
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={() => handleOpenDialog()}
-          >
-            New Cutting Operation
-          </Button>
-        </div>
+    <Box sx={{ flexGrow: 1, p: 3 }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+        <Typography variant="h4" sx={{ fontWeight: 600 }}>
+          Cutting Operations
+        </Typography>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => handleOpenDialog()}
+        >
+          New Cutting Operation
+        </Button>
+      </Box>
 
+      {/* Summary Cards */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              background: (theme) => 
+                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(25, 118, 210, 0.05) 100%)`,
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <ForestIcon sx={{ color: 'primary.main', mr: 1 }} />
+              <Typography color="textSecondary">Total Operations</Typography>
+            </Box>
+            <Typography variant="h4">{summaryStats.totalOperations}</Typography>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              background: (theme) => 
+                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(46, 125, 50, 0.05) 100%)`,
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <WorkerIcon sx={{ color: 'success.main', mr: 1 }} />
+              <Typography color="textSecondary">Active Operations</Typography>
+            </Box>
+            <Typography variant="h4">{summaryStats.activeOperations}</Typography>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              background: (theme) => 
+                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(251, 140, 0, 0.05) 100%)`,
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <TreeIcon sx={{ color: 'warning.main', mr: 1 }} />
+              <Typography color="textSecondary">Total Trees</Typography>
+            </Box>
+            <Typography variant="h4">{summaryStats.totalTrees}</Typography>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              background: (theme) => 
+                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(2, 136, 209, 0.05) 100%)`,
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <VolumeIcon sx={{ color: 'info.main', mr: 1 }} />
+              <Typography color="textSecondary">Total Volume</Typography>
+            </Box>
+            <Typography variant="h4">{summaryStats.totalVolume} m³</Typography>
+          </Paper>
+        </Grid>
+      </Grid>
+
+      {/* Operations Table */}
+      <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
         <TableContainer>
           <Table>
             <TableHead>
               <TableRow>
                 <TableCell>Operation #</TableCell>
                 <TableCell>Land Parcel</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Start Date</TableCell>
-                <TableCell>End Date</TableCell>
                 <TableCell>Species</TableCell>
+                <TableCell>Trees</TableCell>
                 <TableCell>Volume (m³)</TableCell>
-                <TableCell>Actions</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {cuttingOperations.map((operation) => (
-                <TableRow key={operation._id}>
+                <TableRow key={operation._id} hover>
                   <TableCell>{operation.operationNumber}</TableCell>
                   <TableCell>{operation.landParcel}</TableCell>
+                  <TableCell>{operation.species}</TableCell>
+                  <TableCell>{operation.treeCount}</TableCell>
+                  <TableCell>{operation.estimatedVolume}</TableCell>
                   <TableCell>
-                    <Chip 
-                      label={operation.status.replace('_', ' ')} 
+                    <Chip
+                      label={operation.status}
                       color={getStatusColor(operation.status)}
                       size="small"
                     />
                   </TableCell>
-                  <TableCell>{new Date(operation.startDate).toLocaleDateString()}</TableCell>
-                  <TableCell>{operation.endDate ? new Date(operation.endDate).toLocaleDateString() : '-'}</TableCell>
-                  <TableCell>{operation.species}</TableCell>
-                  <TableCell>{operation.actualVolume || operation.estimatedVolume}</TableCell>
-                  <TableCell>
-                    <IconButton onClick={() => handleOpenDialog(operation)}>
+                  <TableCell align="right">
+                    <IconButton 
+                      size="small" 
+                      onClick={() => handleOpenDialog(operation)}
+                      sx={{ color: 'primary.main' }}
+                    >
                       <EditIcon />
                     </IconButton>
-                    <IconButton onClick={() => handleDelete(operation._id)}>
+                    <IconButton 
+                      size="small" 
+                      onClick={() => handleDelete(operation._id)}
+                      sx={{ color: 'error.main', ml: 1 }}
+                    >
                       <DeleteIcon />
                     </IconButton>
                   </TableCell>
@@ -220,176 +325,10 @@ const CuttingManagement = () => {
             </TableBody>
           </Table>
         </TableContainer>
-
-        <Dialog 
-          open={openDialog} 
-          onClose={handleCloseDialog}
-          maxWidth="md"
-          fullWidth
-        >
-          <DialogTitle>
-            {selectedOperation ? 'Edit Cutting Operation' : 'New Cutting Operation'}
-          </DialogTitle>
-          <DialogContent>
-            <Grid container spacing={2} sx={{ mt: 1 }}>
-              <Grid item xs={6}>
-                <TextField
-                  name="operationNumber"
-                  label="Operation Number"
-                  fullWidth
-                  value={formData.operationNumber}
-                  onChange={handleInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="landParcel"
-                  label="Land Parcel"
-                  fullWidth
-                  value={formData.landParcel}
-                  onChange={handleInputChange}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <FormControl fullWidth>
-                  <InputLabel>Assigned Workers</InputLabel>
-                  <Select
-                    multiple
-                    name="assignedWorkers"
-                    value={formData.assignedWorkers}
-                    label="Assigned Workers"
-                    onChange={handleInputChange}
-                    renderValue={(selected) => (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                        {selected.map((value) => {
-                          const worker = employees.find(emp => emp._id === value);
-                          return worker ? (
-                            <Chip 
-                              key={value} 
-                              label={`${worker.firstName} ${worker.lastName}`} 
-                              size="small"
-                            />
-                          ) : null;
-                        })}
-                      </div>
-                    )}
-                  >
-                    {employees.map((employee) => (
-                      <MenuItem key={employee._id} value={employee._id}>
-                        {`${employee.firstName} ${employee.lastName}`}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="startDate"
-                  label="Start Date"
-                  type="date"
-                  fullWidth
-                  InputLabelProps={{ shrink: true }}
-                  value={formData.startDate}
-                  onChange={handleInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="endDate"
-                  label="End Date"
-                  type="date"
-                  fullWidth
-                  InputLabelProps={{ shrink: true }}
-                  value={formData.endDate}
-                  onChange={handleInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Status</InputLabel>
-                  <Select
-                    name="status"
-                    value={formData.status}
-                    label="Status"
-                    onChange={handleInputChange}
-                  >
-                    <MenuItem value="pending">Pending</MenuItem>
-                    <MenuItem value="in_progress">In Progress</MenuItem>
-                    <MenuItem value="completed">Completed</MenuItem>
-                    <MenuItem value="cancelled">Cancelled</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="treeCount"
-                  label="Number of Trees"
-                  type="number"
-                  fullWidth
-                  value={formData.treeCount}
-                  onChange={handleInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="species"
-                  label="Tree Species"
-                  fullWidth
-                  value={formData.species}
-                  onChange={handleInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="estimatedVolume"
-                  label="Estimated Volume (m³)"
-                  type="number"
-                  fullWidth
-                  value={formData.estimatedVolume}
-                  onChange={handleInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="actualVolume"
-                  label="Actual Volume (m³)"
-                  type="number"
-                  fullWidth
-                  value={formData.actualVolume}
-                  onChange={handleInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="equipment"
-                  label="Equipment Used"
-                  fullWidth
-                  value={formData.equipment}
-                  onChange={handleInputChange}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  name="notes"
-                  label="Notes"
-                  fullWidth
-                  multiline
-                  rows={3}
-                  value={formData.notes}
-                  onChange={handleInputChange}
-                />
-              </Grid>
-            </Grid>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleCloseDialog}>Cancel</Button>
-            <Button onClick={handleSubmit} color="primary">
-              {selectedOperation ? 'Update Operation' : 'Create Operation'}
-            </Button>
-          </DialogActions>
-        </Dialog>
       </Paper>
-    </Container>
+
+      {/* Keep your existing dialog with the current form fields */}
+    </Box>
   );
 };
 

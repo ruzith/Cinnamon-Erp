@@ -5,6 +5,7 @@ const connectDB = require('./config/db');
 const { errorHandler, notFound } = require('./middleware/errorMiddleware');
 const mongoose = require('mongoose');
 const userRoutes = require('./routes/userRoutes')
+const settingsRoutes = require('./routes/settingsRoutes');
 
 // Load env vars
 dotenv.config();
@@ -36,6 +37,7 @@ const app = express();
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static('uploads'));
 
 // Routes
 app.use('/api/lands', require('./routes/landRoutes'));
@@ -53,7 +55,7 @@ app.use('/api/reports', require('./routes/reportRoutes'));
 app.use('/api/tasks', require('./routes/taskRoutes'));
 app.use('/api/manufacturing-orders', require('./routes/manufacturingOrderRoutes'));
 app.use('/api/customers', require('./routes/customerRoutes'));
-app.use('/api/settings', require('./routes/settingsRoutes'));
+app.use('/api/settings', settingsRoutes);
 
 // Error Handling middlewares
 app.use(notFound);

@@ -1,202 +1,319 @@
 import React, { useState, useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 import {
-  Container,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  IconButton,
-  Typography,
+    Box,
+    Typography,
+    Button,
+    Grid,
+    Paper,
+    Chip,
+    IconButton,
+    LinearProgress,
+    TableContainer,
+    Table,
+    TableHead,
+    TableBody,
+    TableRow,
+    TableCell,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    TextField,
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem,
 } from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import axios from 'axios';
+import {
+    Add as AddIcon,
+    Edit as EditIcon,
+    Delete as DeleteIcon,
+    Person as PersonIcon,
+    SupervisorAccount as AdminIcon,
+    Security as SecurityIcon,
+    Group as GroupIcon,
+} from '@mui/icons-material';
+import { getUsers, deleteUser } from '../features/users/userSlice';
 
 const UserManagement = () => {
-  const [users, setUsers] = useState([]);
-  const [openDialog, setOpenDialog] = useState(false);
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [formData, setFormData] = useState({
-    username: '',
-    email: '',
-    role: '',
-    password: '',
-  });
+    const dispatch = useDispatch();
+    const { users, isLoading } = useSelector((state) => state.users);
+    const [openDialog, setOpenDialog] = useState(false);
+    const [selectedUser, setSelectedUser] = useState(null);
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
+    useEffect(() => {
+        dispatch(getUsers());
+    }, [dispatch]);
 
-  const fetchUsers = async () => {
-    try {
-      const response = await axios.get('/api/users');
-      setUsers(response.data);
-    } catch (error) {
-      console.error('Error fetching users:', error);
+    // Calculate summary statistics
+    const summaryStats = {
+        totalUsers: users.length,
+        adminUsers: users.filter(user => user.role === 'admin').length,
+        activeUsers: users.filter(user => user.status === 'active').length,
+        departments: [...new Set(users.map(user => user.department))].length
+    };
+
+    const handleEdit = (user) => {
+        setSelectedUser(user);
+        setOpenDialog(true);
+    };
+
+    const handleDelete = async (userId) => {
+        if (window.confirm('Are you sure you want to delete this user?')) {
+            try {
+                await dispatch(deleteUser(userId));
+                dispatch(getUsers());
+            } catch (error) {
+                console.error('Error deleting user:', error);
+            }
+        }
+    };
+
+    const getRoleColor = (role) => {
+        switch (role.toLowerCase()) {
+            case 'admin':
+                return 'error';
+            case 'manager':
+                return 'warning';
+            case 'user':
+                return 'info';
+            default:
+                return 'default';
+        }
+    };
+
+    if (isLoading) {
+        return <LinearProgress />;
     }
-  };
 
-  const handleOpenDialog = (user = null) => {
-    if (user) {
-      setSelectedUser(user);
-      setFormData({
-        username: user.username,
-        email: user.email,
-        role: user.role,
-        password: '',
-      });
-    } else {
-      setSelectedUser(null);
-      setFormData({
-        username: '',
-        email: '',
-        role: '',
-        password: '',
-      });
-    }
-    setOpenDialog(true);
-  };
+    return (
+        <Box sx={{ flexGrow: 1, p: 3 }}>
+            {/* Header */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+                <Typography variant="h4" sx={{ fontWeight: 600 }}>
+                    User Management
+                </Typography>
+                <Button
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    onClick={() => setOpenDialog(true)}
+                >
+                    New User
+                </Button>
+            </Box>
 
-  const handleCloseDialog = () => {
-    setOpenDialog(false);
-    setSelectedUser(null);
-  };
+            {/* Summary Cards */}
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+                <Grid item xs={12} sm={6} md={3}>
+                    <Paper
+                        elevation={0}
+                        sx={{
+                            p: 3,
+                            background: (theme) =>
+                                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(25, 118, 210, 0.05) 100%)`,
+                            border: '1px solid',
+                            borderColor: 'divider',
+                        }}
+                    >
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                            <GroupIcon sx={{ color: 'primary.main', mr: 1 }} />
+                            <Typography color="textSecondary">Total Users</Typography>
+                        </Box>
+                        <Typography variant="h4">{summaryStats.totalUsers}</Typography>
+                    </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                    <Paper
+                        elevation={0}
+                        sx={{
+                            p: 3,
+                            background: (theme) =>
+                                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(211, 47, 47, 0.05) 100%)`,
+                            border: '1px solid',
+                            borderColor: 'divider',
+                        }}
+                    >
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                            <AdminIcon sx={{ color: 'error.main', mr: 1 }} />
+                            <Typography color="textSecondary">Administrators</Typography>
+                        </Box>
+                        <Typography variant="h4">{summaryStats.adminUsers}</Typography>
+                    </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                    <Paper
+                        elevation={0}
+                        sx={{
+                            p: 3,
+                            background: (theme) =>
+                                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(46, 125, 50, 0.05) 100%)`,
+                            border: '1px solid',
+                            borderColor: 'divider',
+                        }}
+                    >
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                            <PersonIcon sx={{ color: 'success.main', mr: 1 }} />
+                            <Typography color="textSecondary">Active Users</Typography>
+                        </Box>
+                        <Typography variant="h4">{summaryStats.activeUsers}</Typography>
+                    </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                    <Paper
+                        elevation={0}
+                        sx={{
+                            p: 3,
+                            background: (theme) =>
+                                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(251, 140, 0, 0.05) 100%)`,
+                            border: '1px solid',
+                            borderColor: 'divider',
+                        }}
+                    >
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                            <SecurityIcon sx={{ color: 'warning.main', mr: 1 }} />
+                            <Typography color="textSecondary">Departments</Typography>
+                        </Box>
+                        <Typography variant="h4">{summaryStats.departments}</Typography>
+                    </Paper>
+                </Grid>
+            </Grid>
 
-  const handleInputChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
+            {/* Users Table */}
+            <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
+                <TableContainer>
+                    <Table>
+                        <TableHead>
+                            <TableRow>
+                                <TableCell>Username</TableCell>
+                                <TableCell>Email</TableCell>
+                                <TableCell>Department</TableCell>
+                                <TableCell>Role</TableCell>
+                                <TableCell>Status</TableCell>
+                                <TableCell align="right">Actions</TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {users.map((user) => (
+                                <TableRow key={user._id} hover>
+                                    <TableCell>{user.username}</TableCell>
+                                    <TableCell>{user.email}</TableCell>
+                                    <TableCell>{user.department}</TableCell>
+                                    <TableCell>
+                                        <Chip
+                                            label={user.role}
+                                            color={getRoleColor(user.role)}
+                                            size="small"
+                                        />
+                                    </TableCell>
+                                    <TableCell>
+                                        <Chip
+                                            label={user.status}
+                                            color={user.status === 'active' ? 'success' : 'default'}
+                                            size="small"
+                                        />
+                                    </TableCell>
+                                    <TableCell align="right">
+                                        <IconButton
+                                            size="small"
+                                            onClick={() => handleEdit(user)}
+                                            sx={{ color: 'primary.main' }}
+                                        >
+                                            <EditIcon />
+                                        </IconButton>
+                                        <IconButton
+                                            size="small"
+                                            onClick={() => handleDelete(user._id)}
+                                            sx={{ color: 'error.main', ml: 1 }}
+                                        >
+                                            <DeleteIcon />
+                                        </IconButton>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+            </Paper>
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      if (selectedUser) {
-        await axios.put(`/api/users/${selectedUser._id}`, formData);
-      } else {
-        await axios.post('/api/users', formData);
-      }
-      fetchUsers();
-      handleCloseDialog();
-    } catch (error) {
-      console.error('Error saving user:', error);
-    }
-  };
-
-  const handleDeleteUser = async (userId) => {
-    if (window.confirm('Are you sure you want to delete this user?')) {
-      try {
-        await axios.delete(`/api/users/${userId}`);
-        fetchUsers();
-      } catch (error) {
-        console.error('Error deleting user:', error);
-      }
-    }
-  };
-
-  return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-          <Typography variant="h6">User Management</Typography>
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={() => handleOpenDialog()}
-          >
-            Add New User
-          </Button>
-        </div>
-        
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Username</TableCell>
-                <TableCell>Email</TableCell>
-                <TableCell>Role</TableCell>
-                <TableCell>Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {users.map((user) => (
-                <TableRow key={user._id}>
-                  <TableCell>{user.username}</TableCell>
-                  <TableCell>{user.email}</TableCell>
-                  <TableCell>{user.role}</TableCell>
-                  <TableCell>
-                    <IconButton onClick={() => handleOpenDialog(user)}>
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton onClick={() => handleDeleteUser(user._id)}>
-                      <DeleteIcon />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-
-        <Dialog open={openDialog} onClose={handleCloseDialog}>
-          <DialogTitle>
-            {selectedUser ? 'Edit User' : 'Create New User'}
-          </DialogTitle>
-          <DialogContent>
-            <TextField
-              name="username"
-              label="Username"
-              fullWidth
-              margin="normal"
-              value={formData.username}
-              onChange={handleInputChange}
-            />
-            <TextField
-              name="email"
-              label="Email"
-              fullWidth
-              margin="normal"
-              value={formData.email}
-              onChange={handleInputChange}
-            />
-            <TextField
-              name="role"
-              label="Role"
-              fullWidth
-              margin="normal"
-              value={formData.role}
-              onChange={handleInputChange}
-            />
-            <TextField
-              name="password"
-              label="Password"
-              type="password"
-              fullWidth
-              margin="normal"
-              value={formData.password}
-              onChange={handleInputChange}
-            />
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleCloseDialog}>Cancel</Button>
-            <Button onClick={handleSubmit} color="primary">
-              {selectedUser ? 'Update' : 'Create'}
-            </Button>
-          </DialogActions>
-        </Dialog>
-      </Paper>
-    </Container>
-  );
+            {/* User Dialog */}
+            <Dialog
+                open={openDialog}
+                onClose={() => {
+                    setOpenDialog(false);
+                    setSelectedUser(null);
+                }}
+                maxWidth="sm"
+                fullWidth
+            >
+                <DialogTitle>
+                    {selectedUser ? 'Edit User' : 'Add New User'}
+                </DialogTitle>
+                <DialogContent>
+                    <Grid container spacing={2} sx={{ mt: 1 }}>
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                fullWidth
+                                label="Username"
+                                name="username"
+                                defaultValue={selectedUser?.username}
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                fullWidth
+                                label="Email"
+                                name="email"
+                                type="email"
+                                defaultValue={selectedUser?.email}
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <FormControl fullWidth>
+                                <InputLabel>Role</InputLabel>
+                                <Select
+                                    label="Role"
+                                    name="role"
+                                    defaultValue={selectedUser?.role || 'user'}
+                                >
+                                    <MenuItem value="admin">Administrator</MenuItem>
+                                    <MenuItem value="manager">Manager</MenuItem>
+                                    <MenuItem value="user">User</MenuItem>
+                                </Select>
+                            </FormControl>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <FormControl fullWidth>
+                                <InputLabel>Status</InputLabel>
+                                <Select
+                                    label="Status"
+                                    name="status"
+                                    defaultValue={selectedUser?.status || 'active'}
+                                >
+                                    <MenuItem value="active">Active</MenuItem>
+                                    <MenuItem value="inactive">Inactive</MenuItem>
+                                </Select>
+                            </FormControl>
+                        </Grid>
+                        <Grid item xs={12}>
+                            <TextField
+                                fullWidth
+                                label="Department"
+                                name="department"
+                                defaultValue={selectedUser?.department}
+                            />
+                        </Grid>
+                    </Grid>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
+                    <Button variant="contained" color="primary">
+                        {selectedUser ? 'Update' : 'Create'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+        </Box>
+    );
 };
 
 export default UserManagement; 

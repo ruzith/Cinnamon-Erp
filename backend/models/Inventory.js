@@ -1,46 +1,44 @@
-const mongoose = require('mongoose');
+const BaseModel = require('./BaseModel');
 
-const inventorySchema = new mongoose.Schema({
-  productName: {
-    type: String,
-    required: true
-  },
-  category: {
-    type: String,
-    required: true
-  },
-  quantity: {
-    type: Number,
-    required: true,
-    default: 0
-  },
-  unit: {
-    type: String,
-    required: true
-  },
-  minStockLevel: {
-    type: Number,
-    required: true
-  },
-  maxStockLevel: {
-    type: Number,
-    required: true
-  },
-  location: {
-    type: String,
-    required: true
-  },
-  unitPrice: {
-    type: Number,
-    required: true
-  },
-  description: String,
-  lastUpdated: {
-    type: Date,
-    default: Date.now
+class Inventory extends BaseModel {
+  constructor() {
+    super('inventory');
   }
-}, {
-  timestamps: true
-});
 
-module.exports = mongoose.model('Inventory', inventorySchema); 
+  async findByProductName(productName) {
+    const [rows] = await this.pool.execute(
+      'SELECT * FROM inventory WHERE product_name = ?',
+      [productName]
+    );
+    return rows[0];
+  }
+
+  async updateQuantity(id, quantity) {
+    await this.pool.execute(
+      'UPDATE inventory SET quantity = ?, last_updated = CURRENT_TIMESTAMP WHERE id = ?',
+      [quantity, id]
+    );
+    const [rows] = await this.pool.execute('SELECT * FROM inventory WHERE id = ?', [id]);
+    return rows[0];
+  }
+
+  async getLowStockItems() {
+    const [rows] = await this.pool.execute(
+      'SELECT * FROM inventory WHERE quantity <= min_stock_level ORDER BY product_name'
+    );
+    return rows;
+  }
+
+  async getTransactionHistory(id) {
+    const [rows] = await this.pool.execute(`
+      SELECT it.*, i.product_name
+      FROM inventory_transactions it
+      JOIN inventory i ON it.item_id = i.id
+      WHERE it.item_id = ?
+      ORDER BY it.created_at DESC
+    `, [id]);
+    return rows;
+  }
+}
+
+module.exports = new Inventory(); 

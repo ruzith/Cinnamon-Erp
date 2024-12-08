@@ -8,7 +8,7 @@ const AssetMaintenance = require('../models/AssetMaintenance');
 // Category routes
 router.get('/categories', protect, async (req, res) => {
   try {
-    const categories = await AssetCategory.find({ status: 'active' });
+    const categories = await AssetCategory.getActiveCategories();
     res.json(categories);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -17,7 +17,11 @@ router.get('/categories', protect, async (req, res) => {
 
 router.post('/categories', protect, authorize('admin'), async (req, res) => {
   try {
-    const category = await AssetCategory.create(req.body);
+    const [result] = await AssetCategory.pool.execute(
+      'INSERT INTO asset_categories SET ?',
+      [req.body]
+    );
+    const category = await AssetCategory.getWithAssets(result.insertId);
     res.status(201).json(category);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -27,10 +31,7 @@ router.post('/categories', protect, authorize('admin'), async (req, res) => {
 // Asset routes
 router.get('/', protect, async (req, res) => {
   try {
-    const assets = await Asset.find()
-      .populate('category')
-      .populate('createdBy', 'name')
-      .sort('-createdAt');
+    const assets = await Asset.getWithDetails();
     res.json(assets);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -39,18 +40,18 @@ router.get('/', protect, async (req, res) => {
 
 router.post('/', protect, authorize('admin'), async (req, res) => {
   try {
-    const asset = new Asset({
+    const assetData = {
       ...req.body,
-      createdBy: req.user.id
-    });
-    await asset.calculateCurrentValue();
-    await asset.save();
+      created_by: req.user.id
+    };
     
-    res.status(201).json(
-      await asset
-        .populate('category')
-        .populate('createdBy', 'name')
+    const [result] = await Asset.pool.execute(
+      'INSERT INTO assets SET ?',
+      [assetData]
     );
+    
+    const asset = await Asset.getWithDetails(result.insertId);
+    res.status(201).json(asset);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
@@ -64,18 +65,14 @@ router.post('/:assetId/maintenance', protect, async (req, res) => {
       return res.status(404).json({ message: 'Asset not found' });
     }
 
-    const maintenance = await AssetMaintenance.create({
+    const maintenanceData = {
       ...req.body,
-      asset: req.params.assetId,
-      createdBy: req.user.id
-    });
+      asset_id: req.params.assetId,
+      created_by: req.user.id
+    };
 
-    // Update asset's maintenance schedule
-    asset.maintenanceSchedule.lastMaintenance = maintenance.maintenanceDate;
-    asset.maintenanceSchedule.nextMaintenance = maintenance.nextMaintenanceDate;
-    await asset.save();
-
-    res.status(201).json(await maintenance.populate(['asset', 'createdBy']));
+    const maintenance = await AssetMaintenance.createWithAttachments(maintenanceData);
+    res.status(201).json(maintenance);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
@@ -84,10 +81,7 @@ router.post('/:assetId/maintenance', protect, async (req, res) => {
 // Get asset maintenance records
 router.get('/:assetId/maintenance', protect, async (req, res) => {
   try {
-    const maintenance = await AssetMaintenance.find({ asset: req.params.assetId })
-      .populate('asset')
-      .populate('createdBy', 'name')
-      .sort('-maintenanceDate');
+    const maintenance = await AssetMaintenance.getByAssetId(req.params.assetId);
     res.json(maintenance);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -97,11 +91,17 @@ router.get('/:assetId/maintenance', protect, async (req, res) => {
 // Get all maintenance records
 router.get('/maintenance', protect, async (req, res) => {
   try {
-    const maintenance = await AssetMaintenance.find()
-      .populate('asset')
-      .populate('createdBy', 'name')
-      .sort('-maintenanceDate');
-    res.json(maintenance);
+    const [rows] = await AssetMaintenance.pool.execute(`
+      SELECT am.*,
+             u.name as created_by_name,
+             a.name as asset_name,
+             a.code as asset_code
+      FROM asset_maintenance am
+      JOIN assets a ON am.asset_id = a.id
+      LEFT JOIN users u ON am.created_by = u.id
+      ORDER BY am.maintenance_date DESC
+    `);
+    res.json(rows);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -110,16 +110,31 @@ router.get('/maintenance', protect, async (req, res) => {
 // Generate depreciation report
 router.get('/report/depreciation', protect, async (req, res) => {
   try {
-    const assets = await Asset.find().populate('category');
-    const report = assets.map(asset => ({
-      name: asset.name,
-      code: asset.code,
-      purchasePrice: asset.purchasePrice,
-      purchaseDate: asset.purchaseDate,
-      currentValue: asset.calculateCurrentValue(),
-      depreciation: asset.purchasePrice - asset.currentValue,
-      depreciationRate: asset.category.depreciationRate
-    }));
+    const [assets] = await Asset.pool.execute(`
+      SELECT a.*,
+             ac.name as category_name,
+             ac.depreciation_rate
+      FROM assets a
+      JOIN asset_categories ac ON a.category_id = ac.id
+      WHERE a.status = 'active'
+    `);
+
+    const report = assets.map(asset => {
+      const purchaseDate = new Date(asset.purchase_date);
+      const currentDate = new Date();
+      const ageInYears = (currentDate - purchaseDate) / (365 * 24 * 60 * 60 * 1000);
+      const currentValue = asset.purchase_price * Math.pow(1 - (asset.depreciation_rate / 100), ageInYears);
+
+      return {
+        name: asset.name,
+        code: asset.code,
+        purchasePrice: asset.purchase_price,
+        purchaseDate: asset.purchase_date,
+        currentValue: Math.max(currentValue, 0),
+        depreciation: asset.purchase_price - Math.max(currentValue, 0),
+        depreciationRate: asset.depreciation_rate
+      };
+    });
     
     res.json(report);
   } catch (error) {

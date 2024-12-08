@@ -59,7 +59,8 @@ const LoanBook = () => {
     totalLoaned: 0,
     totalRepaid: 0,
     outstandingAmount: 0,
-    activeLoans: 0
+    activeLoans: 0,
+    overdueLoans: 0
   });
 
   const [loanFormData, setLoanFormData] = useState({
@@ -113,9 +114,22 @@ const LoanBook = () => {
   const fetchSummary = async () => {
     try {
       const response = await axios.get('/api/loans/summary');
-      setSummary(response.data);
+      setSummary({
+        totalLoaned: Number(response.data.totalLoaned) || 0,
+        totalRepaid: Number(response.data.totalRepaid) || 0,
+        outstandingAmount: Number(response.data.outstandingAmount) || 0,
+        activeLoans: Number(response.data.activeLoans) || 0,
+        overdueLoans: Number(response.data.overdueLoans) || 0
+      });
     } catch (error) {
       console.error('Error fetching summary:', error);
+      setSummary({
+        totalLoaned: 0,
+        totalRepaid: 0,
+        outstandingAmount: 0,
+        activeLoans: 0,
+        overdueLoans: 0
+      });
     }
   };
 

@@ -1,69 +1,33 @@
-const mongoose = require('mongoose');
+const BaseModel = require('./BaseModel');
 
-const employeeSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  nic: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true
-  },
-  phone: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  address: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  birthday: {
-    type: Date,
-    required: true
-  },
-  designation: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Designation',
-    required: true
-  },
-  employmentType: {
-    type: String,
-    enum: ['permanent', 'temporary'],
-    required: true
-  },
-  status: {
-    type: String,
-    enum: ['active', 'inactive'],
-    default: 'active'
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  salaryStructure: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'SalaryStructure',
-    required: true
-  },
-  bankDetails: {
-    bankName: {
-      type: String,
-      trim: true
-    },
-    accountNumber: {
-      type: String,
-      trim: true
-    },
-    accountName: {
-      type: String,
-      trim: true
-    }
+class Employee extends BaseModel {
+  constructor() {
+    super('employees');
   }
-});
 
-module.exports = mongoose.model('Employee', employeeSchema); 
+  async findByNIC(nic) {
+    const [rows] = await this.pool.execute(
+      'SELECT * FROM employees WHERE nic = ?',
+      [nic]
+    );
+    return rows[0];
+  }
+
+  async getWithDetails() {
+    const [rows] = await this.pool.execute(`
+      SELECT e.*, 
+             d.title as designation_title,
+             d.department as designation_department,
+             s.name as salary_structure_name,
+             s.basic_salary
+      FROM employees e
+      LEFT JOIN designations d ON e.designation_id = d.id
+      LEFT JOIN salary_structures s ON e.salary_structure_id = s.id
+      WHERE e.status = 'active'
+      ORDER BY e.name ASC
+    `);
+    return rows;
+  }
+}
+
+module.exports = new Employee(); 

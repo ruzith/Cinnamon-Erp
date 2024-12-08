@@ -15,22 +15,19 @@ const registerUser = asyncHandler(async (req, res) => {
   }
 
   // Check if user exists
-  const userExists = await User.findOne({ email });
+  const userExists = await User.findByEmail(email);
 
   if (userExists) {
     res.status(400);
     throw new Error('User already exists');
   }
 
-  // Hash password
-  const salt = await bcrypt.genSalt(10);
-  const hashedPassword = await bcrypt.hash(password, salt);
-
-  // Create user
+  // Create user with default role of 'staff'
   const user = await User.create({
     name,
     email,
-    password: hashedPassword
+    password,
+    role: 'staff' // Set default role for registration
   });
 
   if (user) {
@@ -39,7 +36,7 @@ const registerUser = asyncHandler(async (req, res) => {
       name: user.name,
       email: user.email,
       role: user.role,
-      token: generateToken(user._id)
+      token: generateToken(user.id)
     });
   } else {
     res.status(400);
@@ -54,15 +51,15 @@ const loginUser = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
   // Check for user email
-  const user = await User.findOne({ email });
+  const user = await User.findByEmail(email);
 
-  if (user && (await bcrypt.compare(password, user.password))) {
+  if (user && (await User.validatePassword(user, password))) {
     res.json({
       _id: user.id,
       name: user.name,
       email: user.email,
       role: user.role,
-      token: generateToken(user._id)
+      token: generateToken(user.id)
     });
   } else {
     res.status(400);
@@ -74,7 +71,7 @@ const loginUser = asyncHandler(async (req, res) => {
 // @route   GET /api/users
 // @access  Private/Admin
 const getUsers = asyncHandler(async (req, res) => {
-  const users = await User.find().select('-password');
+  const users = await User.findAll();
   res.status(200).json(users);
 });
 
@@ -82,7 +79,7 @@ const getUsers = asyncHandler(async (req, res) => {
 // @route   GET /api/users/:id
 // @access  Private/Admin
 const getUser = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.params.id).select('-password');
+  const user = await User.findById(req.params.id);
   if (!user) {
     res.status(404);
     throw new Error('User not found');
@@ -94,11 +91,7 @@ const getUser = asyncHandler(async (req, res) => {
 // @route   PUT /api/users/:id
 // @access  Private/Admin
 const updateUser = asyncHandler(async (req, res) => {
-  const user = await User.findByIdAndUpdate(req.params.id, req.body, {
-    new: true,
-    runValidators: true
-  }).select('-password');
-  
+  const user = await User.update(req.params.id, req.body);
   if (!user) {
     res.status(404);
     throw new Error('User not found');
@@ -110,7 +103,7 @@ const updateUser = asyncHandler(async (req, res) => {
 // @route   DELETE /api/users/:id
 // @access  Private/Admin
 const deleteUser = asyncHandler(async (req, res) => {
-  const user = await User.findByIdAndDelete(req.params.id);
+  const user = await User.delete(req.params.id);
   if (!user) {
     res.status(404);
     throw new Error('User not found');
@@ -137,22 +130,19 @@ const createUser = asyncHandler(async (req, res) => {
   }
 
   // Check if user exists
-  const userExists = await User.findOne({ email });
+  const userExists = await User.findByEmail(email);
   if (userExists) {
     res.status(400);
     throw new Error('User already exists');
   }
 
-  // Hash password
-  const salt = await bcrypt.genSalt(10);
-  const hashedPassword = await bcrypt.hash(password, salt);
-
-  // Create user
+  // Create user with role validation
+  const validRoles = ['admin', 'staff', 'accountant', 'manager'];
   const user = await User.create({
     name,
     email,
-    password: hashedPassword,
-    role: role || 'user'
+    password,
+    role: validRoles.includes(role) ? role : 'staff'
   });
 
   if (user) {

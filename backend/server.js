@@ -1,34 +1,22 @@
 const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
-const connectDB = require('./config/db');
+const { connectDB } = require('./config/db');
 const { errorHandler, notFound } = require('./middleware/errorMiddleware');
-const mongoose = require('mongoose');
 const userRoutes = require('./routes/userRoutes')
 const settingsRoutes = require('./routes/settingsRoutes');
+const Report = require('./models/Report');
 
 // Load env vars
 dotenv.config();
 
 // Connect to database
-connectDB();
-
-mongoose.connection.on('error', (err) => {
-  console.error('MongoDB connection error:', err);
-});
-
-mongoose.connection.on('disconnected', () => {
-  console.log('MongoDB disconnected');
-});
-
-process.on('SIGINT', async () => {
+connectDB().then(async () => {
   try {
-    await mongoose.connection.close();
-    console.log('MongoDB connection closed through app termination');
-    process.exit(0);
-  } catch (err) {
-    console.error('Error closing MongoDB connection:', err);
-    process.exit(1);
+    await Report.initializeTemplates();
+    console.log('Report templates initialized');
+  } catch (error) {
+    console.error('Error initializing report templates:', error);
   }
 });
 

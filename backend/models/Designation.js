@@ -1,25 +1,28 @@
-const mongoose = require('mongoose');
+const BaseModel = require('./BaseModel');
 
-const designationSchema = new mongoose.Schema({
-  title: {
-    type: String,
-    required: true,
-    trim: true,
-    unique: true
-  },
-  description: {
-    type: String,
-    trim: true
-  },
-  department: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
+class Designation extends BaseModel {
+  constructor() {
+    super('designations');
   }
-});
 
-module.exports = mongoose.model('Designation', designationSchema); 
+  async findByTitle(title) {
+    const [rows] = await this.pool.execute(
+      'SELECT * FROM designations WHERE title = ?',
+      [title]
+    );
+    return rows[0];
+  }
+
+  async getWithEmployeeCount() {
+    const [rows] = await this.pool.execute(`
+      SELECT d.*, COUNT(e.id) as employee_count
+      FROM designations d
+      LEFT JOIN employees e ON d.id = e.designation_id
+      GROUP BY d.id
+      ORDER BY d.title ASC
+    `);
+    return rows;
+  }
+}
+
+module.exports = new Designation(); 

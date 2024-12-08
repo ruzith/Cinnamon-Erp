@@ -7,11 +7,16 @@ const LoanPayment = require('../models/LoanPayment');
 // Get all loans
 router.get('/', protect, async (req, res) => {
   try {
-    const loans = await Loan.find()
-      .populate('borrower')
-      .populate('createdBy', 'name')
-      .sort('-createdAt');
-    res.json(loans);
+    const [rows] = await Loan.pool.execute(`
+      SELECT l.*,
+             b.name as borrower_name,
+             u.name as created_by_name
+      FROM loans l
+      LEFT JOIN customers b ON l.borrower_id = b.id
+      LEFT JOIN users u ON l.created_by = u.id
+      ORDER BY l.created_at DESC
+    `);
+    res.json(rows);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -20,20 +25,13 @@ router.get('/', protect, async (req, res) => {
 // Create new loan
 router.post('/', protect, authorize('admin', 'accountant'), async (req, res) => {
   try {
-    const loan = new Loan({
+    const loanData = {
       ...req.body,
-      createdBy: req.user.id
-    });
-
-    // Calculate payment schedule
-    loan.calculatePaymentSchedule();
-    await loan.save();
-
-    res.status(201).json(
-      await loan
-        .populate('borrower')
-        .populate('createdBy', 'name')
-    );
+      created_by: req.user.id
+    };
+    
+    const loan = await Loan.createWithSchedule(loanData);
+    res.status(201).json(loan);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
@@ -42,38 +40,47 @@ router.post('/', protect, authorize('admin', 'accountant'), async (req, res) => 
 // Record loan payment
 router.post('/:id/payments', protect, authorize('admin', 'accountant'), async (req, res) => {
   try {
-    const loan = await Loan.findById(req.params.id);
-    if (!loan) {
+    const [loan] = await Loan.pool.execute(
+      'SELECT * FROM loans WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (!loan[0]) {
       return res.status(404).json({ message: 'Loan not found' });
     }
 
-    const { scheduleItemId, amount } = req.body;
-    const scheduleItem = loan.paymentSchedule.id(scheduleItemId);
-    if (!scheduleItem) {
-      return res.status(404).json({ message: 'Payment schedule item not found' });
+    const { amount } = req.body;
+    const paymentData = {
+      loan_id: loan[0].id,
+      amount,
+      payment_date: new Date(),
+      created_by: req.user.id,
+      ...req.body
+    };
+
+    // Begin transaction
+    await Loan.pool.beginTransaction();
+    try {
+      // Create payment record
+      const [result] = await Loan.pool.execute(
+        'INSERT INTO loan_payments SET ?',
+        [paymentData]
+      );
+
+      // Update loan remaining balance
+      await Loan.pool.execute(
+        'UPDATE loans SET remaining_balance = remaining_balance - ?, status = IF(remaining_balance - ? <= 0, "completed", status) WHERE id = ?',
+        [amount, amount, loan[0].id]
+      );
+
+      await Loan.pool.commit();
+
+      const payment = await LoanPayment.getWithDetails(result.insertId);
+      res.status(201).json(payment);
+    } catch (error) {
+      await Loan.pool.rollback();
+      throw error;
     }
-
-    // Create payment record
-    const payment = await LoanPayment.create({
-      ...req.body,
-      loan: loan._id,
-      scheduleItem: scheduleItemId,
-      createdBy: req.user.id
-    });
-
-    // Update schedule item
-    scheduleItem.paidAmount += amount;
-    scheduleItem.status = scheduleItem.paidAmount >= scheduleItem.amount ? 'paid' : 'pending';
-    scheduleItem.paidDate = scheduleItem.status === 'paid' ? new Date() : undefined;
-
-    // Update loan remaining balance
-    loan.remainingBalance -= amount;
-    if (loan.remainingBalance <= 0) {
-      loan.status = 'completed';
-    }
-
-    await loan.save();
-    res.status(201).json(await payment.populate(['loan', 'createdBy']));
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
@@ -82,11 +89,16 @@ router.post('/:id/payments', protect, authorize('admin', 'accountant'), async (r
 // Get all loan payments
 router.get('/payments', protect, async (req, res) => {
   try {
-    const payments = await LoanPayment.find()
-      .populate('loan')
-      .populate('createdBy', 'name')
-      .sort('-paymentDate');
-    res.json(payments);
+    const [rows] = await LoanPayment.pool.execute(`
+      SELECT lp.*,
+             l.loan_number,
+             u.name as created_by_name
+      FROM loan_payments lp
+      JOIN loans l ON lp.loan_id = l.id
+      LEFT JOIN users u ON lp.created_by = u.id
+      ORDER BY lp.payment_date DESC
+    `);
+    res.json(rows);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -95,20 +107,30 @@ router.get('/payments', protect, async (req, res) => {
 // Get loan summary statistics
 router.get('/summary', protect, async (req, res) => {
   try {
-    const loans = await Loan.find();
-    const payments = await LoanPayment.find();
-    
+    const [loans] = await Loan.pool.execute(`
+      SELECT 
+        COALESCE(SUM(amount), 0) as total_loaned,
+        COALESCE(SUM(remaining_balance), 0) as total_outstanding,
+        COUNT(CASE WHEN status = 'active' THEN 1 END) as active_loans,
+        COUNT(CASE WHEN status = 'overdue' THEN 1 END) as overdue_loans
+      FROM loans
+      WHERE status != 'completed'
+    `);
+
+    const [payments] = await Loan.pool.execute(`
+      SELECT COALESCE(SUM(amount), 0) as total_repaid 
+      FROM loan_payments
+      WHERE status = 'completed'
+    `);
+
     const summary = {
-      totalLoaned: loans.reduce((sum, loan) => sum + loan.amount, 0),
-      totalRepaid: payments.reduce((sum, payment) => sum + payment.amount, 0),
-      outstandingAmount: 0,
-      activeLoans: loans.filter(loan => loan.status === 'active').length,
-      overdueLoans: loans.filter(loan => loan.status === 'overdue').length
+      totalLoaned: Number(loans[0].total_loaned) || 0,
+      totalRepaid: Number(payments[0].total_repaid) || 0,
+      outstandingAmount: Number(loans[0].total_outstanding) || 0,
+      activeLoans: Number(loans[0].active_loans) || 0,
+      overdueLoans: Number(loans[0].overdue_loans) || 0
     };
-    
-    // Calculate outstanding amount
-    summary.outstandingAmount = summary.totalLoaned - summary.totalRepaid;
-    
+
     res.json(summary);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -118,19 +140,11 @@ router.get('/summary', protect, async (req, res) => {
 // Get loan details with payment history
 router.get('/:id', protect, async (req, res) => {
   try {
-    const loan = await Loan.findById(req.params.id)
-      .populate('borrower')
-      .populate('createdBy', 'name');
-    
+    const loan = await Loan.getWithDetails(req.params.id);
     if (!loan) {
       return res.status(404).json({ message: 'Loan not found' });
     }
-
-    const payments = await LoanPayment.find({ loan: loan._id })
-      .populate('createdBy', 'name')
-      .sort('-paymentDate');
-
-    res.json({ loan, payments });
+    res.json(loan);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -139,44 +153,19 @@ router.get('/:id', protect, async (req, res) => {
 // Update loan status
 router.patch('/:id/status', protect, authorize('admin'), async (req, res) => {
   try {
-    const loan = await Loan.findById(req.params.id);
-    if (!loan) {
+    const [result] = await Loan.pool.execute(
+      'UPDATE loans SET status = ? WHERE id = ?',
+      [req.body.status, req.params.id]
+    );
+
+    if (result.affectedRows === 0) {
       return res.status(404).json({ message: 'Loan not found' });
     }
 
-    loan.status = req.body.status;
-    await loan.save();
-
+    const loan = await Loan.getWithDetails(req.params.id);
     res.json(loan);
   } catch (error) {
     res.status(400).json({ message: error.message });
-  }
-});
-
-// Get overdue loans report
-router.get('/reports/overdue', protect, async (req, res) => {
-  try {
-    const loans = await Loan.find({
-      status: 'active',
-      'paymentSchedule.status': 'pending',
-      'paymentSchedule.dueDate': { $lt: new Date() }
-    }).populate('borrower');
-
-    const report = loans.map(loan => ({
-      loanNumber: loan.loanNumber,
-      borrower: loan.borrower,
-      overduePayments: loan.paymentSchedule.filter(
-        item => item.status === 'pending' && item.dueDate < new Date()
-      ),
-      totalOverdue: loan.paymentSchedule.reduce((sum, item) => 
-        item.status === 'pending' && item.dueDate < new Date() ? 
-        sum + (item.amount - item.paidAmount) : sum, 0
-      )
-    }));
-
-    res.json(report);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
   }
 });
 

@@ -16,11 +16,20 @@ const protect = asyncHandler(async (req, res, next) => {
       // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // Get user from token
-      req.user = await User.findById(decoded.id).select('-password');
+      // Get user from token (modified to work with your database)
+      const user = await User.findById(decoded.id);
+      if (!user) {
+        res.status(401);
+        return res.json({ message: 'User not found' });
+      }
+
+      // Remove password from user object
+      delete user.password;
+      req.user = user;
 
       next();
     } catch (error) {
+      console.error('Token verification error:', error);
       res.status(401);
       return res.json({ message: 'Not authorized' });
     }

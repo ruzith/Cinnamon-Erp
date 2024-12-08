@@ -1,48 +1,28 @@
-const mongoose = require('mongoose');
+const BaseModel = require('./BaseModel');
 
-const landSchema = new mongoose.Schema({
-  parcelNumber: {
-    type: String,
-    required: true,
-    unique: true
-  },
-  location: {
-    type: String,
-    required: true
-  },
-  area: {
-    type: Number,
-    required: true
-  },
-  areaUnit: {
-    type: String,
-    required: true,
-    enum: ['hectares', 'acres', 'square_meters']
-  },
-  acquisitionDate: {
-    type: Date,
-    required: true
-  },
-  status: {
-    type: String,
-    required: true,
-    enum: ['active', 'inactive', 'under_maintenance']
-  },
-  forestType: {
-    type: String,
-    required: true
-  },
-  soilType: String,
-  lastHarvestDate: Date,
-  nextHarvestDate: Date,
-  notes: String,
-  user: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: false
+class Land extends BaseModel {
+  constructor() {
+    super('lands');
   }
-}, {
-  timestamps: true
-});
 
-module.exports = mongoose.model('Land', landSchema); 
+  async findByParcelNumber(parcelNumber) {
+    const [rows] = await this.pool.execute(
+      'SELECT * FROM lands WHERE parcel_number = ?',
+      [parcelNumber]
+    );
+    return rows[0];
+  }
+
+  async getActiveWithAssignments() {
+    const [rows] = await this.pool.execute(`
+      SELECT l.*, la.contractor_id, la.start_date, la.end_date, la.status as assignment_status
+      FROM lands l
+      LEFT JOIN land_assignments la ON l.id = la.land_id AND la.status = 'active'
+      WHERE l.status = 'active'
+      ORDER BY l.created_at DESC
+    `);
+    return rows;
+  }
+}
+
+module.exports = new Land(); 

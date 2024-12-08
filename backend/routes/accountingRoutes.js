@@ -7,8 +7,13 @@ const Transaction = require('../models/Transaction');
 // Account routes
 router.get('/accounts', protect, async (req, res) => {
   try {
-    const accounts = await Account.find({ status: 'active' }).sort('code');
-    res.json(accounts);
+    const [rows] = await Account.pool.execute(`
+      SELECT a.*
+      FROM accounts a
+      WHERE a.status = 'active'
+      ORDER BY a.code ASC
+    `);
+    res.json(rows);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -16,8 +21,17 @@ router.get('/accounts', protect, async (req, res) => {
 
 router.post('/accounts', protect, authorize('admin', 'accountant'), async (req, res) => {
   try {
-    const account = await Account.create(req.body);
-    res.status(201).json(account);
+    const [result] = await Account.pool.execute(
+      'INSERT INTO accounts SET ?',
+      [req.body]
+    );
+    
+    const [account] = await Account.pool.execute(
+      'SELECT * FROM accounts WHERE id = ?',
+      [result.insertId]
+    );
+    
+    res.status(201).json(account[0]);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
@@ -192,21 +206,27 @@ router.get('/reports/balance-sheet', protect, async (req, res) => {
   }
 });
 
-// Get accounting summary
+// Get financial summary
 router.get('/summary', protect, async (req, res) => {
   try {
-    const accounts = await Account.find({ status: 'active' });
-    
+    // Get all active accounts with their balances
+    const [accounts] = await Account.pool.execute(`
+      SELECT *
+      FROM accounts
+      WHERE status = 'active'
+      ORDER BY type, category
+    `);
+
     const summary = {
       assets: {
-        total: 0,
         currentAssets: 0,
-        fixedAssets: 0
+        fixedAssets: 0,
+        total: 0
       },
       liabilities: {
-        total: 0,
         currentLiabilities: 0,
-        longTermLiabilities: 0
+        longTermLiabilities: 0,
+        total: 0
       },
       equity: {
         total: 0
@@ -218,8 +238,8 @@ router.get('/summary', protect, async (req, res) => {
       },
       ratios: {
         currentRatio: 0,
-        debtToEquity: 0,
-        quickRatio: 0
+        quickRatio: 0,
+        debtToEquity: 0
       }
     };
 
@@ -284,26 +304,55 @@ router.get('/transactions', protect, async (req, res) => {
   try {
     const { startDate, endDate, status } = req.query;
     
-    // Build query
-    const query = {};
+    // Build query conditions
+    let conditions = [];
+    let params = [];
     
-    // Add date range if provided
     if (startDate && endDate) {
-      query.date = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
-      };
+      conditions.push('t.date BETWEEN ? AND ?');
+      params.push(startDate, endDate);
     }
     
-    // Add status if provided
     if (status) {
-      query.status = status;
+      conditions.push('t.status = ?');
+      params.push(status);
     }
 
-    const transactions = await Transaction.find(query)
-      .populate('entries.account')
-      .populate('createdBy', 'name')
-      .sort('-date');
+    const whereClause = conditions.length > 0 
+      ? 'WHERE ' + conditions.join(' AND ')
+      : '';
+
+    const [rows] = await Transaction.pool.execute(`
+      SELECT t.*,
+             w.name as well_name,
+             l.name as lease_name,
+             u.name as created_by_name
+      FROM transactions t
+      JOIN wells w ON t.well_id = w.id
+      JOIN leases l ON t.lease_id = l.id
+      LEFT JOIN users u ON t.created_by = u.id
+      ${whereClause}
+      ORDER BY t.date DESC
+    `, params);
+
+    // Get entries for each transaction
+    const transactions = await Promise.all(rows.map(async (transaction) => {
+      const [entries] = await Transaction.pool.execute(`
+        SELECT te.*,
+               a.code as account_code,
+               a.name as account_name,
+               a.type as account_type
+        FROM transactions_entries te
+        JOIN accounts a ON te.account_id = a.id
+        WHERE te.transaction_id = ?
+        ORDER BY te.id ASC
+      `, [transaction.id]);
+
+      return {
+        ...transaction,
+        entries
+      };
+    }));
       
     res.json(transactions);
   } catch (error) {

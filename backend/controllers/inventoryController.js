@@ -1,128 +1,183 @@
-const asyncHandler = require('express-async-handler');
 const Inventory = require('../models/Inventory');
-const InventoryTransaction = require('../models/InventoryTransaction');
+const { validateInventory, validateTransaction } = require('../validators/inventoryValidator');
 
 // @desc    Get all inventory items
 // @route   GET /api/inventory
 // @access  Private
-const getInventoryItems = asyncHandler(async (req, res) => {
-  const inventory = await Inventory.find().sort('productName');
-  res.json(inventory);
-});
+exports.getInventoryItems = async (req, res) => {
+  try {
+    const items = await Inventory.findAll();
+    res.status(200).json(items);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
 
 // @desc    Get single inventory item
 // @route   GET /api/inventory/:id
 // @access  Private
-const getInventoryItem = asyncHandler(async (req, res) => {
-  const item = await Inventory.findById(req.params.id);
-  if (!item) {
-    res.status(404);
-    throw new Error('Inventory item not found');
+exports.getInventoryItem = async (req, res) => {
+  try {
+    const item = await Inventory.findById(req.params.id);
+    if (!item) {
+      return res.status(404).json({ message: 'Inventory item not found' });
+    }
+    res.status(200).json(item);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
-  res.json(item);
-});
+};
 
 // @desc    Create inventory item
 // @route   POST /api/inventory
-// @access  Private
-const createInventoryItem = asyncHandler(async (req, res) => {
-  const item = await Inventory.create(req.body);
-  res.status(201).json(item);
-});
+// @access  Private/Admin
+exports.createInventoryItem = async (req, res) => {
+  try {
+    const { error } = validateInventory(req.body);
+    if (error) {
+      return res.status(400).json({ message: error.details[0].message });
+    }
+
+    const existingItem = await Inventory.findByProductName(req.body.product_name);
+    if (existingItem) {
+      return res.status(400).json({ message: 'Product name already exists' });
+    }
+
+    const item = await Inventory.create(req.body);
+    res.status(201).json(item);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
 
 // @desc    Update inventory item
 // @route   PUT /api/inventory/:id
-// @access  Private
-const updateInventoryItem = asyncHandler(async (req, res) => {
-  const item = await Inventory.findById(req.params.id);
-  if (!item) {
-    res.status(404);
-    throw new Error('Inventory item not found');
+// @access  Private/Admin
+exports.updateInventoryItem = async (req, res) => {
+  try {
+    const { error } = validateInventory(req.body);
+    if (error) {
+      return res.status(400).json({ message: error.details[0].message });
+    }
+
+    const item = await Inventory.findById(req.params.id);
+    if (!item) {
+      return res.status(404).json({ message: 'Inventory item not found' });
+    }
+
+    if (req.body.product_name && req.body.product_name !== item.product_name) {
+      const existingItem = await Inventory.findByProductName(req.body.product_name);
+      if (existingItem) {
+        return res.status(400).json({ message: 'Product name already exists' });
+      }
+    }
+
+    const updatedItem = await Inventory.update(req.params.id, req.body);
+    res.status(200).json(updatedItem);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
   }
+};
 
-  const updatedItem = await Inventory.findByIdAndUpdate(
-    req.params.id,
-    req.body,
-    { new: true, runValidators: true }
-  );
-  res.json(updatedItem);
-});
+// @desc    Create inventory transaction
+// @route   POST /api/inventory/transactions
+// @access  Private/Admin
+exports.createInventoryTransaction = async (req, res) => {
+  try {
+    const { error } = validateTransaction(req.body);
+    if (error) {
+      return res.status(400).json({ message: error.details[0].message });
+    }
 
-// @desc    Delete inventory item
-// @route   DELETE /api/inventory/:id
-// @access  Private
-const deleteInventoryItem = asyncHandler(async (req, res) => {
-  const item = await Inventory.findById(req.params.id);
-  if (!item) {
-    res.status(404);
-    throw new Error('Inventory item not found');
+    const { type, item_id, quantity } = req.body;
+    const item = await Inventory.findById(item_id);
+    if (!item) {
+      return res.status(404).json({ message: 'Inventory item not found' });
+    }
+
+    let newQuantity = item.quantity;
+    if (type === 'IN') {
+      newQuantity += quantity;
+    } else if (type === 'OUT') {
+      if (quantity > item.quantity) {
+        return res.status(400).json({ message: 'Insufficient stock' });
+      }
+      newQuantity -= quantity;
+    } else if (type === 'ADJUSTMENT') {
+      newQuantity = quantity;
+    }
+
+    await Inventory.pool.beginTransaction();
+    try {
+      const [result] = await Inventory.pool.execute(
+        'INSERT INTO inventory_transactions SET ?',
+        [req.body]
+      );
+      await Inventory.updateQuantity(item_id, newQuantity);
+      await Inventory.pool.commit();
+
+      const [transaction] = await Inventory.pool.execute(
+        `SELECT it.*, i.product_name 
+         FROM inventory_transactions it
+         JOIN inventory i ON it.item_id = i.id
+         WHERE it.id = ?`,
+        [result.insertId]
+      );
+
+      res.status(201).json(transaction[0]);
+    } catch (error) {
+      await Inventory.pool.rollback();
+      throw error;
+    }
+  } catch (error) {
+    res.status(400).json({ message: error.message });
   }
-
-  // Check if there are any transactions for this item
-  const transactionCount = await InventoryTransaction.countDocuments({ itemId: req.params.id });
-  if (transactionCount > 0) {
-    res.status(400);
-    throw new Error('Cannot delete item with existing transactions');
-  }
-
-  await item.deleteOne();
-  res.json({ message: 'Inventory item removed' });
-});
+};
 
 // @desc    Get all inventory transactions
 // @route   GET /api/inventory/transactions
 // @access  Private
-const getInventoryTransactions = asyncHandler(async (req, res) => {
+exports.getInventoryTransactions = async (req, res) => {
   try {
-    const transactions = await InventoryTransaction.find()
-      .populate('itemId')
-      .sort('-date');
-    res.json(transactions);
+    const [rows] = await Inventory.pool.execute(`
+      SELECT it.*, 
+             i.product_name,
+             i.unit
+      FROM inventory_transactions it
+      JOIN inventory i ON it.item_id = i.id
+      ORDER BY it.created_at DESC
+    `);
+    res.status(200).json(rows);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
-});
+};
 
-// @desc    Create inventory transaction
-// @route   POST /api/inventory/transactions
-// @access  Private
-const createInventoryTransaction = asyncHandler(async (req, res) => {
-  const { type, itemId, quantity, reference, notes } = req.body;
+// @desc    Delete inventory item
+// @route   DELETE /api/inventory/:id
+// @access  Private/Admin
+exports.deleteInventoryItem = async (req, res) => {
+  try {
+    const item = await Inventory.findById(req.params.id);
+    if (!item) {
+      return res.status(404).json({ message: 'Inventory item not found' });
+    }
 
-  const transaction = await InventoryTransaction.create({
-    type,
-    itemId,
-    quantity,
-    reference,
-    notes
-  });
+    // Check if there are any active transactions
+    const [transactions] = await Inventory.pool.execute(
+      'SELECT COUNT(*) as count FROM inventory_transactions WHERE item_id = ?',
+      [req.params.id]
+    );
 
-  // Update inventory quantity
-  const inventory = await Inventory.findById(itemId);
-  if (!inventory) {
-    res.status(404);
-    throw new Error('Inventory item not found');
+    if (transactions[0].count > 0) {
+      return res.status(400).json({
+        message: 'Cannot delete item with existing transactions. Consider marking it as inactive instead.'
+      });
+    }
+
+    await Inventory.delete(req.params.id);
+    res.status(200).json({ message: 'Inventory item deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
-
-  if (type === 'IN') {
-    inventory.quantity += quantity;
-  } else if (type === 'OUT') {
-    inventory.quantity -= quantity;
-  } else if (type === 'ADJUSTMENT') {
-    inventory.quantity = quantity;
-  }
-
-  await inventory.save();
-
-  res.status(201).json(transaction);
-});
-
-module.exports = {
-  getInventoryItems,
-  getInventoryItem,
-  createInventoryItem,
-  updateInventoryItem,
-  deleteInventoryItem,
-  getInventoryTransactions,
-  createInventoryTransaction
 }; 

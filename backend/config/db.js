@@ -1,13 +1,22 @@
-const mongoose = require('mongoose');
+const mysql = require('mysql2/promise');
+const config = require('./config');
+
+const pool = mysql.createPool({
+  ...config.database,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
+});
 
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGO_URI);
-    console.log(`MongoDB Connected: ${conn.connection.host}`);
+    const connection = await pool.getConnection();
+    console.log(`MySQL Connected: ${config.database.host}`);
+    connection.release();
   } catch (error) {
-    console.error(`MongoDB Connection Error: ${error.message}`);
+    console.error(`MySQL Connection Error: ${error.message}`);
     process.exit(1);
   }
 };
 
-module.exports = connectDB; 
+module.exports = { pool, connectDB }; 

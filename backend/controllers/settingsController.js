@@ -1,137 +1,160 @@
 const Settings = require('../models/Settings');
-const asyncHandler = require('express-async-handler');
+const Currency = require('../models/Currency');
+const { validateSettings, validateCurrency } = require('../validators/settingsValidator');
+const { pool } = require('../config/db');
 
 // @desc    Get settings
 // @route   GET /api/settings
 // @access  Private
-const getSettings = asyncHandler(async (req, res) => {
-  let settings = await Settings.findOne();
-  
-  if (!settings) {
-    // Create default settings if none exist
-    settings = await Settings.create({
-      companyName: 'Your Company',
-      companyAddress: 'Your Address',
-      companyPhone: 'Your Phone',
-      currencies: [{
-        code: 'USD',
-        name: 'US Dollar',
-        symbol: '$',
-        rate: 1
-      }]
-    });
+exports.getSettings = async (req, res) => {
+  try {
+    const settings = await Settings.getSettings();
+    res.status(200).json(settings || {});
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
-  
-  res.json(settings);
-});
+};
 
 // @desc    Update settings
 // @route   PUT /api/settings
 // @access  Private/Admin
-const updateSettings = asyncHandler(async (req, res) => {
-  const settings = await Settings.findOne();
+exports.updateSettings = async (req, res) => {
+  try {
+    const { error } = validateSettings(req.body);
+    if (error) {
+      return res.status(400).json({ message: error.details[0].message });
+    }
 
-  if (!settings) {
-    res.status(404);
-    throw new Error('Settings not found');
+    const settings = await Settings.updateSettings(req.body);
+    res.status(200).json(settings);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
   }
+};
 
-  // Handle file upload if there's a logo
-  if (req.file) {
-    req.body.logo = req.file.path;
+// @desc    Get specific setting
+// @route   GET /api/settings/:key
+// @access  Private
+exports.getSetting = async (req, res) => {
+  try {
+    const value = await Settings.getSetting(req.params.key);
+    if (value === null) {
+      return res.status(404).json({ message: 'Setting not found' });
+    }
+    res.status(200).json({ [req.params.key]: value });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
+};
 
-  // Parse currencies if they're sent as string
-  if (typeof req.body.currencies === 'string') {
-    req.body.currencies = JSON.parse(req.body.currencies);
+// @desc    Update specific setting
+// @route   PUT /api/settings/:key
+// @access  Private/Admin
+exports.updateSetting = async (req, res) => {
+  try {
+    const { value } = req.body;
+    if (value === undefined) {
+      return res.status(400).json({ message: 'Value is required' });
+    }
+
+    const setting = await Settings.updateSetting(req.params.key, value);
+    res.status(200).json(setting);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
   }
+};
 
-  const updatedSettings = await Settings.findByIdAndUpdate(
-    settings._id,
-    {
-      ...req.body,
-      updatedAt: Date.now()
-    },
-    { new: true }
-  );
+// @desc    Get all currencies
+// @route   GET /api/settings/currencies
+// @access  Private
+exports.getCurrencies = async (req, res) => {
+  try {
+    const currencies = await Currency.getActiveCurrencies();
+    res.status(200).json(currencies);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
 
-  res.json(updatedSettings);
-});
-
-// @desc    Add currency
+// @desc    Add new currency
 // @route   POST /api/settings/currencies
 // @access  Private/Admin
-const addCurrency = asyncHandler(async (req, res) => {
-  const settings = await Settings.findOne();
+exports.addCurrency = async (req, res) => {
+  try {
+    const { error } = validateCurrency(req.body);
+    if (error) {
+      return res.status(400).json({ message: error.details[0].message });
+    }
 
-  if (!settings) {
-    res.status(404);
-    throw new Error('Settings not found');
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      const currency = await Currency.create(req.body);
+
+      // If this is the first currency, set it as default in settings
+      const settings = await Settings.getSettings();
+      if (!settings.default_currency) {
+        await Settings.updateSetting('default_currency', currency.code);
+      }
+
+      await connection.commit();
+      res.status(201).json(currency);
+    } catch (err) {
+      await connection.rollback();
+      throw err;
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    res.status(400).json({ message: error.message });
   }
-
-  // Check if currency already exists
-  if (settings.currencies.some(c => c.code === req.body.code.toUpperCase())) {
-    res.status(400);
-    throw new Error('Currency already exists');
-  }
-
-  settings.currencies.push({
-    ...req.body,
-    code: req.body.code.toUpperCase()
-  });
-  await settings.save();
-
-  res.json(settings);
-});
+};
 
 // @desc    Edit currency
 // @route   PUT /api/settings/currencies/:code
 // @access  Private/Admin
-const editCurrency = asyncHandler(async (req, res) => {
-  const settings = await Settings.findOne();
-  const currencyIndex = settings.currencies.findIndex(
-    c => c.code === req.params.code.toUpperCase()
-  );
+exports.editCurrency = async (req, res) => {
+  try {
+    const { error } = validateCurrency(req.body);
+    if (error) {
+      return res.status(400).json({ message: error.details[0].message });
+    }
 
-  if (currencyIndex === -1) {
-    res.status(404);
-    throw new Error('Currency not found');
+    const currency = await Currency.findByCode(req.params.code);
+    if (!currency) {
+      return res.status(404).json({ message: 'Currency not found' });
+    }
+
+    const updated = await Currency.update(currency.id, {
+      ...req.body,
+      code: req.params.code // Don't allow code to be changed
+    });
+
+    res.status(200).json(updated);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
   }
-
-  settings.currencies[currencyIndex] = {
-    ...settings.currencies[currencyIndex],
-    ...req.body,
-    code: req.params.code.toUpperCase()
-  };
-
-  await settings.save();
-  res.json(settings);
-});
+};
 
 // @desc    Delete currency
 // @route   DELETE /api/settings/currencies/:code
 // @access  Private/Admin
-const deleteCurrency = asyncHandler(async (req, res) => {
-  const settings = await Settings.findOne();
+exports.deleteCurrency = async (req, res) => {
+  try {
+    const settings = await Settings.getSettings();
+    if (settings.default_currency === req.params.code) {
+      return res.status(400).json({ message: 'Cannot delete default currency' });
+    }
 
-  // Prevent deleting default currency
-  if (req.params.code === settings.defaultCurrency) {
-    res.status(400);
-    throw new Error('Cannot delete default currency');
+    const currency = await Currency.findByCode(req.params.code);
+    if (!currency) {
+      return res.status(404).json({ message: 'Currency not found' });
+    }
+
+    await Currency.update(currency.id, { status: 'inactive' });
+    res.status(200).json({ message: 'Currency deleted successfully' });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
   }
-
-  settings.currencies = settings.currencies.filter(
-    c => c.code !== req.params.code.toUpperCase()
-  );
-
-  await settings.save();
-  res.json(settings);
-});
-
-module.exports = {
-  getSettings,
-  updateSettings,
-  addCurrency,
-  editCurrency,
-  deleteCurrency
 }; 

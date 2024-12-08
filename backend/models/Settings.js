@@ -1,68 +1,38 @@
-const mongoose = require('mongoose');
+const BaseModel = require('./BaseModel');
 
-const currencySchema = new mongoose.Schema({
-  code: {
-    type: String,
-    required: true,
-    unique: true,
-    uppercase: true
-  },
-  name: {
-    type: String,
-    required: true
-  },
-  symbol: {
-    type: String,
-    required: true
-  },
-  rate: {
-    type: Number,
-    required: true,
-    default: 1
+class Settings extends BaseModel {
+  constructor() {
+    super('settings');
   }
-});
 
-const settingsSchema = new mongoose.Schema({
-  companyName: {
-    type: String,
-    required: true
-  },
-  companyAddress: {
-    type: String,
-    required: true
-  },
-  companyPhone: {
-    type: String,
-    required: true
-  },
-  vatNumber: {
-    type: String
-  },
-  taxNumber: {
-    type: String
-  },
-  logo: {
-    type: String // URL to the logo image
-  },
-  language: {
-    type: String,
-    enum: ['en', 'si'],
-    default: 'en'
-  },
-  currencies: [currencySchema],
-  defaultCurrency: {
-    type: String,
-    ref: 'currencies.code',
-    default: 'USD'
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
+  async getSettings() {
+    const [settings] = await this.findAll({ limit: 1 });
+    return settings || null;
   }
-});
 
-module.exports = mongoose.model('Settings', settingsSchema); 
+  async updateSettings(data) {
+    const settings = await this.getSettings();
+    if (settings) {
+      return this.update(settings.id, data);
+    }
+    return this.create(data);
+  }
+
+  // Helper method to get specific setting
+  async getSetting(key) {
+    const settings = await this.getSettings();
+    return settings ? settings[key] : null;
+  }
+
+  // Helper method to update specific setting
+  async updateSetting(key, value) {
+    const settings = await this.getSettings();
+    if (settings) {
+      const updatedData = { ...settings, [key]: value };
+      return this.update(settings.id, updatedData);
+    }
+    return this.create({ [key]: value });
+  }
+}
+
+module.exports = new Settings(); 

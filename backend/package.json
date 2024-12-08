@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "seed": "node --tls-min-v1.0 seeders/databaseSeeder.js"
+    "migrate": "node migrations/runMigrations.js",
+    "seed": "node seeders/databaseSeeder.js"
   },
   "dependencies": {
     "@faker-js/faker": "^8.0.0",
@@ -19,8 +20,7 @@
     "joi": "^17.13.3",
     "jsonwebtoken": "^9.0.2",
     "moment": "^2.30.1",
-    "mongodb": "^6.11.0",
-    "mongoose": "^8.8.3",
+    "mysql2": "^3.9.1",
     "multer": "^1.4.5-lts.1",
     "pdfkit": "^0.14.0"
   },

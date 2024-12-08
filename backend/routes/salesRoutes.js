@@ -2,16 +2,22 @@ const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/authMiddleware');
 const SalesInvoice = require('../models/SalesInvoice');
-const Product = require('../models/Product');
-const InventoryTransaction = require('../models/InventoryTransaction');
+const Inventory = require('../models/Inventory');
+const { validateSalesInvoice } = require('../validators/salesValidator');
 
 // Get all sales invoices
 router.get('/', protect, async (req, res) => {
   try {
-    const invoices = await SalesInvoice.find()
-      .populate('items.product')
-      .populate('createdBy', 'name')
-      .sort('-date');
+    const [invoices] = await SalesInvoice.pool.execute(`
+      SELECT si.*, 
+             u.name as created_by_name,
+             COUNT(sit.id) as total_items
+      FROM sales_invoices si
+      LEFT JOIN users u ON si.created_by = u.id
+      LEFT JOIN sales_items sit ON si.id = sit.invoice_id
+      GROUP BY si.id
+      ORDER BY si.date DESC
+    `);
     res.json(invoices);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -21,108 +27,37 @@ router.get('/', protect, async (req, res) => {
 // Create sales invoice
 router.post('/', protect, authorize('admin', 'manager', 'sales'), async (req, res) => {
   try {
-    const invoice = new SalesInvoice({
-      ...req.body,
-      createdBy: req.user.id
-    });
+    const { error } = validateSalesInvoice(req.body);
+    if (error) {
+      return res.status(400).json({ message: error.details[0].message });
+    }
 
-    // Check stock availability and create inventory transactions
-    for (const item of invoice.items) {
-      const product = await Product.findById(item.product);
-      if (!product) {
-        return res.status(404).json({ message: `Product not found: ${item.product}` });
+    // Check stock availability
+    for (const item of req.body.items) {
+      const [product] = await Inventory.pool.execute(
+        'SELECT * FROM inventory WHERE id = ?',
+        [item.product_id]
+      );
+      
+      if (!product[0]) {
+        return res.status(404).json({ message: `Product not found: ${item.product_id}` });
       }
-      if (product.currentStock < item.quantity) {
+      
+      if (product[0].quantity < item.quantity) {
         return res.status(400).json({ 
-          message: `Insufficient stock for product: ${product.name}`
+          message: `Insufficient stock for product: ${product[0].product_name}`
         });
       }
     }
 
-    // If invoice is confirmed, update inventory
-    if (req.body.status === 'confirmed') {
-      for (const item of invoice.items) {
-        // Create inventory transaction
-        await InventoryTransaction.create({
-          product: item.product,
-          type: 'sale',
-          quantity: item.quantity,
-          reference: invoice.invoiceNumber,
-          createdBy: req.user.id
-        });
-
-        // Update product stock
-        await Product.findByIdAndUpdate(item.product, {
-          $inc: { currentStock: -item.quantity }
-        });
-      }
-    }
-
-    await invoice.save();
-    res.status(201).json(
-      await invoice
-        .populate('items.product')
-        .populate('createdBy', 'name')
+    const invoice = await SalesInvoice.createWithItems(
+      { ...req.body, created_by: req.user.id },
+      req.body.items
     );
+    
+    res.status(201).json(invoice);
   } catch (error) {
     res.status(400).json({ message: error.message });
-  }
-});
-
-// Update sales invoice
-router.put('/:id', protect, async (req, res) => {
-  try {
-    const invoice = await SalesInvoice.findById(req.params.id);
-    if (!invoice) {
-      return res.status(404).json({ message: 'Invoice not found' });
-    }
-
-    // Don't allow editing confirmed invoices
-    if (invoice.status === 'confirmed') {
-      return res.status(400).json({ message: 'Cannot edit confirmed invoice' });
-    }
-
-    const updatedInvoice = await SalesInvoice.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true }
-    ).populate('items.product').populate('createdBy', 'name');
-
-    // If status changed to confirmed, update inventory
-    if (req.body.status === 'confirmed' && invoice.status !== 'confirmed') {
-      for (const item of updatedInvoice.items) {
-        await InventoryTransaction.create({
-          product: item.product,
-          type: 'sale',
-          quantity: item.quantity,
-          reference: updatedInvoice.invoiceNumber,
-          createdBy: req.user.id
-        });
-
-        await Product.findByIdAndUpdate(item.product, {
-          $inc: { currentStock: -item.quantity }
-        });
-      }
-    }
-
-    res.json(updatedInvoice);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-});
-
-// Get invoice by ID
-router.get('/:id', protect, async (req, res) => {
-  try {
-    const invoice = await SalesInvoice.findById(req.params.id)
-      .populate('items.product')
-      .populate('createdBy', 'name');
-    if (!invoice) {
-      return res.status(404).json({ message: 'Invoice not found' });
-    }
-    res.json(invoice);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
   }
 });
 

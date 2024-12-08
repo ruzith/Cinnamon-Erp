@@ -137,7 +137,7 @@ const Reports = () => {
                     ) : templates && templates.length > 0 ? (
                       templates.map(template => (
                         <MenuItem key={template.code} value={template.code}>
-                          {template.name[language]}
+                          {template.name?.[language] || template.code || 'Unnamed Template'}
                         </MenuItem>
                       ))
                     ) : (

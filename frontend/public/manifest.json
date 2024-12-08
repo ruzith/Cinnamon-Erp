@@ -1,6 +1,6 @@
 {
   "short_name": "Cinnamon ERP",
-  "name": "Cinnamon ERP System",
+  "name": "Cinnamon Industry ERP System",
   "icons": [
     {
       "src": "favicon.ico",
@@ -20,6 +20,6 @@
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "theme_color": "#8B4513",
+  "background_color": "#FBF7F4"
 }

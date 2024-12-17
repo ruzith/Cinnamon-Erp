@@ -9,7 +9,7 @@ module.exports = {
     port: process.env.DB_PORT || 3306
   },
   server: {
-    port: process.env.PORT || 5000,
+    port: process.env.PORT || 5001,
     env: process.env.NODE_ENV || 'development'
   },
   jwt: {

@@ -10,12 +10,12 @@ const LandItem = ({ land, onDelete }) => {
 
   return (
     <div className="land-item">
-      <h3>{land.name}</h3>
-      <p>Size: {land.size} {land.unit}</p>
-      <p>Category: {land.category}</p>
-      <p>Ownership: {land.ownership}</p>
+      <h3>{land.parcel_number}</h3>
+      <p>Size: {land.area} {land.area_unit}</p>
+      <p>Forest Type: {land.forest_type}</p>
+      <p>Soil Type: {land.soil_type}</p>
       <p>Location: {land.location}</p>
-      {land.description && <p>Description: {land.description}</p>}
+      {land.notes && <p>Notes: {land.notes}</p>}
       
       <div className="actions">
         <button onClick={() => setIsEditing(true)}>Edit</button>

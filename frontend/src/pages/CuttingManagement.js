@@ -41,16 +41,16 @@ const CuttingManagement = () => {
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedOperation, setSelectedOperation] = useState(null);
   const [formData, setFormData] = useState({
-    operationNumber: '',
-    landParcel: '',
-    assignedWorkers: [],
-    startDate: '',
-    endDate: '',
+    operation_number: '',
+    land_parcel: '',
+    assigned_workers: [],
+    start_date: '',
+    end_date: '',
     status: 'pending',
-    treeCount: '',
+    tree_count: '',
     species: '',
-    estimatedVolume: '',
-    actualVolume: '',
+    estimated_volume: '',
+    actual_volume: '',
     equipment: '',
     notes: ''
   });
@@ -82,32 +82,32 @@ const CuttingManagement = () => {
     if (operation) {
       setSelectedOperation(operation);
       setFormData({
-        operationNumber: operation.operationNumber,
-        landParcel: operation.landParcel,
-        assignedWorkers: operation.assignedWorkers.map(worker => worker._id),
-        startDate: operation.startDate?.split('T')[0] || '',
-        endDate: operation.endDate?.split('T')[0] || '',
+        operation_number: operation.operation_number,
+        land_parcel: operation.land_parcel,
+        assigned_workers: operation.assigned_workers.map(worker => worker._id),
+        start_date: operation.start_date?.split('T')[0] || '',
+        end_date: operation.end_date?.split('T')[0] || '',
         status: operation.status,
-        treeCount: operation.treeCount,
+        tree_count: operation.tree_count,
         species: operation.species,
-        estimatedVolume: operation.estimatedVolume,
-        actualVolume: operation.actualVolume,
+        estimated_volume: operation.estimated_volume,
+        actual_volume: operation.actual_volume,
         equipment: operation.equipment,
         notes: operation.notes
       });
     } else {
       setSelectedOperation(null);
       setFormData({
-        operationNumber: '',
-        landParcel: '',
-        assignedWorkers: [],
-        startDate: '',
-        endDate: '',
+        operation_number: '',
+        land_parcel: '',
+        assigned_workers: [],
+        start_date: '',
+        end_date: '',
         status: 'pending',
-        treeCount: '',
+        tree_count: '',
         species: '',
-        estimatedVolume: '',
-        actualVolume: '',
+        estimated_volume: '',
+        actual_volume: '',
         equipment: '',
         notes: ''
       });
@@ -124,7 +124,7 @@ const CuttingManagement = () => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'assignedWorkers' ? 
+      [name]: name === 'assigned_workers' ? 
         typeof value === 'string' ? value.split(',') : value :
         value
     }));
@@ -156,12 +156,12 @@ const CuttingManagement = () => {
     }
   };
 
-  // Calculate summary statistics
+  // Calculate summary statistics with snake_case
   const summaryStats = {
-    totalOperations: cuttingOperations.length,
-    activeOperations: cuttingOperations.filter(op => op.status === 'in_progress').length,
-    totalTrees: cuttingOperations.reduce((sum, op) => sum + Number(op.treeCount || 0), 0),
-    totalVolume: cuttingOperations.reduce((sum, op) => sum + Number(op.estimatedVolume || 0), 0)
+    total_operations: cuttingOperations.length,
+    active_operations: cuttingOperations.filter(op => op.status === 'in_progress').length,
+    total_trees: cuttingOperations.reduce((sum, op) => sum + Number(op.tree_count || 0), 0),
+    total_volume: cuttingOperations.reduce((sum, op) => sum + Number(op.estimated_volume || 0), 0)
   };
 
   const getStatusColor = (status) => {
@@ -212,7 +212,7 @@ const CuttingManagement = () => {
               <ForestIcon sx={{ color: 'primary.main', mr: 1 }} />
               <Typography color="textSecondary">Total Operations</Typography>
             </Box>
-            <Typography variant="h4">{summaryStats.totalOperations}</Typography>
+            <Typography variant="h4">{summaryStats.total_operations}</Typography>
           </Paper>
         </Grid>
 
@@ -231,7 +231,7 @@ const CuttingManagement = () => {
               <WorkerIcon sx={{ color: 'success.main', mr: 1 }} />
               <Typography color="textSecondary">Active Operations</Typography>
             </Box>
-            <Typography variant="h4">{summaryStats.activeOperations}</Typography>
+            <Typography variant="h4">{summaryStats.active_operations}</Typography>
           </Paper>
         </Grid>
 
@@ -250,7 +250,7 @@ const CuttingManagement = () => {
               <TreeIcon sx={{ color: 'warning.main', mr: 1 }} />
               <Typography color="textSecondary">Total Trees</Typography>
             </Box>
-            <Typography variant="h4">{summaryStats.totalTrees}</Typography>
+            <Typography variant="h4">{summaryStats.total_trees}</Typography>
           </Paper>
         </Grid>
 
@@ -269,7 +269,7 @@ const CuttingManagement = () => {
               <VolumeIcon sx={{ color: 'info.main', mr: 1 }} />
               <Typography color="textSecondary">Total Volume</Typography>
             </Box>
-            <Typography variant="h4">{summaryStats.totalVolume} m³</Typography>
+            <Typography variant="h4">{summaryStats.total_volume} m³</Typography>
           </Paper>
         </Grid>
       </Grid>
@@ -292,11 +292,11 @@ const CuttingManagement = () => {
             <TableBody>
               {cuttingOperations.map((operation) => (
                 <TableRow key={operation._id} hover>
-                  <TableCell>{operation.operationNumber}</TableCell>
-                  <TableCell>{operation.landParcel}</TableCell>
+                  <TableCell>{operation.operation_number}</TableCell>
+                  <TableCell>{operation.land_parcel}</TableCell>
                   <TableCell>{operation.species}</TableCell>
-                  <TableCell>{operation.treeCount}</TableCell>
-                  <TableCell>{operation.estimatedVolume}</TableCell>
+                  <TableCell>{operation.tree_count}</TableCell>
+                  <TableCell>{operation.estimated_volume}</TableCell>
                   <TableCell>
                     <Chip
                       label={operation.status}

@@ -45,9 +45,9 @@ export const createLand = createAsyncThunk('lands/create', async (landData, thun
 export const updateLand = createAsyncThunk('lands/update', async ({ id, landData }, thunkAPI) => {
   try {
     const token = thunkAPI.getState().auth.user.token;
-    return await landService.updateLand(id, landData, token);
+    return await landService.updateLand({ id, landData }, token);
   } catch (error) {
-    return thunkAPI.rejectWithValue(error.response.data.message);
+    return thunkAPI.rejectWithValue(error.response?.data?.message || error.message);
   }
 });
 
@@ -55,9 +55,10 @@ export const updateLand = createAsyncThunk('lands/update', async ({ id, landData
 export const deleteLand = createAsyncThunk('lands/delete', async (id, thunkAPI) => {
   try {
     const token = thunkAPI.getState().auth.user.token;
-    return await landService.deleteLand(id, token);
+    const result = await landService.deleteLand(id, token);
+    return result;
   } catch (error) {
-    return thunkAPI.rejectWithValue(error.response.data.message);
+    return thunkAPI.rejectWithValue(error.response?.data?.message || error.message);
   }
 });
 
@@ -119,6 +120,7 @@ export const landSlice = createSlice({
         state.isLoading = false;
         state.isSuccess = true;
         state.lands = state.lands.filter(land => land._id !== action.payload.id);
+        state.message = 'Land deleted successfully';
       })
       .addCase(deleteLand.rejected, (state, action) => {
         state.isLoading = false;

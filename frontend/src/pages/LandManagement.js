@@ -31,6 +31,10 @@ import {
   LocationOn,
 } from '@mui/icons-material';
 import { getLands, deleteLand } from '../features/lands/landSlice';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import LandForm from '../components/lands/LandForm';
 
 const LandManagement = () => {
   const dispatch = useDispatch();
@@ -56,8 +60,7 @@ const LandManagement = () => {
   const handleDelete = async (landId) => {
     if (window.confirm('Are you sure you want to delete this land?')) {
       try {
-        await dispatch(deleteLand(landId));
-        dispatch(getLands()); // Refresh the list
+        await dispatch(deleteLand(landId)).unwrap();
       } catch (error) {
         console.error('Error deleting land:', error);
       }
@@ -197,11 +200,11 @@ const LandManagement = () => {
             <TableBody>
               {lands.map((land) => (
                 <TableRow key={land._id} hover>
-                  <TableCell>{land.parcelNumber}</TableCell>
+                  <TableCell>{land.parcel_number}</TableCell>
                   <TableCell>{land.location}</TableCell>
-                  <TableCell>{land.area} {land.areaUnit}</TableCell>
-                  <TableCell>{land.forestType}</TableCell>
-                  <TableCell>{land.soilType}</TableCell>
+                  <TableCell>{land.area} {land.area_unit}</TableCell>
+                  <TableCell>{land.forest_type}</TableCell>
+                  <TableCell>{land.soil_type}</TableCell>
                   <TableCell>
                     <Chip
                       label={land.status}
@@ -232,7 +235,16 @@ const LandManagement = () => {
         </TableContainer>
       </Paper>
 
-      {/* Keep your existing dialog components */}
+      {/* Land Form Dialog */}
+      <Dialog open={openDialog} onClose={() => setOpenDialog(false)}>
+        <DialogTitle>{selectedLand ? 'Edit Land' : 'New Land'}</DialogTitle>
+        <DialogContent>
+          <LandForm 
+            land={selectedLand} 
+            onClose={() => setOpenDialog(false)} 
+          />
+        </DialogContent>
+      </Dialog>
     </Box>
   );
 };

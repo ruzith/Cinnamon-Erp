@@ -42,25 +42,41 @@ const createLand = async (landData, token) => {
 };
 
 // Update land
-const updateLand = async (id, landData, token) => {
-  const config = {
-    headers: {
-      Authorization: `Bearer ${token}`
+const updateLand = async ({ id, landData }, token) => {
+  try {
+    const config = {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    };
+    const response = await axios.put(API_URL + id, landData, config);
+    return response.data;
+  } catch (error) {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('user');
+      throw new Error('Session expired - please login again');
     }
-  };
-  const response = await axios.put(API_URL + id, landData, config);
-  return response.data;
+    throw error;
+  }
 };
 
 // Delete land
 const deleteLand = async (id, token) => {
-  const config = {
-    headers: {
-      Authorization: `Bearer ${token}`
+  try {
+    const config = {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    };
+    const response = await axios.delete(`${API_URL}${id}`, config);
+    return { id }; // Return the id for the reducer to use
+  } catch (error) {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('user');
+      throw new Error('Session expired - please login again');
     }
-  };
-  const response = await axios.delete(API_URL + id, config);
-  return response.data;
+    throw error;
+  }
 };
 
 const landService = {

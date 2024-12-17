@@ -6,20 +6,20 @@ import Form from '../common/Form';
 const LandForm = ({ land, onClose }) => {
   const dispatch = useDispatch();
   const [formData, setFormData] = useState({
-    parcelNumber: land?.parcelNumber || '',
+    parcel_number: land?.parcel_number || '',
     location: land?.location || '',
     area: land?.area || '',
-    areaUnit: land?.areaUnit || 'hectares',
+    area_unit: land?.area_unit || 'hectares',
     status: land?.status || 'active',
-    forestType: land?.forestType || '',
-    soilType: land?.soilType || '',
-    acquisitionDate: land?.acquisitionDate?.split('T')[0] || '',
+    forest_type: land?.forest_type || '',
+    soil_type: land?.soil_type || '',
+    acquisition_date: land?.acquisition_date?.split('T')[0] || new Date().toISOString().split('T')[0],
     notes: land?.notes || ''
   });
 
   const fields = [
     {
-      name: 'parcelNumber',
+      name: 'parcel_number',
       label: 'Parcel Number',
       required: true
     },
@@ -36,7 +36,7 @@ const LandForm = ({ land, onClose }) => {
       width: 6
     },
     {
-      name: 'areaUnit',
+      name: 'area_unit',
       label: 'Unit',
       type: 'select',
       required: true,
@@ -59,16 +59,16 @@ const LandForm = ({ land, onClose }) => {
       ]
     },
     {
-      name: 'forestType',
+      name: 'forest_type',
       label: 'Forest Type',
       required: true
     },
     {
-      name: 'soilType',
+      name: 'soil_type',
       label: 'Soil Type'
     },
     {
-      name: 'acquisitionDate',
+      name: 'acquisition_date',
       label: 'Acquisition Date',
       type: 'date',
       required: true
@@ -93,7 +93,7 @@ const LandForm = ({ land, onClose }) => {
     e.preventDefault();
     
     // Validate required fields
-    const requiredFields = ['parcelNumber', 'location', 'area', 'areaUnit', 'status', 'forestType', 'acquisitionDate'];
+    const requiredFields = ['parcel_number', 'location', 'area', 'area_unit', 'status', 'forest_type', 'acquisition_date'];
     const missingFields = requiredFields.filter(field => !formData[field]);
     
     if (missingFields.length > 0) {

@@ -1,41 +1,30 @@
-const mongoose = require('mongoose');
+const BaseModel = require('./BaseModel');
 
-const leaseSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true
-  },
-  lessor: {
-    type: String,
-    required: true
-  },
-  lessee: {
-    type: String,
-    required: true
-  },
-  effectiveDate: {
-    type: Date,
-    required: true
-  },
-  expirationDate: {
-    type: Date,
-    required: true
-  },
-  acreage: {
-    type: Number,
-    required: true
-  },
-  royaltyRate: {
-    type: Number,
-    required: true
-  },
-  status: {
-    type: String,
-    enum: ['active', 'expired', 'pending'],
-    required: true
+class Lease extends BaseModel {
+  constructor() {
+    super('leases');
   }
-}, {
-  timestamps: true
-});
 
-module.exports = mongoose.model('Lease', leaseSchema); 
+  async findByName(name) {
+    const [rows] = await this.pool.execute(
+      'SELECT * FROM leases WHERE name = ?',
+      [name]
+    );
+    return rows[0];
+  }
+
+  async getActiveLeases() {
+    const [rows] = await this.pool.execute(`
+      SELECT l.*,
+             COUNT(w.id) as well_count
+      FROM leases l
+      LEFT JOIN wells w ON l.id = w.lease_id
+      WHERE l.status = 'active'
+      GROUP BY l.id
+      ORDER BY l.name ASC
+    `);
+    return rows;
+  }
+}
+
+module.exports = new Lease(); 

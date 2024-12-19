@@ -1,30 +1,32 @@
-const mongoose = require('mongoose');
+const BaseModel = require('./BaseModel');
 
-const productCategorySchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true
-  },
-  type: {
-    type: String,
-    enum: ['raw-material', 'finished-good'],
-    required: true
-  },
-  description: {
-    type: String,
-    trim: true
-  },
-  status: {
-    type: String,
-    enum: ['active', 'inactive'],
-    default: 'active'
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
+class ProductCategory extends BaseModel {
+  constructor() {
+    super('product_categories');
   }
-});
 
-module.exports = mongoose.model('ProductCategory', productCategorySchema); 
+  async findByName(name) {
+    const [rows] = await this.pool.execute(
+      'SELECT * FROM product_categories WHERE name = ?',
+      [name]
+    );
+    return rows[0];
+  }
+
+  async getActiveCategories(type = null) {
+    let query = 'SELECT * FROM product_categories WHERE status = ?';
+    const params = ['active'];
+
+    if (type) {
+      query += ' AND type = ?';
+      params.push(type);
+    }
+
+    query += ' ORDER BY name';
+
+    const [rows] = await this.pool.execute(query, params);
+    return rows;
+  }
+}
+
+module.exports = new ProductCategory(); 

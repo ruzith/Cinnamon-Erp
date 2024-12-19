@@ -63,13 +63,15 @@ const Inventory = () => {
   const [formData, setFormData] = useState({
     product_name: '',
     category: '',
+    product_type: 'raw_material',
     quantity: '',
     unit: '',
     min_stock_level: '',
     max_stock_level: '',
     location: '',
-    description: '',
-    unit_price: ''
+    purchase_price: '',
+    selling_price: '',
+    description: ''
   });
 
   const [transactionData, setTransactionData] = useState({
@@ -113,26 +115,30 @@ const Inventory = () => {
       setFormData({
         product_name: item.product_name,
         category: item.category,
+        product_type: item.product_type,
         quantity: item.quantity,
         unit: item.unit,
         min_stock_level: item.min_stock_level,
         max_stock_level: item.max_stock_level,
         location: item.location,
-        description: item.description,
-        unit_price: item.unit_price
+        purchase_price: item.purchase_price,
+        selling_price: item.selling_price,
+        description: item.description
       });
     } else {
       setSelectedItem(null);
       setFormData({
         product_name: '',
         category: '',
+        product_type: 'raw_material',
         quantity: '',
         unit: '',
         min_stock_level: '',
         max_stock_level: '',
         location: '',
-        description: '',
-        unit_price: ''
+        purchase_price: '',
+        selling_price: '',
+        description: ''
       });
     }
     setOpenDialog(true);
@@ -180,12 +186,14 @@ const Inventory = () => {
       const payload = {
         product_name: formData.product_name,
         category: formData.category,
+        product_type: formData.product_type,
         quantity: Number(formData.quantity),
         unit: formData.unit,
         min_stock_level: Number(formData.min_stock_level),
         max_stock_level: Number(formData.max_stock_level),
         location: formData.location,
-        unit_price: Number(formData.unit_price),
+        purchase_price: Number(formData.purchase_price),
+        selling_price: Number(formData.selling_price),
         description: formData.description
       };
 
@@ -474,6 +482,20 @@ const Inventory = () => {
               />
             </Grid>
             <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel>Product Type</InputLabel>
+                <Select
+                  name="product_type"
+                  value={formData.product_type}
+                  onChange={handleInputChange}
+                  required
+                >
+                  <MenuItem value="raw_material">Raw Material</MenuItem>
+                  <MenuItem value="finished_good">Finished Good</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 label="Quantity"
@@ -526,12 +548,24 @@ const Inventory = () => {
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
-                label="Unit Price"
-                name="unit_price"
+                label="Purchase Price"
+                name="purchase_price"
                 type="number"
-                value={formData.unit_price}
+                value={formData.purchase_price}
                 onChange={handleInputChange}
                 required
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Selling Price"
+                name="selling_price"
+                type="number"
+                value={formData.selling_price}
+                onChange={handleInputChange}
+                disabled={formData.product_type === 'raw_material'}
+                helperText={formData.product_type === 'raw_material' ? 'Not applicable for raw materials' : ''}
               />
             </Grid>
             <Grid item xs={12}>

@@ -32,6 +32,7 @@ import {
   LocalFlorist as TreeIcon,
   Engineering as WorkerIcon,
   Speed as VolumeIcon,
+  Payment as PaymentIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 
@@ -46,10 +47,29 @@ const CuttingManagement = () => {
     phone: '',
     status: 'active'
   });
+  const [openAssignmentDialog, setOpenAssignmentDialog] = useState(false);
+  const [assignmentFormData, setAssignmentFormData] = useState({
+    contractor_id: '',
+    land_id: '',
+    start_date: '',
+    end_date: '',
+    status: 'active'
+  });
+  const [lands, setLands] = useState([]);
+  const [openPaymentDialog, setOpenPaymentDialog] = useState(false);
+  const [paymentFormData, setPaymentFormData] = useState({
+    contractor_id: '',
+    amount: 250,
+    companyContribution: 100,
+    manufacturingContribution: 150,
+    status: 'pending',
+    notes: ''
+  });
 
   useEffect(() => {
     fetchContractors();
     fetchAssignments();
+    fetchLands();
   }, []);
 
   const fetchContractors = async () => {
@@ -67,6 +87,15 @@ const CuttingManagement = () => {
       setAssignments(response.data);
     } catch (error) {
       console.error('Error fetching assignments:', error);
+    }
+  };
+
+  const fetchLands = async () => {
+    try {
+      const response = await axios.get('/api/lands');
+      setLands(response.data);
+    } catch (error) {
+      console.error('Error fetching lands:', error);
     }
   };
 
@@ -130,7 +159,68 @@ const CuttingManagement = () => {
     }
   };
 
-  // Calculate summary statistics with snake_case
+  const handleAssignmentSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const startDate = new Date(assignmentFormData.start_date);
+      const endDate = new Date(assignmentFormData.end_date);
+      
+      if (endDate <= startDate) {
+        alert('End date must be after start date');
+        return;
+      }
+
+      if (!assignmentFormData.contractor_id || !assignmentFormData.land_id || 
+          !assignmentFormData.start_date || !assignmentFormData.end_date) {
+        alert('Please fill in all required fields');
+        return;
+      }
+
+      await axios.post('/api/cutting/assignments', assignmentFormData);
+      fetchAssignments();
+      setOpenAssignmentDialog(false);
+      setAssignmentFormData({
+        contractor_id: '',
+        land_id: '',
+        start_date: '',
+        end_date: '',
+        status: 'active'
+      });
+    } catch (error) {
+      console.error('Error creating assignment:', error);
+      alert(error.response?.data?.message || 'Error creating assignment');
+    }
+  };
+
+  const handleOpenPaymentDialog = (contractor) => {
+    setPaymentFormData(prev => ({
+      ...prev,
+      contractor_id: contractor.id,
+      notes: `Payment for ${contractor.name}`
+    }));
+    setOpenPaymentDialog(true);
+  };
+
+  const handlePaymentSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post('/api/cutting/payments', paymentFormData);
+      fetchContractors();
+      setOpenPaymentDialog(false);
+      setPaymentFormData({
+        contractor_id: '',
+        amount: 250,
+        companyContribution: 100,
+        manufacturingContribution: 150,
+        status: 'pending',
+        notes: ''
+      });
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      alert(error.response?.data?.message || 'Error processing payment');
+    }
+  };
+
   const summaryStats = {
     total_contractors: contractors.length,
     active_contractors: contractors.filter(c => c.status === 'active').length,
@@ -155,21 +245,28 @@ const CuttingManagement = () => {
 
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
-      {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
         <Typography variant="h4" sx={{ fontWeight: 600 }}>
           Cutting Operations
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => handleOpenDialog()}
-        >
-          New Cutting Operation
-        </Button>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="outlined"
+            startIcon={<TreeIcon />}
+            onClick={() => setOpenAssignmentDialog(true)}
+          >
+            Assign Land
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => handleOpenDialog()}
+          >
+            New Cutting Operation
+          </Button>
+        </Box>
       </Box>
 
-      {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
           <Paper
@@ -248,7 +345,6 @@ const CuttingManagement = () => {
         </Grid>
       </Grid>
 
-      {/* Operations Table */}
       <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
         <TableContainer>
           <Table>
@@ -281,10 +377,30 @@ const CuttingManagement = () => {
                   <TableCell align="right">
                     <IconButton 
                       size="small" 
+                      onClick={() => {
+                        setAssignmentFormData(prev => ({
+                          ...prev,
+                          contractor_id: contractor.id
+                        }));
+                        setOpenAssignmentDialog(true);
+                      }}
+                      sx={{ color: 'success.main' }}
+                    >
+                      <TreeIcon />
+                    </IconButton>
+                    <IconButton 
+                      size="small" 
                       onClick={() => handleOpenDialog(contractor)}
-                      sx={{ color: 'primary.main' }}
+                      sx={{ color: 'primary.main', ml: 1 }}
                     >
                       <EditIcon />
+                    </IconButton>
+                    <IconButton 
+                      size="small" 
+                      onClick={() => handleOpenPaymentDialog(contractor)}
+                      sx={{ color: 'info.main', ml: 1 }}
+                    >
+                      <PaymentIcon />
                     </IconButton>
                     <IconButton 
                       size="small" 
@@ -301,7 +417,6 @@ const CuttingManagement = () => {
         </TableContainer>
       </Paper>
 
-      {/* Keep your existing dialog with the current form fields */}
       <Dialog open={openDialog} onClose={handleCloseDialog}>
         <DialogTitle>
           {selectedContractor ? 'Edit Cutting Contractor' : 'New Cutting Contractor'}
@@ -357,6 +472,163 @@ const CuttingManagement = () => {
           <Button onClick={handleCloseDialog}>Cancel</Button>
           <Button variant="contained" onClick={handleSubmit}>
             {selectedContractor ? 'Update' : 'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={openAssignmentDialog} onClose={() => setOpenAssignmentDialog(false)}>
+        <DialogTitle>Assign Land to Contractor</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel>Contractor</InputLabel>
+                <Select
+                  name="contractor_id"
+                  value={assignmentFormData.contractor_id}
+                  label="Contractor"
+                  onChange={(e) => setAssignmentFormData(prev => ({
+                    ...prev,
+                    contractor_id: e.target.value
+                  }))}
+                  required
+                >
+                  {contractors.map(contractor => (
+                    <MenuItem key={contractor.id} value={contractor.id}>
+                      {contractor.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel>Land</InputLabel>
+                <Select
+                  name="land_id"
+                  value={assignmentFormData.land_id}
+                  label="Land"
+                  onChange={(e) => setAssignmentFormData(prev => ({
+                    ...prev,
+                    land_id: e.target.value
+                  }))}
+                  required
+                >
+                  {lands.map(land => (
+                    <MenuItem key={land.id} value={land.id}>
+                      {land.name} ({land.parcel_number})
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Start Date"
+                type="date"
+                name="start_date"
+                value={assignmentFormData.start_date}
+                onChange={(e) => setAssignmentFormData(prev => ({
+                  ...prev,
+                  start_date: e.target.value
+                }))}
+                InputLabelProps={{ shrink: true }}
+                required
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="End Date"
+                type="date"
+                name="end_date"
+                value={assignmentFormData.end_date}
+                onChange={(e) => setAssignmentFormData(prev => ({
+                  ...prev,
+                  end_date: e.target.value
+                }))}
+                InputLabelProps={{ shrink: true }}
+                required
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenAssignmentDialog(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleAssignmentSubmit}>
+            Assign
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={openPaymentDialog} onClose={() => setOpenPaymentDialog(false)}>
+        <DialogTitle>Process Cutting Payment</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Total Amount"
+                type="number"
+                value={paymentFormData.amount}
+                disabled
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Company Contribution"
+                type="number"
+                value={paymentFormData.companyContribution}
+                disabled
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Manufacturing Contribution"
+                type="number"
+                value={paymentFormData.manufacturingContribution}
+                disabled
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel>Status</InputLabel>
+                <Select
+                  value={paymentFormData.status}
+                  label="Status"
+                  onChange={(e) => setPaymentFormData(prev => ({
+                    ...prev,
+                    status: e.target.value
+                  }))}
+                >
+                  <MenuItem value="pending">Pending</MenuItem>
+                  <MenuItem value="due">Due</MenuItem>
+                  <MenuItem value="paid">Paid</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Notes"
+                multiline
+                rows={2}
+                value={paymentFormData.notes}
+                onChange={(e) => setPaymentFormData(prev => ({
+                  ...prev,
+                  notes: e.target.value
+                }))}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenPaymentDialog(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handlePaymentSubmit}>
+            Process Payment
           </Button>
         </DialogActions>
       </Dialog>

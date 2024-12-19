@@ -64,6 +64,8 @@ const LoanBook = () => {
   });
 
   const [loanFormData, setLoanFormData] = useState({
+    borrower_type: 'employee',
+    borrower_id: '',
     borrowerName: '',
     borrowerContact: '',
     amount: '',
@@ -86,6 +88,10 @@ const LoanBook = () => {
     reference: '',
     notes: ''
   });
+
+  const [borrowers, setBorrowers] = useState([]);
+  const [openPayrollDialog, setOpenPayrollDialog] = useState(false);
+  const [payrollDetails, setPayrollDetails] = useState(null);
 
   useEffect(() => {
     fetchLoans();
@@ -133,6 +139,16 @@ const LoanBook = () => {
     }
   };
 
+  const fetchBorrowers = async (type) => {
+    try {
+      const response = await axios.get(`/api/loans/borrowers?type=${type}`);
+      setBorrowers(response.data);
+    } catch (error) {
+      console.error('Error fetching borrowers:', error);
+      setBorrowers([]);
+    }
+  };
+
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
   };
@@ -141,6 +157,8 @@ const LoanBook = () => {
     if (loan) {
       setSelectedLoan(loan);
       setLoanFormData({
+        borrower_type: loan.borrower_type,
+        borrower_id: loan.borrower_id,
         borrowerName: loan.borrowerName,
         borrowerContact: loan.borrowerContact,
         amount: loan.amount,
@@ -154,9 +172,12 @@ const LoanBook = () => {
         paymentFrequency: loan.paymentFrequency,
         notes: loan.notes
       });
+      fetchBorrowers(loan.borrower_type);
     } else {
       setSelectedLoan(null);
       setLoanFormData({
+        borrower_type: 'employee',
+        borrower_id: '',
         borrowerName: '',
         borrowerContact: '',
         amount: '',
@@ -170,6 +191,7 @@ const LoanBook = () => {
         paymentFrequency: 'monthly',
         notes: ''
       });
+      fetchBorrowers('employee');
     }
     setOpenLoanDialog(true);
   };
@@ -282,6 +304,22 @@ const LoanBook = () => {
       .filter(payment => payment.loanId === loan.id)
       .reduce((sum, payment) => sum + payment.amount, 0);
     return loan.amount - paidAmount;
+  };
+
+  useEffect(() => {
+    if (openLoanDialog) {
+      fetchBorrowers(loanFormData.borrower_type);
+    }
+  }, [loanFormData.borrower_type, openLoanDialog]);
+
+  const handleViewPayroll = async (employeeId) => {
+    try {
+      const response = await axios.get(`/api/payroll/calculate/${employeeId}`);
+      setPayrollDetails(response.data);
+      setOpenPayrollDialog(true);
+    } catch (error) {
+      console.error('Error fetching payroll details:', error);
+    }
   };
 
   return (
@@ -533,13 +571,46 @@ const LoanBook = () => {
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={6}>
-              <TextField
-                name="borrowerName"
-                label="Borrower Name"
-                fullWidth
-                value={loanFormData.borrowerName}
-                onChange={handleLoanInputChange}
-              />
+              <FormControl fullWidth>
+                <InputLabel>Borrower Type</InputLabel>
+                <Select
+                  name="borrower_type"
+                  value={loanFormData.borrower_type}
+                  label="Borrower Type"
+                  onChange={handleLoanInputChange}
+                >
+                  <MenuItem value="employee">Employee</MenuItem>
+                  <MenuItem value="contractor">Contractor</MenuItem>
+                  <MenuItem value="other">Other</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={6}>
+              {loanFormData.borrower_type !== 'other' ? (
+                <FormControl fullWidth>
+                  <InputLabel>Select {loanFormData.borrower_type}</InputLabel>
+                  <Select
+                    name="borrower_id"
+                    value={loanFormData.borrower_id}
+                    label={`Select ${loanFormData.borrower_type}`}
+                    onChange={handleLoanInputChange}
+                  >
+                    {borrowers.map((borrower) => (
+                      <MenuItem key={borrower.id} value={borrower.id}>
+                        {borrower.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              ) : (
+                <TextField
+                  name="borrowerName"
+                  label="Borrower Name"
+                  fullWidth
+                  value={loanFormData.borrowerName}
+                  onChange={handleLoanInputChange}
+                />
+              )}
             </Grid>
             <Grid item xs={6}>
               <TextField
@@ -817,6 +888,65 @@ const LoanBook = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseHistoryDialog}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={openPayrollDialog}
+        onClose={() => setOpenPayrollDialog(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Employee Payroll Details</DialogTitle>
+        <DialogContent>
+          {payrollDetails && (
+            <Grid container spacing={2} sx={{ mt: 1 }}>
+              <Grid item xs={12}>
+                <Typography variant="h6">
+                  {payrollDetails.employeeName}
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography variant="subtitle1">Basic Salary</Typography>
+                <Typography variant="h6">
+                  ${payrollDetails.basicSalary.toFixed(2)}
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography variant="subtitle1">Gross Salary</Typography>
+                <Typography variant="h6">
+                  ${payrollDetails.grossSalary.toFixed(2)}
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography variant="subtitle1">Earnings</Typography>
+                {payrollDetails.earnings.map((earning, index) => (
+                  <Box key={index} sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Typography>{earning.name}</Typography>
+                    <Typography>${earning.amount.toFixed(2)}</Typography>
+                  </Box>
+                ))}
+              </Grid>
+              <Grid item xs={6}>
+                <Typography variant="subtitle1">Deductions</Typography>
+                {payrollDetails.deductions.map((deduction, index) => (
+                  <Box key={index} sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Typography>{deduction.name}</Typography>
+                    <Typography>${deduction.amount.toFixed(2)}</Typography>
+                  </Box>
+                ))}
+              </Grid>
+              <Grid item xs={12}>
+                <Typography variant="subtitle1">Net Salary</Typography>
+                <Typography variant="h5" color="primary">
+                  ${payrollDetails.netSalary.toFixed(2)}
+                </Typography>
+              </Grid>
+            </Grid>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenPayrollDialog(false)}>Close</Button>
         </DialogActions>
       </Dialog>
     </Box>

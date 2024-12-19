@@ -93,6 +93,54 @@ class Account extends BaseModel {
     `, [startDate, endDate]);
     return rows;
   }
+
+  async getLedgerEntries(accountId, startDate, endDate) {
+    const [rows] = await this.pool.execute(`
+      SELECT 
+        t.date,
+        t.reference,
+        t.description,
+        te.debit,
+        te.credit,
+        t.status,
+        CASE 
+          WHEN a.type IN ('asset', 'expense') THEN @balance := @balance + (te.debit - te.credit)
+          ELSE @balance := @balance + (te.credit - te.debit)
+        END as running_balance
+      FROM transactions t
+      JOIN transactions_entries te ON t.id = te.transaction_id
+      JOIN accounts a ON te.account_id = a.id
+      CROSS JOIN (SELECT @balance := 0) AS vars
+      WHERE te.account_id = ?
+        AND t.date BETWEEN ? AND ?
+        AND t.status = 'posted'
+      ORDER BY t.date, t.id
+    `, [accountId, startDate, endDate]);
+    
+    return rows;
+  }
+
+  async getCashBook(startDate, endDate) {
+    const [rows] = await this.pool.execute(`
+      SELECT 
+        t.date,
+        t.reference,
+        t.description,
+        CASE WHEN te.debit > 0 THEN te.debit ELSE NULL END as receipt,
+        CASE WHEN te.credit > 0 THEN te.credit ELSE NULL END as payment,
+        @balance := @balance + (te.debit - te.credit) as balance
+      FROM transactions t
+      JOIN transactions_entries te ON t.id = te.transaction_id
+      JOIN accounts a ON te.account_id = a.id
+      CROSS JOIN (SELECT @balance := 0) AS vars
+      WHERE a.code = '1001' -- Cash account code
+        AND t.date BETWEEN ? AND ?
+        AND t.status = 'posted'
+      ORDER BY t.date, t.id
+    `, [startDate, endDate]);
+    
+    return rows;
+  }
 }
 
 module.exports = new Account(); 

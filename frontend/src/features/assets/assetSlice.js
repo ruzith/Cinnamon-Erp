@@ -51,6 +51,42 @@ export const getDepreciationReport = createAsyncThunk(
   }
 );
 
+// Get asset depreciation report
+export const getAssetDepreciation = createAsyncThunk(
+  'assets/depreciation',
+  async (id, thunkAPI) => {
+    try {
+      return await assetService.getAssetDepreciation(id);
+    } catch (error) {
+      return thunkAPI.rejectWithValue(error.response.data.message);
+    }
+  }
+);
+
+// Get asset value report
+export const getAssetValueReport = createAsyncThunk(
+  'assets/valueReport',
+  async (_, thunkAPI) => {
+    try {
+      return await assetService.getAssetValueReport();
+    } catch (error) {
+      return thunkAPI.rejectWithValue(error.response.data.message);
+    }
+  }
+);
+
+// Get asset usage report
+export const getAssetUsageReport = createAsyncThunk(
+  'assets/usageReport',
+  async (_, thunkAPI) => {
+    try {
+      return await assetService.getAssetUsageReport();
+    } catch (error) {
+      return thunkAPI.rejectWithValue(error.response.data.message);
+    }
+  }
+);
+
 export const assetSlice = createSlice({
   name: 'asset',
   initialState,

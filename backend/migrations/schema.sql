@@ -1,38 +1,47 @@
--- Drop tables if they exist (in correct order due to foreign keys)
+-- Drop tables if they exist (in correct order due to foreign key dependencies)
+DROP TABLE IF EXISTS payroll_components;
+DROP TABLE IF EXISTS payroll_items;
+DROP TABLE IF EXISTS payrolls;
+DROP TABLE IF EXISTS salary_structure_components;
+DROP TABLE IF EXISTS salary_structures;
 DROP TABLE IF EXISTS report_columns;
 DROP TABLE IF EXISTS report_filters;
 DROP TABLE IF EXISTS reports;
 DROP TABLE IF EXISTS transactions_entries;
 DROP TABLE IF EXISTS transactions;
-DROP TABLE IF EXISTS loan_schedule;
 DROP TABLE IF EXISTS loan_payments;
+DROP TABLE IF EXISTS loan_schedule;
 DROP TABLE IF EXISTS loans;
 DROP TABLE IF EXISTS asset_attachments;
 DROP TABLE IF EXISTS asset_maintenance;
 DROP TABLE IF EXISTS assets;
 DROP TABLE IF EXISTS asset_categories;
+DROP TABLE IF EXISTS manufacturing_materials;
 DROP TABLE IF EXISTS purchase_items;
 DROP TABLE IF EXISTS purchase_invoices;
 DROP TABLE IF EXISTS sales_items;
 DROP TABLE IF EXISTS sales_invoices;
 DROP TABLE IF EXISTS inventory_transactions;
-DROP TABLE IF EXISTS inventory;
-DROP TABLE IF EXISTS manufacturing_orders;
-DROP TABLE IF EXISTS cinnamon_assignments;
+DROP TABLE IF EXISTS tasks;
+DROP TABLE IF EXISTS cutting_payments;
+DROP TABLE IF EXISTS cutting_tasks;
 DROP TABLE IF EXISTS land_assignments;
-DROP TABLE IF EXISTS cutting_contractors;
+DROP TABLE IF EXISTS advance_payments;
+DROP TABLE IF EXISTS cinnamon_assignments;
+DROP TABLE IF EXISTS manufacturing_orders;
 DROP TABLE IF EXISTS manufacturing_contractors;
+DROP TABLE IF EXISTS cutting_contractors;
+DROP TABLE IF EXISTS inventory;
+DROP TABLE IF EXISTS products;
+DROP TABLE IF EXISTS grades;
+DROP TABLE IF EXISTS product_categories;
+DROP TABLE IF EXISTS employees;
+DROP TABLE IF EXISTS designations;
+DROP TABLE IF EXISTS customers;
+DROP TABLE IF EXISTS accounts;
 DROP TABLE IF EXISTS wells;
 DROP TABLE IF EXISTS leases;
 DROP TABLE IF EXISTS lands;
-DROP TABLE IF EXISTS employees;
-DROP TABLE IF EXISTS salary_structures;
-DROP TABLE IF EXISTS designations;
-DROP TABLE IF EXISTS products;
-DROP TABLE IF EXISTS product_categories;
-DROP TABLE IF EXISTS tasks;
-DROP TABLE IF EXISTS customers;
-DROP TABLE IF EXISTS accounts;
 DROP TABLE IF EXISTS settings;
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS currencies;
@@ -101,25 +110,39 @@ CREATE TABLE designations (
 -- Salary Structures table
 CREATE TABLE salary_structures (
   id INT PRIMARY KEY AUTO_INCREMENT,
-  name VARCHAR(255) NOT NULL UNIQUE,
+  name VARCHAR(100) NOT NULL,
   basic_salary DECIMAL(10,2) NOT NULL,
-  description TEXT,
   status ENUM('active', 'inactive') DEFAULT 'active',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  description TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- Salary Structure Components table
+CREATE TABLE salary_structure_components (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  structure_id INT NOT NULL,
+  name VARCHAR(100) NOT NULL,
+  type ENUM('earning', 'deduction') NOT NULL,
+  amount DECIMAL(10,2) NOT NULL,
+  is_percentage BOOLEAN DEFAULT FALSE,
+  description TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (structure_id) REFERENCES salary_structures(id)
 );
 
 -- Employees table
 CREATE TABLE employees (
   id INT PRIMARY KEY AUTO_INCREMENT,
   name VARCHAR(255) NOT NULL,
-  nic VARCHAR(20) NOT NULL UNIQUE,
-  phone VARCHAR(20) NOT NULL,
-  address TEXT NOT NULL,
-  birthday DATE NOT NULL,
-  designation_id INT NOT NULL,
-  employment_type ENUM('permanent', 'temporary') NOT NULL,
+  nic VARCHAR(12) NOT NULL UNIQUE,
+  phone VARCHAR(15),
+  address TEXT,
+  birthday DATE,
+  designation_id INT,
+  employment_type ENUM('permanent', 'temporary') DEFAULT 'permanent',
   status ENUM('active', 'inactive') DEFAULT 'active',
-  salary_structure_id INT NOT NULL,
+  salary_structure_id INT,
   bank_name VARCHAR(100),
   account_number VARCHAR(50),
   account_name VARCHAR(255),
@@ -129,20 +152,68 @@ CREATE TABLE employees (
   FOREIGN KEY (salary_structure_id) REFERENCES salary_structures(id)
 );
 
+-- Payrolls table
+CREATE TABLE payrolls (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  payroll_id VARCHAR(20) NOT NULL UNIQUE,
+  month INT NOT NULL,
+  year INT NOT NULL,
+  from_date DATE NOT NULL,
+  to_date DATE NOT NULL,
+  total_basic_salary DECIMAL(15,2) DEFAULT 0,
+  total_gross_salary DECIMAL(15,2) DEFAULT 0,
+  total_deductions DECIMAL(15,2) DEFAULT 0,
+  total_net_salary DECIMAL(15,2) DEFAULT 0,
+  status ENUM('draft', 'processing', 'approved', 'completed') DEFAULT 'draft',
+  created_by INT NOT NULL,
+  approved_by INT,
+  approved_at TIMESTAMP NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (created_by) REFERENCES users(id),
+  FOREIGN KEY (approved_by) REFERENCES users(id)
+);
+
+-- Payroll Items table
+CREATE TABLE payroll_items (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  payroll_id INT NOT NULL,
+  employee_id INT NOT NULL,
+  basic_salary DECIMAL(15,2) NOT NULL,
+  gross_salary DECIMAL(15,2) NOT NULL,
+  net_salary DECIMAL(15,2) NOT NULL,
+  status ENUM('pending', 'paid') DEFAULT 'pending',
+  payment_method ENUM('bank', 'cash', 'cheque') DEFAULT 'bank',
+  payment_date TIMESTAMP NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (payroll_id) REFERENCES payrolls(id),
+  FOREIGN KEY (employee_id) REFERENCES employees(id)
+);
+
+-- Payroll Components table
+CREATE TABLE payroll_components (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  payroll_item_id INT NOT NULL,
+  type ENUM('earning', 'deduction') NOT NULL,
+  name VARCHAR(100) NOT NULL,
+  amount DECIMAL(10,2) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (payroll_item_id) REFERENCES payroll_items(id)
+);
+
 -- Lands table
 CREATE TABLE lands (
   id INT PRIMARY KEY AUTO_INCREMENT,
+  name VARCHAR(255) NOT NULL,
   parcel_number VARCHAR(50) NOT NULL UNIQUE,
+  size DECIMAL(10,2) NOT NULL,
+  category ENUM('agricultural', 'residential', 'commercial', 'forest', 'other') NOT NULL,
+  ownership_status ENUM('owned', 'rent') NOT NULL,
   location VARCHAR(255) NOT NULL,
-  area DECIMAL(10,2) NOT NULL,
-  area_unit ENUM('hectares', 'acres', 'square_meters') NOT NULL,
   acquisition_date DATE NOT NULL,
   status ENUM('active', 'inactive', 'under_maintenance') DEFAULT 'active',
-  forest_type VARCHAR(100) NOT NULL,
-  soil_type VARCHAR(100),
-  last_harvest_date DATE,
-  next_harvest_date DATE,
-  notes TEXT,
+  description TEXT,
+  rent_details JSON,
   created_by INT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -217,6 +288,42 @@ CREATE TABLE land_assignments (
   FOREIGN KEY (land_id) REFERENCES lands(id)
 );
 
+-- Cutting Tasks table
+CREATE TABLE cutting_tasks (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  assignment_id INT NOT NULL,
+  date DATE NOT NULL,
+  progress DECIMAL(5,2) NOT NULL CHECK (progress >= 0 AND progress <= 100),
+  area_covered DECIMAL(10,2) NOT NULL CHECK (area_covered >= 0),
+  workers_count INT NOT NULL CHECK (workers_count >= 1),
+  weather_conditions ENUM('sunny', 'cloudy', 'rainy', 'stormy') NOT NULL,
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (assignment_id) REFERENCES land_assignments(id) ON DELETE CASCADE,
+  INDEX idx_assignment_date (assignment_id, date)
+);
+
+-- Cutting Payments table
+CREATE TABLE cutting_payments (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  contractor_id INT NOT NULL,
+  assignment_id INT NOT NULL,
+  total_amount DECIMAL(10,2) NOT NULL DEFAULT 250.00,
+  company_contribution DECIMAL(10,2) NOT NULL DEFAULT 100.00,
+  manufacturing_contribution DECIMAL(10,2) NOT NULL DEFAULT 150.00,
+  status ENUM('paid', 'due', 'pending') DEFAULT 'pending',
+  payment_date DATE,
+  receipt_number VARCHAR(20) UNIQUE,
+  notes TEXT,
+  created_by INT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (contractor_id) REFERENCES cutting_contractors(id),
+  FOREIGN KEY (assignment_id) REFERENCES land_assignments(id),
+  FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
 -- Tasks table
 CREATE TABLE tasks (
   id INT PRIMARY KEY AUTO_INCREMENT,
@@ -278,6 +385,16 @@ CREATE TABLE product_categories (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
+-- Grades table
+CREATE TABLE grades (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  name VARCHAR(255) NOT NULL UNIQUE,
+  description TEXT,
+  status ENUM('active', 'inactive') DEFAULT 'active',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
 -- Products table
 CREATE TABLE products (
   id INT PRIMARY KEY AUTO_INCREMENT,
@@ -299,16 +416,17 @@ CREATE TABLE inventory (
   id INT PRIMARY KEY AUTO_INCREMENT,
   product_name VARCHAR(255) NOT NULL,
   category VARCHAR(100) NOT NULL,
+  product_type ENUM('raw_material', 'finished_good') NOT NULL,
   quantity DECIMAL(10,2) NOT NULL DEFAULT 0,
   unit VARCHAR(50) NOT NULL,
   min_stock_level DECIMAL(10,2) NOT NULL,
   max_stock_level DECIMAL(10,2) NOT NULL,
-  location VARCHAR(255) NOT NULL,
-  unit_price DECIMAL(10,2) NOT NULL,
+  location VARCHAR(100),
+  purchase_price DECIMAL(15,2) NOT NULL,
+  selling_price DECIMAL(15,2),
   description TEXT,
-  last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY unique_product (product_name)
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 -- Inventory Transactions table
@@ -410,13 +528,13 @@ CREATE TABLE purchase_items (
 -- Loans table
 CREATE TABLE loans (
   id INT PRIMARY KEY AUTO_INCREMENT,
-  loan_number VARCHAR(20) UNIQUE NOT NULL,
   borrower_id INT NOT NULL,
+  loan_number VARCHAR(20) NOT NULL UNIQUE,
   amount DECIMAL(15,2) NOT NULL,
   interest_rate DECIMAL(5,2) NOT NULL,
   term_months INT NOT NULL,
   remaining_balance DECIMAL(15,2) NOT NULL,
-  status ENUM('pending', 'active', 'completed', 'overdue', 'cancelled') DEFAULT 'pending',
+  status ENUM('pending', 'active', 'completed', 'defaulted') DEFAULT 'pending',
   created_by INT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -424,7 +542,7 @@ CREATE TABLE loans (
   FOREIGN KEY (created_by) REFERENCES users(id)
 );
 
--- Loan Schedule table
+-- Loan Schedule table (must come before loan_payments)
 CREATE TABLE loan_schedule (
   id INT PRIMARY KEY AUTO_INCREMENT,
   loan_id INT NOT NULL,
@@ -434,13 +552,13 @@ CREATE TABLE loan_schedule (
   principal_amount DECIMAL(15,2) NOT NULL,
   interest_amount DECIMAL(15,2) NOT NULL,
   paid_amount DECIMAL(15,2) DEFAULT 0,
-  status ENUM('pending', 'paid', 'overdue') DEFAULT 'pending',
-  paid_date TIMESTAMP NULL,
+  status ENUM('pending', 'partial', 'paid', 'overdue') DEFAULT 'pending',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (loan_id) REFERENCES loans(id)
 );
 
--- Loan Payments table
+-- Loan Payments table (must come after loan_schedule)
 CREATE TABLE loan_payments (
   id INT PRIMARY KEY AUTO_INCREMENT,
   loan_id INT NOT NULL,
@@ -499,10 +617,24 @@ CREATE TABLE cinnamon_assignments (
   id INT PRIMARY KEY AUTO_INCREMENT,
   contractor_id INT NOT NULL,
   quantity DECIMAL(10,2) NOT NULL,
-  unit_price DECIMAL(10,2) NOT NULL,
+  duration INT NOT NULL,
+  duration_type ENUM('day', 'week', 'month') NOT NULL,
   start_date DATE NOT NULL,
   end_date DATE,
   status ENUM('active', 'completed', 'cancelled') DEFAULT 'active',
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (contractor_id) REFERENCES manufacturing_contractors(id)
+);
+
+-- Advance Payments table
+CREATE TABLE advance_payments (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  contractor_id INT NOT NULL,
+  amount DECIMAL(10,2) NOT NULL,
+  payment_date DATE NOT NULL,
+  receipt_number VARCHAR(50) NOT NULL UNIQUE,
   notes TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -614,5 +746,17 @@ CREATE TABLE report_columns (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (report_id) REFERENCES reports(id)
 ); 
+
+-- Manufacturing Materials table
+CREATE TABLE manufacturing_materials (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  order_id INT NOT NULL,
+  material_id INT NOT NULL,
+  quantity_used DECIMAL(10,2) NOT NULL,
+  unit_cost DECIMAL(15,2) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (order_id) REFERENCES manufacturing_orders(id),
+  FOREIGN KEY (material_id) REFERENCES inventory(id)
+);
 
 

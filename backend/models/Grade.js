@@ -1,25 +1,25 @@
-const mongoose = require('mongoose');
+const BaseModel = require('./BaseModel');
 
-const gradeSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true
-  },
-  description: {
-    type: String,
-    trim: true
-  },
-  status: {
-    type: String,
-    enum: ['active', 'inactive'],
-    default: 'active'
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
+class Grade extends BaseModel {
+  constructor() {
+    super('grades');
   }
-});
 
-module.exports = mongoose.model('Grade', gradeSchema); 
+  async findByName(name) {
+    const [rows] = await this.pool.execute(
+      'SELECT * FROM grades WHERE name = ?',
+      [name]
+    );
+    return rows[0];
+  }
+
+  async getActiveGrades() {
+    const [rows] = await this.pool.execute(
+      'SELECT * FROM grades WHERE status = ? ORDER BY name',
+      ['active']
+    );
+    return rows;
+  }
+}
+
+module.exports = new Grade(); 

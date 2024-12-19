@@ -6,7 +6,15 @@ const { validateInventory, validateTransaction } = require('../validators/invent
 // @access  Private
 exports.getInventoryItems = async (req, res) => {
   try {
-    const items = await Inventory.findAll();
+    let query = 'SELECT * FROM inventory';
+    const params = [];
+
+    if (req.query.type) {
+      query += ' WHERE product_type = ?';
+      params.push(req.query.type);
+    }
+
+    const [items] = await Inventory.pool.execute(query, params);
     res.status(200).json(items);
   } catch (error) {
     res.status(500).json({ message: error.message });

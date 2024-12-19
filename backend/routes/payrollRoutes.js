@@ -176,4 +176,39 @@ router.get('/:id', protect, async (req, res) => {
   }
 });
 
+// Get employee payroll details
+router.get('/employee/:id', protect, async (req, res) => {
+  try {
+    const employeeId = req.params.id;
+    
+    // Get employee's payroll history
+    const [payrollHistory] = await Payroll.pool.execute(`
+      SELECT p.*, pi.*,
+             u1.name as created_by_name,
+             u2.name as approved_by_name
+      FROM payrolls p
+      JOIN payroll_items pi ON p.id = pi.payroll_id 
+      LEFT JOIN users u1 ON p.created_by = u1.id
+      LEFT JOIN users u2 ON p.approved_by = u2.id
+      WHERE pi.employee_id = ?
+      ORDER BY p.year DESC, p.month DESC
+    `, [employeeId]);
+
+    res.json(payrollHistory);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Calculate employee salary
+router.get('/calculate/:employeeId', protect, async (req, res) => {
+  try {
+    const payroll = new Payroll();
+    const salaryDetails = await payroll.calculateEmployeeSalary(req.params.employeeId);
+    res.json(salaryDetails);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
 module.exports = router; 

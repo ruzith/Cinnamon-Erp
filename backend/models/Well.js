@@ -1,36 +1,39 @@
-const mongoose = require('mongoose');
+const BaseModel = require('./BaseModel');
 
-const wellSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-    unique: true
-  },
-  lease: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Lease',
-    required: true
-  },
-  status: {
-    type: String,
-    enum: ['producing', 'shut-in', 'abandoned'],
-    required: true
-  },
-  location: {
-    latitude: Number,
-    longitude: Number
-  },
-  depth: {
-    type: Number,
-    required: true
-  },
-  production: {
-    oil: Number,
-    gas: Number,
-    water: Number
+class Well extends BaseModel {
+  constructor() {
+    super('wells');
   }
-}, {
-  timestamps: true
-});
 
-module.exports = mongoose.model('Well', wellSchema); 
+  async findByName(name) {
+    const [rows] = await this.pool.execute(
+      'SELECT * FROM wells WHERE name = ?',
+      [name]
+    );
+    return rows[0];
+  }
+
+  async getWithDetails(id) {
+    const [rows] = await this.pool.execute(`
+      SELECT w.*,
+             l.name as lease_name,
+             JSON_OBJECT(
+               'latitude', w.latitude,
+               'longitude', w.longitude
+             ) as location,
+             JSON_OBJECT(
+               'oil', w.oil_production,
+               'gas', w.gas_production,
+               'water', w.water_production
+             ) as production
+      FROM wells w
+      LEFT JOIN leases l ON w.lease_id = l.id
+      ${id ? 'WHERE w.id = ?' : ''}
+      ORDER BY w.name ASC
+    `, id ? [id] : []);
+    
+    return id ? rows[0] : rows;
+  }
+}
+
+module.exports = new Well(); 

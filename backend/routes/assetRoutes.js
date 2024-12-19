@@ -142,4 +142,62 @@ router.get('/report/depreciation', protect, async (req, res) => {
   }
 });
 
+// Get depreciation report for an asset
+router.get('/:id/depreciation', protect, async (req, res) => {
+  try {
+    const depreciation = await Asset.calculateDepreciation(req.params.id);
+    if (!depreciation) {
+      return res.status(404).json({ message: 'Asset not found' });
+    }
+    res.json(depreciation);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get asset value report
+router.get('/report/values', protect, async (req, res) => {
+  try {
+    const [rows] = await Asset.pool.execute(`
+      SELECT 
+        ac.name as category_name,
+        COUNT(*) as asset_count,
+        SUM(a.purchase_price) as total_purchase_value,
+        SUM(a.current_value) as total_current_value,
+        SUM(a.purchase_price - a.current_value) as total_depreciation
+      FROM assets a
+      JOIN asset_categories ac ON a.category_id = ac.id
+      WHERE a.status != 'retired'
+      GROUP BY ac.id, ac.name
+      ORDER BY ac.name
+    `);
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get asset usage report
+router.get('/report/usage', protect, async (req, res) => {
+  try {
+    const [rows] = await Asset.pool.execute(`
+      SELECT 
+        a.*,
+        ac.name as category_name,
+        COUNT(am.id) as maintenance_count,
+        MAX(am.maintenance_date) as last_maintenance,
+        w.name as current_location
+      FROM assets a
+      LEFT JOIN asset_categories ac ON a.category_id = ac.id
+      LEFT JOIN asset_maintenance am ON a.id = am.asset_id
+      LEFT JOIN wells w ON a.assigned_to = w.id
+      GROUP BY a.id
+      ORDER BY a.name
+    `);
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 module.exports = router; 

@@ -60,6 +60,47 @@ class Asset extends BaseModel {
     const prefix = type.charAt(0).toUpperCase();
     return `${prefix}${year}${count.toString().padStart(4, '0')}`;
   }
+
+  async calculateDepreciation(id) {
+    const [asset] = await this.pool.execute(`
+      SELECT a.*,
+             ac.depreciation_rate,
+             ac.useful_life,
+             TIMESTAMPDIFF(YEAR, a.purchase_date, CURRENT_DATE) as age
+      FROM assets a
+      JOIN asset_categories ac ON a.category_id = ac.id
+      WHERE a.id = ?
+    `, [id]);
+
+    if (!asset[0]) return null;
+
+    const {
+      purchase_price,
+      age,
+      depreciation_rate,
+      useful_life
+    } = asset[0];
+
+    // Calculate straight-line depreciation
+    const annualDepreciation = purchase_price * (depreciation_rate / 100);
+    const totalDepreciation = Math.min(age * annualDepreciation, purchase_price);
+    const currentValue = purchase_price - totalDepreciation;
+
+    // Update current value in database
+    await this.pool.execute(
+      'UPDATE assets SET current_value = ? WHERE id = ?',
+      [currentValue, id]
+    );
+
+    return {
+      purchase_price,
+      current_value: currentValue,
+      total_depreciation: totalDepreciation,
+      annual_depreciation: annualDepreciation,
+      age,
+      useful_life_remaining: Math.max(useful_life - age, 0)
+    };
+  }
 }
 
 module.exports = new Asset(); 

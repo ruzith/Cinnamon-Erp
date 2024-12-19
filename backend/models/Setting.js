@@ -1,71 +1,33 @@
-const mongoose = require('mongoose');
+const BaseModel = require('./BaseModel');
 
-const settingSchema = new mongoose.Schema({
-  general: {
-    companyName: String,
-    email: String,
-    phone: String,
-    address: String,
-    taxNumber: String,
-    currency: {
-      type: String,
-      default: 'USD'
-    },
-    dateFormat: {
-      type: String,
-      default: 'MM/DD/YYYY'
-    },
-    timezone: {
-      type: String,
-      default: 'UTC'
-    }
-  },
-  notifications: {
-    emailNotifications: {
-      type: Boolean,
-      default: true
-    },
-    lowStockAlerts: {
-      type: Boolean,
-      default: true
-    },
-    paymentReminders: {
-      type: Boolean,
-      default: true
-    },
-    taskDeadlines: {
-      type: Boolean,
-      default: true
-    },
-    maintenanceAlerts: {
-      type: Boolean,
-      default: true
-    },
-    loanDueAlerts: {
-      type: Boolean,
-      default: true
-    }
-  },
-  backup: {
-    autoBackup: {
-      type: Boolean,
-      default: true
-    },
-    backupFrequency: {
-      type: String,
-      default: 'daily'
-    },
-    retentionPeriod: {
-      type: Number,
-      default: 30
-    },
-    backupLocation: {
-      type: String,
-      default: 'cloud'
-    }
+class Setting extends BaseModel {
+  constructor() {
+    super('settings');
   }
-}, {
-  timestamps: true
-});
 
-module.exports = mongoose.model('Setting', settingSchema); 
+  async get(key) {
+    const [rows] = await this.pool.execute(
+      'SELECT value FROM settings WHERE `key` = ?',
+      [key]
+    );
+    return rows[0]?.value;
+  }
+
+  async set(key, value) {
+    await this.pool.execute(
+      'INSERT INTO settings (`key`, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = ?',
+      [key, value, value]
+    );
+    return { key, value };
+  }
+
+  async getAll() {
+    const [rows] = await this.pool.execute('SELECT * FROM settings');
+    return rows.reduce((acc, row) => ({
+      ...acc,
+      [row.key]: row.value
+    }), {});
+  }
+}
+
+module.exports = new Setting(); 

@@ -35,6 +35,7 @@ import {
   Payments as PaymentIcon,
   People as CustomersIcon,
   TrendingUp as RevenueIcon,
+  Print as PrintIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 
@@ -67,7 +68,10 @@ const Sales = () => {
     paymentMethod: '',
     notes: '',
     shippingAddress: '',
-    totalAmount: 0
+    totalAmount: 0,
+    tax: 0,
+    discount: 0,
+    subTotal: 0
   });
 
   const [customerFormData, setCustomerFormData] = useState({
@@ -108,7 +112,7 @@ const Sales = () => {
 
   const fetchInventory = async () => {
     try {
-      const response = await axios.get('/api/inventory');
+      const response = await axios.get('/api/inventory?type=finished_good');
       setInventory(response.data);
     } catch (error) {
       console.error('Error fetching inventory:', error);
@@ -122,18 +126,28 @@ const Sales = () => {
   const handleOpenDialog = (sale = null) => {
     if (sale) {
       setSelectedSale(sale);
+      const mappedItems = sale.items?.map(item => ({
+        id: item.product_id,
+        productName: item.product_name,
+        quantity: item.quantity,
+        unitPrice: item.unit_price || item.price,
+        unit: item.unit
+      })) || [];
+
       setSaleFormData({
-        orderNumber: sale.orderNumber,
-        customerId: sale.customerId.id,
-        items: sale.items,
-        status: sale.status,
-        paymentStatus: sale.paymentStatus,
-        paymentMethod: sale.paymentMethod,
-        notes: sale.notes,
-        shippingAddress: sale.shippingAddress,
-        totalAmount: sale.totalAmount
+        orderNumber: sale.order_number || '',
+        customerId: sale.customer_id || '',
+        items: mappedItems,
+        status: sale.status || 'pending',
+        paymentStatus: sale.payment_status || 'pending',
+        paymentMethod: sale.payment_method || '',
+        notes: sale.notes || '',
+        shippingAddress: sale.shipping_address || '',
+        totalAmount: sale.total_amount || 0,
+        tax: sale.tax || 0,
+        discount: sale.discount || 0,
+        subTotal: sale.sub_total || 0
       });
-      setSelectedItems(sale.items);
     } else {
       setSelectedSale(null);
       setSaleFormData({
@@ -145,9 +159,11 @@ const Sales = () => {
         paymentMethod: '',
         notes: '',
         shippingAddress: '',
-        totalAmount: 0
+        totalAmount: 0,
+        tax: 0,
+        discount: 0,
+        subTotal: 0
       });
-      setSelectedItems([]);
     }
     setOpenDialog(true);
   };
@@ -215,10 +231,21 @@ const Sales = () => {
 
   const handleItemSelect = (event, value) => {
     setSelectedItems(value);
-    const totalAmount = value.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+    const totalAmount = value.reduce((sum, item) => {
+      const quantity = parseFloat(item.quantity || 0);
+      const unitPrice = parseFloat(item.unitPrice || 0);
+      return sum + (quantity * unitPrice);
+    }, 0);
+
     setSaleFormData(prev => ({
       ...prev,
-      items: value,
+      items: value.map(item => ({
+        product_id: item.id,
+        product_name: item.productName,
+        quantity: item.quantity || 0,
+        unit_price: item.unitPrice || 0,
+        unit: item.unit
+      })),
       totalAmount
     }));
   };
@@ -226,10 +253,25 @@ const Sales = () => {
   const handleSaleSubmit = async (e) => {
     e.preventDefault();
     try {
+      const formattedData = {
+        invoice_number: saleFormData.orderNumber,
+        customer_id: saleFormData.customerId,
+        items: saleFormData.items,
+        status: saleFormData.status,
+        payment_status: saleFormData.paymentStatus,
+        payment_method: saleFormData.paymentMethod,
+        notes: saleFormData.notes,
+        shipping_address: saleFormData.shippingAddress,
+        total: saleFormData.totalAmount,
+        tax: saleFormData.tax,
+        discount: saleFormData.discount,
+        sub_total: saleFormData.subTotal
+      };
+
       if (selectedSale) {
-        await axios.put(`/api/sales/${selectedSale.id}`, saleFormData);
+        await axios.put(`/api/sales/${selectedSale.id}`, formattedData);
       } else {
-        await axios.post('/api/sales', saleFormData);
+        await axios.post('/api/sales', formattedData);
       }
       fetchSales();
       handleCloseDialog();
@@ -305,6 +347,22 @@ const Sales = () => {
 
   const handleEdit = (sale) => {
     handleOpenDialog(sale);
+  };
+
+  const handlePrintInvoice = async (sale) => {
+    try {
+      const response = await axios.get(`/api/sales/${sale.id}/print`, { responseType: 'blob' });
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `invoice-${sale.invoice_number}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      console.error('Error printing invoice:', error);
+    }
   };
 
   return (
@@ -465,6 +523,12 @@ const Sales = () => {
                         <EditIcon fontSize="small" />
                       </IconButton>
                     )}
+                    <IconButton
+                      size="small"
+                      onClick={() => handlePrintInvoice(sale)}
+                    >
+                      <PrintIcon fontSize="small" />
+                    </IconButton>
                   </TableCell>
                 </TableRow>
               ))}
@@ -507,15 +571,27 @@ const Sales = () => {
               <Autocomplete
                 multiple
                 options={inventory}
-                getOptionLabel={(option) => option.productName}
+                getOptionLabel={(option) => `${option.productName} (${option.unit})`}
                 value={selectedItems}
                 onChange={handleItemSelect}
+                isOptionEqualToValue={(option, value) => option.id === value.id}
                 renderInput={(params) => (
                   <TextField
                     {...params}
                     label="Select Products"
+                    variant="outlined"
                     required
                   />
+                )}
+                renderOption={(props, option) => (
+                  <li {...props}>
+                    <div>
+                      <Typography variant="body1">{option.productName}</Typography>
+                      <Typography variant="caption" color="textSecondary">
+                        Stock: {option.quantity} {option.unit}
+                      </Typography>
+                    </div>
+                  </li>
                 )}
               />
             </Grid>
@@ -528,10 +604,9 @@ const Sales = () => {
                   label="Status"
                   onChange={handleSaleInputChange}
                 >
+                  <MenuItem value="draft">Draft</MenuItem>
                   <MenuItem value="pending">Pending</MenuItem>
                   <MenuItem value="confirmed">Confirmed</MenuItem>
-                  <MenuItem value="shipped">Shipped</MenuItem>
-                  <MenuItem value="delivered">Delivered</MenuItem>
                   <MenuItem value="cancelled">Cancelled</MenuItem>
                 </Select>
               </FormControl>

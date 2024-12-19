@@ -23,6 +23,8 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -32,8 +34,11 @@ import {
   Inventory as ProductIcon,
   Engineering as WorkerIcon,
   Grade as QualityIcon,
+  Payment as PaymentIcon,
+  ShoppingCart as ShoppingCartIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
+import PurchaseInvoiceForm from '../components/PurchaseInvoiceForm';
 
 const STATUS_OPTIONS = ['planned', 'in_progress', 'completed', 'cancelled'];
 
@@ -67,11 +72,34 @@ const Manufacturing = () => {
     notes: ''
   });
   const [products, setProducts] = useState([]);
+  const [assignmentFormData, setAssignmentFormData] = useState({
+    contractor_id: '',
+    quantity: '',
+    duration: 1,
+    duration_type: 'day',
+    start_date: new Date().toISOString().split('T')[0],
+    notes: ''
+  });
+  const [advancePaymentData, setAdvancePaymentData] = useState({
+    contractor_id: '',
+    amount: '',
+    payment_date: new Date().toISOString().split('T')[0],
+    notes: ''
+  });
+  const [openAssignmentDialog, setOpenAssignmentDialog] = useState(false);
+  const [contractors, setContractors] = useState([]);
+  const [openPaymentDialog, setOpenPaymentDialog] = useState(false);
+  const [assignments, setAssignments] = useState([]);
+  const [selectedContractor, setSelectedContractor] = useState(null);
+  const [currentTab, setCurrentTab] = useState(0);
+  const [openPurchaseDialog, setOpenPurchaseDialog] = useState(false);
 
   useEffect(() => {
     fetchManufacturingOrders();
     fetchEmployees();
     fetchProducts();
+    fetchContractors();
+    fetchAssignments();
   }, []);
 
   const fetchManufacturingOrders = async () => {
@@ -102,36 +130,31 @@ const Manufacturing = () => {
     }
   };
 
-  const handleOpenDialog = (order = null) => {
-    if (order) {
-      setSelectedOrder(order);
+  const fetchContractors = async () => {
+    try {
+      const response = await axios.get('/api/manufacturing/contractors');
+      setContractors(response.data);
+    } catch (error) {
+      console.error('Error fetching contractors:', error);
+    }
+  };
+
+  const handleOpenDialog = (contractor = null) => {
+    if (contractor) {
+      setSelectedContractor(contractor);
       setFormData({
-        orderNumber: order.order_number,
-        productType: order.product_name,
-        quantity: order.quantity,
-        assignedWorkers: order.assigned_to ? [order.assigned_to] : [],
-        startDate: order.start_date?.split('T')[0] || '',
-        endDate: order.end_date?.split('T')[0] || '',
-        status: order.status,
-        rawMaterials: order.raw_materials || '',
-        machineUsed: order.machine_used || '',
-        qualityGrade: order.quality_grade || '',
-        notes: order.notes || ''
+        name: contractor.name,
+        contractor_id: contractor.contractor_id,
+        phone: contractor.phone,
+        status: contractor.status || 'active'
       });
     } else {
-      setSelectedOrder(null);
+      setSelectedContractor(null);
       setFormData({
-        orderNumber: '',
-        productType: '',
-        quantity: '',
-        assignedWorkers: [],
-        startDate: '',
-        endDate: '',
-        status: 'planned',
-        rawMaterials: '',
-        machineUsed: '',
-        qualityGrade: '',
-        notes: ''
+        name: '',
+        contractor_id: '',
+        phone: '',
+        status: 'active'
       });
     }
     setOpenDialog(true);
@@ -266,23 +289,176 @@ const Manufacturing = () => {
     }
   };
 
+  const handleAssignmentSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await axios.post('/api/manufacturing/assignments', assignmentFormData);
+      fetchAssignments();
+      setOpenAssignmentDialog(false);
+      // Reset form
+      setAssignmentFormData({
+        contractor_id: '',
+        quantity: '',
+        duration: 1,
+        duration_type: 'day',
+        start_date: new Date().toISOString().split('T')[0],
+        notes: ''
+      });
+    } catch (error) {
+      console.error('Error creating assignment:', error);
+      alert(error.response?.data?.message || 'Error creating assignment');
+    }
+  };
+
+  const handleAdvancePayment = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await axios.post('/api/manufacturing/advance-payments', advancePaymentData);
+      // Open receipt in new window
+      const receiptWindow = window.open('', '_blank');
+      receiptWindow.document.write(`
+        <h2>Advance Payment Receipt</h2>
+        <p>Receipt #: ${response.data.receipt_number}</p>
+        <p>Date: ${new Date(response.data.payment_date).toLocaleDateString()}</p>
+        <p>Contractor: ${response.data.contractor_name}</p>
+        <p>Amount: ${response.data.amount}</p>
+        <p>Notes: ${response.data.notes || ''}</p>
+      `);
+      receiptWindow.document.close();
+      
+      fetchContractors();
+      setOpenPaymentDialog(false);
+      setAdvancePaymentData({
+        contractor_id: '',
+        amount: '',
+        payment_date: new Date().toISOString().split('T')[0],
+        notes: ''
+      });
+    } catch (error) {
+      console.error('Error processing advance payment:', error);
+      alert(error.response?.data?.message || 'Error processing payment');
+    }
+  };
+
+  const fetchAssignments = async () => {
+    try {
+      const response = await axios.get('/api/manufacturing/assignments');
+      setAssignments(response.data);
+    } catch (error) {
+      console.error('Error fetching assignments:', error);
+    }
+  };
+
+  const handleOpenAssignmentDialog = (contractor = null) => {
+    if (contractor) {
+      setAssignmentFormData(prev => ({
+        ...prev,
+        contractor_id: contractor.id
+      }));
+    } else {
+      setAssignmentFormData({
+        contractor_id: '',
+        quantity: '',
+        duration: 1,
+        duration_type: 'day',
+        start_date: new Date().toISOString().split('T')[0],
+        notes: ''
+      });
+    }
+    setOpenAssignmentDialog(true);
+  };
+
+  const handleOpenPaymentDialog = (contractor = null) => {
+    if (contractor) {
+      setAdvancePaymentData(prev => ({
+        ...prev,
+        contractor_id: contractor.id,
+        notes: `Advance payment for ${contractor.name}`
+      }));
+    } else {
+      setAdvancePaymentData({
+        contractor_id: '',
+        amount: '',
+        payment_date: new Date().toISOString().split('T')[0],
+        notes: ''
+      });
+    }
+    setOpenPaymentDialog(true);
+  };
+
+  const handleTabChange = (event, newValue) => {
+    setCurrentTab(newValue);
+  };
+
+  const renderContractorActions = (contractor) => (
+    <>
+      <IconButton 
+        size="small" 
+        onClick={() => handleOpenDialog(contractor)}
+        sx={{ color: 'primary.main' }}
+      >
+        <EditIcon />
+      </IconButton>
+      <IconButton 
+        size="small" 
+        onClick={() => handleOpenAssignmentDialog(contractor)}
+        sx={{ color: 'success.main', ml: 1 }}
+      >
+        <AddIcon />
+      </IconButton>
+      <IconButton 
+        size="small" 
+        onClick={() => handleOpenPaymentDialog(contractor)}
+        sx={{ color: 'info.main', ml: 1 }}
+      >
+        <PaymentIcon />
+      </IconButton>
+      <IconButton 
+        size="small" 
+        onClick={() => handleDelete(contractor.id)}
+        sx={{ color: 'error.main', ml: 1 }}
+      >
+        <DeleteIcon />
+      </IconButton>
+      <IconButton 
+        size="small" 
+        onClick={() => {
+          setSelectedContractor(contractor);
+          setOpenPurchaseDialog(true);
+        }}
+        sx={{ color: 'success.main', ml: 1 }}
+      >
+        <ShoppingCartIcon />
+      </IconButton>
+    </>
+  );
+
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
-      {/* Header */}
+      {/* Header - Updated to match CuttingManagement style */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
         <Typography variant="h4" sx={{ fontWeight: 600 }}>
-          Manufacturing Orders
+          Manufacturing Management
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => handleOpenOrderDialog()}
-        >
-          New Manufacturing Order
-        </Button>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="outlined"
+            startIcon={<AddIcon />}
+            onClick={() => handleOpenOrderDialog()}
+          >
+            New Order
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => handleOpenDialog()}
+          >
+            Add Contractor
+          </Button>
+        </Box>
       </Box>
 
-      {/* Summary Cards */}
+      {/* Summary Stats - Updated background gradients */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
           <Paper
@@ -297,12 +473,11 @@ const Manufacturing = () => {
           >
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
               <FactoryIcon sx={{ color: 'primary.main', mr: 1 }} />
-              <Typography color="textSecondary">Total Orders</Typography>
+              <Typography color="textSecondary">Total Contractors</Typography>
             </Box>
-            <Typography variant="h4">{summaryStats.totalOrders}</Typography>
+            <Typography variant="h4">{contractors.length}</Typography>
           </Paper>
         </Grid>
-
         <Grid item xs={12} sm={6} md={3}>
           <Paper
             elevation={0}
@@ -316,12 +491,13 @@ const Manufacturing = () => {
           >
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
               <WorkerIcon sx={{ color: 'success.main', mr: 1 }} />
-              <Typography color="textSecondary">Active Orders</Typography>
+              <Typography color="textSecondary">Active Contractors</Typography>
             </Box>
-            <Typography variant="h4">{summaryStats.activeOrders}</Typography>
+            <Typography variant="h4">
+              {contractors.filter(c => c.status === 'active').length}
+            </Typography>
           </Paper>
         </Grid>
-
         <Grid item xs={12} sm={6} md={3}>
           <Paper
             elevation={0}
@@ -335,12 +511,11 @@ const Manufacturing = () => {
           >
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
               <ProductIcon sx={{ color: 'warning.main', mr: 1 }} />
-              <Typography color="textSecondary">Completed Orders</Typography>
+              <Typography color="textSecondary">Total Assignments</Typography>
             </Box>
-            <Typography variant="h4">{summaryStats.completedOrders}</Typography>
+            <Typography variant="h4">{assignments.length}</Typography>
           </Paper>
         </Grid>
-
         <Grid item xs={12} sm={6} md={3}>
           <Paper
             elevation={0}
@@ -354,70 +529,161 @@ const Manufacturing = () => {
           >
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
               <QualityIcon sx={{ color: 'info.main', mr: 1 }} />
-              <Typography color="textSecondary">Avg. Quality</Typography>
+              <Typography color="textSecondary">Active Assignments</Typography>
             </Box>
-            <Typography variant="h4">{summaryStats.averageQuality}</Typography>
+            <Typography variant="h4">
+              {assignments.filter(a => a.status === 'active').length}
+            </Typography>
           </Paper>
         </Grid>
       </Grid>
 
-      {/* Orders Table */}
+      {/* Tabs Navigation - Moved inside Paper component */}
       <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Order #</TableCell>
-                <TableCell>Product Type</TableCell>
-                <TableCell>Quantity</TableCell>
-                <TableCell>Start Date</TableCell>
-                <TableCell>Quality Grade</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {manufacturingOrders.map((order) => (
-                <TableRow key={order.id} hover>
-                  <TableCell>{order.order_number}</TableCell>
-                  <TableCell>{order.product_name}</TableCell>
-                  <TableCell>{order.quantity}</TableCell>
-                  <TableCell>{new Date(order.start_date).toLocaleDateString()}</TableCell>
-                  <TableCell>
-                    <Chip
-                      label={order.priority}
-                      color={order.priority === 'urgent' ? 'error' : 'default'}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={order.status}
-                      color={getStatusColor(order.status)}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell align="right">
-                    <IconButton 
-                      size="small" 
-                      onClick={() => handleOpenOrderDialog(order)}
-                      sx={{ color: 'primary.main' }}
-                    >
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton 
-                      size="small" 
-                      onClick={() => handleDelete(order.id)}
-                      sx={{ color: 'error.main', ml: 1 }}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </TableCell>
+        <Tabs 
+          value={currentTab} 
+          onChange={handleTabChange}
+          sx={{ borderBottom: 1, borderColor: 'divider', px: 2, pt: 2 }}
+        >
+          <Tab label="Manufacturing Orders" />
+          <Tab label="Contractors" />
+          <Tab label="Cinnamon Assignments" />
+        </Tabs>
+
+        {/* Manufacturing Orders Tab */}
+        {currentTab === 0 && (
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Order Number</TableCell>
+                  <TableCell>Product</TableCell>
+                  <TableCell>Quantity</TableCell>
+                  <TableCell>Start Date</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="right">Actions</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+              </TableHead>
+              <TableBody>
+                {manufacturingOrders.map((order) => (
+                  <TableRow key={order.id} hover>
+                    <TableCell>{order.order_number}</TableCell>
+                    <TableCell>{products.find(p => p.id === order.product_id)?.name || 'Unknown'}</TableCell>
+                    <TableCell>{order.quantity}</TableCell>
+                    <TableCell>{new Date(order.start_date).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={order.status}
+                        color={getStatusColor(order.status)}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <IconButton 
+                        size="small" 
+                        onClick={() => handleOpenOrderDialog(order)}
+                        sx={{ color: 'primary.main' }}
+                      >
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton 
+                        size="small" 
+                        onClick={() => handleDelete(order.id)}
+                        sx={{ color: 'error.main', ml: 1 }}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+
+        {/* Contractors Tab */}
+        {currentTab === 1 && (
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Contractor ID</TableCell>
+                  <TableCell>Name</TableCell>
+                  <TableCell>Phone</TableCell>
+                  <TableCell>Active Assignments</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {contractors.map((contractor) => (
+                  <TableRow key={contractor.id} hover>
+                    <TableCell>{contractor.contractor_id}</TableCell>
+                    <TableCell>{contractor.name}</TableCell>
+                    <TableCell>{contractor.phone}</TableCell>
+                    <TableCell>{contractor.active_assignments || 0}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={contractor.status}
+                        color={contractor.status === 'active' ? 'success' : 'default'}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      {renderContractorActions(contractor)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+
+        {/* Assignments Tab */}
+        {currentTab === 2 && (
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Contractor</TableCell>
+                  <TableCell>Quantity (kg)</TableCell>
+                  <TableCell>Duration</TableCell>
+                  <TableCell>Start Date</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {assignments.map((assignment) => (
+                  <TableRow key={assignment.id} hover>
+                    <TableCell>
+                      {contractors.find(c => c.id === assignment.contractor_id)?.name || 'Unknown'}
+                    </TableCell>
+                    <TableCell>{assignment.quantity}</TableCell>
+                    <TableCell>{`${assignment.duration} ${assignment.duration_type}(s)`}</TableCell>
+                    <TableCell>{new Date(assignment.start_date).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={assignment.status}
+                        color={getStatusColor(assignment.status)}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <IconButton 
+                        size="small" 
+                        onClick={() => handleOpenAssignmentDialog(assignment)}
+                        sx={{ color: 'primary.main' }}
+                      >
+                        <EditIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
       </Paper>
 
       {/* Add the Manufacturing Order Dialog */}
@@ -552,6 +818,224 @@ const Manufacturing = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Assign Cinnamon to Contractor Dialog */}
+      <Dialog open={openAssignmentDialog} onClose={() => setOpenAssignmentDialog(false)}>
+        <DialogTitle>Assign Cinnamon to Contractor</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel>Contractor</InputLabel>
+                <Select
+                  value={assignmentFormData.contractor_id}
+                  onChange={(e) => setAssignmentFormData(prev => ({
+                    ...prev,
+                    contractor_id: e.target.value
+                  }))}
+                >
+                  {contractors.map(contractor => (
+                    <MenuItem key={contractor.id} value={contractor.id}>
+                      {contractor.name} ({contractor.contractor_id})
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Quantity (kg)"
+                type="number"
+                value={assignmentFormData.quantity}
+                onChange={(e) => setAssignmentFormData(prev => ({
+                  ...prev,
+                  quantity: e.target.value
+                }))}
+                required
+              />
+            </Grid>
+            <Grid item xs={6}>
+              <TextField
+                fullWidth
+                label="Duration"
+                type="number"
+                value={assignmentFormData.duration}
+                onChange={(e) => setAssignmentFormData(prev => ({
+                  ...prev,
+                  duration: e.target.value
+                }))}
+                required
+              />
+            </Grid>
+            <Grid item xs={6}>
+              <FormControl fullWidth>
+                <InputLabel>Duration Type</InputLabel>
+                <Select
+                  value={assignmentFormData.duration_type}
+                  onChange={(e) => setAssignmentFormData(prev => ({
+                    ...prev,
+                    duration_type: e.target.value
+                  }))}
+                >
+                  <MenuItem value="day">Days</MenuItem>
+                  <MenuItem value="week">Weeks</MenuItem>
+                  <MenuItem value="month">Months</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Start Date"
+                type="date"
+                value={assignmentFormData.start_date}
+                onChange={(e) => setAssignmentFormData(prev => ({
+                  ...prev,
+                  start_date: e.target.value
+                }))}
+                InputLabelProps={{ shrink: true }}
+                required
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenAssignmentDialog(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleAssignmentSubmit}>
+            Assign
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Advance Payment Dialog */}
+      <Dialog open={openPaymentDialog} onClose={() => setOpenPaymentDialog(false)}>
+        <DialogTitle>Process Advance Payment</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel>Contractor</InputLabel>
+                <Select
+                  value={advancePaymentData.contractor_id}
+                  onChange={(e) => setAdvancePaymentData(prev => ({
+                    ...prev,
+                    contractor_id: e.target.value
+                  }))}
+                >
+                  {contractors.map(contractor => (
+                    <MenuItem key={contractor.id} value={contractor.id}>
+                      {contractor.name} ({contractor.contractor_id})
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Amount"
+                type="number"
+                value={advancePaymentData.amount}
+                onChange={(e) => setAdvancePaymentData(prev => ({
+                  ...prev,
+                  amount: e.target.value
+                }))}
+                required
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Payment Date"
+                type="date"
+                value={advancePaymentData.payment_date}
+                onChange={(e) => setAdvancePaymentData(prev => ({
+                  ...prev,
+                  payment_date: e.target.value
+                }))}
+                InputLabelProps={{ shrink: true }}
+                required
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Notes"
+                multiline
+                rows={2}
+                value={advancePaymentData.notes}
+                onChange={(e) => setAdvancePaymentData(prev => ({
+                  ...prev,
+                  notes: e.target.value
+                }))}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenPaymentDialog(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleAdvancePayment}>
+            Process Payment
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Contractor Dialog */}
+      <Dialog open={openDialog} onClose={handleCloseDialog}>
+        <DialogTitle>
+          {selectedContractor ? 'Edit Contractor' : 'New Contractor'}
+        </DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Name"
+                name="name"
+                value={formData.name}
+                onChange={handleInputChange}
+                required
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Contractor ID"
+                name="contractor_id"
+                value={formData.contractor_id}
+                onChange={handleInputChange}
+                required
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Phone"
+                name="phone"
+                value={formData.phone}
+                onChange={handleInputChange}
+                required
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDialog}>Cancel</Button>
+          <Button variant="contained" onClick={handleSubmit}>
+            {selectedContractor ? 'Update' : 'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <PurchaseInvoiceForm
+        open={openPurchaseDialog}
+        onClose={() => {
+          setOpenPurchaseDialog(false);
+          setSelectedContractor(null);
+        }}
+        selectedContractor={selectedContractor}
+      />
     </Box>
   );
 };

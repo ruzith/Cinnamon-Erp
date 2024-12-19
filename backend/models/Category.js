@@ -1,23 +1,32 @@
-const mongoose = require('mongoose');
+const BaseModel = require('./BaseModel');
 
-const categorySchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-    unique: true
-  },
-  type: {
-    type: String,
-    required: true,
-    enum: ['income', 'expense', 'asset', 'inventory']
-  },
-  description: String,
-  status: {
-    type: String,
-    default: 'active'
+class Category extends BaseModel {
+  constructor() {
+    super('categories');
   }
-}, {
-  timestamps: true
-});
 
-module.exports = mongoose.model('Category', categorySchema); 
+  async findByName(name) {
+    const [rows] = await this.pool.execute(
+      'SELECT * FROM categories WHERE name = ?',
+      [name]
+    );
+    return rows[0];
+  }
+
+  async getActiveCategories(type = null) {
+    let query = 'SELECT * FROM categories WHERE status = ?';
+    const params = ['active'];
+
+    if (type) {
+      query += ' AND type = ?';
+      params.push(type);
+    }
+
+    query += ' ORDER BY name';
+
+    const [rows] = await this.pool.execute(query, params);
+    return rows;
+  }
+}
+
+module.exports = new Category(); 

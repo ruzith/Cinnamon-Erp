@@ -26,11 +26,32 @@ const deleteAsset = async (id) => {
   return response.data
 }
 
+// Get asset depreciation
+const getAssetDepreciation = async (id) => {
+  const response = await axios.get(`${API_URL}${id}/depreciation`)
+  return response.data
+}
+
+// Get asset value report
+const getAssetValueReport = async () => {
+  const response = await axios.get(`${API_URL}report/values`)
+  return response.data
+}
+
+// Get asset usage report
+const getAssetUsageReport = async () => {
+  const response = await axios.get(`${API_URL}report/usage`)
+  return response.data
+}
+
 const assetService = {
   getAssets,
   createAsset,
   updateAsset,
-  deleteAsset
+  deleteAsset,
+  getAssetDepreciation,
+  getAssetValueReport,
+  getAssetUsageReport
 }
 
 export default assetService 

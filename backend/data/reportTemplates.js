@@ -52,17 +52,61 @@ const reportTemplates = [
     ]
   },
 
-  // Task Report
+  // Employee Report
   {
-    code: 'TASK_STATUS',
+    code: 'EMPLOYEE_SUMMARY',
     name: {
-      en: 'Task Status Report',
-      si: 'කාර්ය තත්ව වාර්තාව'
+      en: 'Employee Summary Report',
+      si: 'සේවක සාරාංශ වාර්තාව'
     },
-    category: 'tasks',
+    category: 'hr',
     description: {
-      en: 'Overview of task completion status',
-      si: 'කාර්ය සම්පූර්ණ කිරීමේ තත්වය පිළිබඳ දළ විශ්ලේෂණය'
+      en: 'Employee status and performance overview',
+      si: 'සේවක තත්ත්වය සහ කාර්ය සාධන දළ විශ්ලේෂණය'
+    },
+    filters: [
+      {
+        field: 'department',
+        type: 'select',
+        label: { en: 'Department', si: 'දෙපාර්තමේන්තුව' }
+      },
+      {
+        field: 'employmentType',
+        type: 'select',
+        label: { en: 'Employment Type', si: 'සේවා වර්ගය' },
+        options: [
+          { value: 'permanent', label: { en: 'Permanent', si: 'ස්ථිර' } },
+          { value: 'temporary', label: { en: 'Temporary', si: 'තාවකාලික' } }
+        ]
+      }
+    ],
+    columns: [
+      {
+        field: 'name',
+        header: { en: 'Name', si: 'නම' }
+      },
+      {
+        field: 'designation',
+        header: { en: 'Designation', si: 'තනතුර' }
+      },
+      {
+        field: 'status',
+        header: { en: 'Status', si: 'තත්ත්වය' }
+      }
+    ]
+  },
+
+  // Cutting Report
+  {
+    code: 'CUTTING_PERFORMANCE',
+    name: {
+      en: 'Cutting Performance Report',
+      si: 'කැපීම් කාර්යසාධන වාර්තාව'
+    },
+    category: 'cutting',
+    description: {
+      en: 'Analysis of cutting operations and contractor performance',
+      si: 'කැපීම් මෙහෙයුම් සහ කොන්ත්‍රාත්කරු කාර්යසාධනය විශ්ලේෂණය'
     },
     filters: [
       {
@@ -71,74 +115,28 @@ const reportTemplates = [
         label: { en: 'Date Range', si: 'කාල සීමාව' }
       },
       {
-        field: 'priority',
+        field: 'contractor',
         type: 'select',
-        label: { en: 'Priority', si: 'ප්‍රමුඛතාව' },
-        options: [
-          { value: 'high', label: { en: 'High', si: 'ඉහළ' } },
-          { value: 'medium', label: { en: 'Medium', si: 'මධ්‍යම' } },
-          { value: 'low', label: { en: 'Low', si: 'අඩු' } }
-        ]
+        label: { en: 'Contractor', si: 'කොන්ත්‍රාත්කරු' }
       }
     ],
     columns: [
       {
-        field: 'title',
-        header: { en: 'Task', si: 'කාර්යය' }
+        field: 'contractorName',
+        header: { en: 'Contractor', si: 'කොන්ත්‍රාත්කරු' }
       },
       {
-        field: 'status',
-        header: { en: 'Status', si: 'තත්වය' }
+        field: 'areaCovered',
+        header: { en: 'Area Covered', si: 'ආවරණය කළ ප්‍රදේශය' },
+        format: 'number'
       },
       {
-        field: 'assignedTo',
-        header: { en: 'Assigned To', si: 'භාර දී ඇත' }
-      }
-    ]
-  },
-
-  // Asset Report
-  {
-    code: 'ASSET_SUMMARY',
-    name: {
-      en: 'Asset Summary Report',
-      si: 'වත්කම් සාරාංශ වාර්තාව'
-    },
-    category: 'assets',
-    description: {
-      en: 'Summary of asset values and depreciation',
-      si: 'වත්කම් වටිනාකම් සහ ක්ෂය වීම් සාරාංශය'
-    },
-    filters: [
-      {
-        field: 'category',
-        type: 'select',
-        label: { en: 'Asset Category', si: 'වත්කම් වර්ගය' }
-      }
-    ],
-    columns: [
-      {
-        field: 'name',
-        header: { en: 'Asset Name', si: 'වත්කම් නම' }
-      },
-      {
-        field: 'purchaseValue',
-        header: { en: 'Purchase Value', si: 'මිලදී ගැනීමේ වටිනාකම' },
-        format: 'currency'
-      },
-      {
-        field: 'currentValue',
-        header: { en: 'Current Value', si: 'වර්තමාන වටිනාකම' },
-        format: 'currency'
-      },
-      {
-        field: 'depreciation',
-        header: { en: 'Depreciation', si: 'ක්ෂය වීම' },
-        format: 'currency'
+        field: 'efficiency',
+        header: { en: 'Efficiency', si: 'කාර්යක්ෂමතාව' },
+        format: 'percentage'
       }
     ]
   }
-  // Add more report templates...
 ];
 
 module.exports = reportTemplates; 

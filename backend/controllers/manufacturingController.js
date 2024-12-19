@@ -1,5 +1,8 @@
 const ManufacturingContractor = require('../models/ManufacturingContractor');
-const { validateContractor, validateAssignment } = require('../validators/manufacturingValidator');
+const { validateContractor, validateAssignment, validateAdvancePayment } = require('../validators/manufacturingValidator');
+const pool = require('../config/database');
+const ManufacturingOrder = require('../models/ManufacturingOrder');
+const Inventory = require('../models/Inventory');
 
 // @desc    Get all contractors
 // @route   GET /api/manufacturing/contractors
@@ -114,7 +117,7 @@ exports.deleteContractor = async (req, res) => {
 // @access  Private
 exports.getAssignments = async (req, res) => {
   try {
-    const [rows] = await ManufacturingContractor.pool.execute(`
+    const [rows] = await pool.execute(`
       SELECT ca.*, mc.name as contractor_name
       FROM cinnamon_assignments ca
       JOIN manufacturing_contractors mc ON ca.contractor_id = mc.id
@@ -131,17 +134,30 @@ exports.getAssignments = async (req, res) => {
 // @access  Private/Admin
 exports.createAssignment = async (req, res) => {
   try {
-    const { error } = validateAssignment(req.body);
-    if (error) {
-      return res.status(400).json({ message: error.details[0].message });
+    const { contractor_id, quantity, duration, duration_type, start_date, notes } = req.body;
+
+    // Calculate end date based on duration and duration_type
+    const end_date = new Date(start_date);
+    switch (duration_type) {
+      case 'day':
+        end_date.setDate(end_date.getDate() + parseInt(duration));
+        break;
+      case 'week':
+        end_date.setDate(end_date.getDate() + (parseInt(duration) * 7));
+        break;
+      case 'month':
+        end_date.setMonth(end_date.getMonth() + parseInt(duration));
+        break;
     }
 
-    const [result] = await ManufacturingContractor.pool.execute(
-      'INSERT INTO cinnamon_assignments SET ?',
-      [req.body]
+    const [result] = await pool.execute(
+      `INSERT INTO cinnamon_assignments 
+       (contractor_id, quantity, duration, duration_type, start_date, end_date, notes, status) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'active')`,
+      [contractor_id, quantity, duration, duration_type, start_date, end_date, notes]
     );
 
-    const [assignment] = await ManufacturingContractor.pool.execute(
+    const [assignment] = await pool.execute(
       `SELECT ca.*, mc.name as contractor_name
        FROM cinnamon_assignments ca
        JOIN manufacturing_contractors mc ON ca.contractor_id = mc.id
@@ -160,12 +176,8 @@ exports.createAssignment = async (req, res) => {
 // @access  Private/Admin
 exports.updateAssignment = async (req, res) => {
   try {
-    const { error } = validateAssignment(req.body);
-    if (error) {
-      return res.status(400).json({ message: error.details[0].message });
-    }
-
-    const [assignment] = await ManufacturingContractor.pool.execute(
+    const { status } = req.body;
+    const [assignment] = await pool.execute(
       'SELECT * FROM cinnamon_assignments WHERE id = ?',
       [req.params.id]
     );
@@ -174,12 +186,12 @@ exports.updateAssignment = async (req, res) => {
       return res.status(404).json({ message: 'Assignment not found' });
     }
 
-    await ManufacturingContractor.pool.execute(
-      'UPDATE cinnamon_assignments SET ? WHERE id = ?',
-      [req.body, req.params.id]
+    await pool.execute(
+      'UPDATE cinnamon_assignments SET status = ? WHERE id = ?',
+      [status, req.params.id]
     );
 
-    const [updatedAssignment] = await ManufacturingContractor.pool.execute(
+    const [updatedAssignment] = await pool.execute(
       `SELECT ca.*, mc.name as contractor_name
        FROM cinnamon_assignments ca
        JOIN manufacturing_contractors mc ON ca.contractor_id = mc.id
@@ -188,6 +200,101 @@ exports.updateAssignment = async (req, res) => {
     );
 
     res.status(200).json(updatedAssignment[0]);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+// @desc    Get advance payments
+// @route   GET /api/manufacturing/advance-payments
+// @access  Private
+exports.getAdvancePayments = async (req, res) => {
+  try {
+    const [rows] = await pool.execute(`
+      SELECT ap.*, mc.name as contractor_name
+      FROM advance_payments ap
+      JOIN manufacturing_contractors mc ON ap.contractor_id = mc.id
+      ORDER BY ap.payment_date DESC
+    `);
+    res.status(200).json(rows);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Create advance payment
+// @route   POST /api/manufacturing/advance-payments
+// @access  Private/Admin
+exports.createAdvancePayment = async (req, res) => {
+  try {
+    // Validate the request body
+    const { error } = validateAdvancePayment(req.body);
+    if (error) {
+      return res.status(400).json({ message: error.details[0].message });
+    }
+
+    const { contractor_id, amount, payment_date, notes } = req.body;
+
+    // Check if contractor exists and is active
+    const contractor = await ManufacturingContractor.findById(contractor_id);
+    if (!contractor || contractor.status !== 'active') {
+      return res.status(400).json({ message: 'Invalid or inactive contractor' });
+    }
+
+    // Generate receipt number
+    const date = new Date(payment_date);
+    const year = date.getFullYear().toString().substr(-2);
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const [countResult] = await pool.execute('SELECT COUNT(*) as count FROM advance_payments');
+    const count = countResult[0].count + 1;
+    const receipt_number = `ADV${year}${month}${count.toString().padStart(4, '0')}`;
+
+    const [result] = await pool.execute(
+      `INSERT INTO advance_payments 
+       (contractor_id, amount, payment_date, receipt_number, notes) 
+       VALUES (?, ?, ?, ?, ?)`,
+      [contractor_id, amount, payment_date, receipt_number, notes]
+    );
+
+    const [payment] = await pool.execute(
+      `SELECT ap.*, mc.name as contractor_name
+       FROM advance_payments ap
+       JOIN manufacturing_contractors mc ON ap.contractor_id = mc.id
+       WHERE ap.id = ?`,
+      [result.insertId]
+    );
+
+    res.status(201).json(payment[0]);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+exports.startProduction = async (req, res) => {
+  try {
+    const { orderId, materials } = req.body;
+    await ManufacturingOrder.startProduction(orderId, materials);
+    res.status(200).json({ message: 'Production started successfully' });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+exports.completeProduction = async (req, res) => {
+  try {
+    const { orderId, productData } = req.body;
+    await ManufacturingOrder.completeProduction(orderId, productData);
+    res.status(200).json({ message: 'Production completed successfully' });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+exports.getMaterialRequirements = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const materials = await ManufacturingOrder.getMaterialRequirements(orderId);
+    res.status(200).json(materials);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }

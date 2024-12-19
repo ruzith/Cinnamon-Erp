@@ -8,6 +8,7 @@ const settingsRoutes = require('./routes/settingsRoutes');
 const Report = require('./models/Report');
 const productRoutes = require('./routes/productRoutes');
 const payrollRoutes = require('./routes/payrollRoutes');
+const purchaseRoutes = require('./routes/purchaseRoutes');
 
 // Load env vars
 dotenv.config();
@@ -48,6 +49,7 @@ app.use('/api/customers', require('./routes/customerRoutes'));
 app.use('/api/settings', settingsRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/payroll', payrollRoutes);
+app.use('/api/purchases', purchaseRoutes);
 
 // Error Handling middlewares
 app.use(notFound);

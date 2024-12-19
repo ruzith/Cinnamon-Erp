@@ -92,12 +92,13 @@ router.get('/payments', protect, async (req, res) => {
     const [rows] = await LoanPayment.pool.execute(`
       SELECT lp.*,
              l.loan_number,
-             l.borrower_name,
+             c.name as borrower_name,
              u.name as created_by_name,
              ls.period_number,
              ls.payment_amount as scheduled_amount
       FROM loan_payments lp
       JOIN loans l ON lp.loan_id = l.id
+      JOIN customers c ON l.borrower_id = c.id
       LEFT JOIN users u ON lp.created_by = u.id
       LEFT JOIN loan_schedule ls ON lp.schedule_item_id = ls.id
       ORDER BY lp.payment_date DESC
@@ -170,6 +171,45 @@ router.patch('/:id/status', protect, authorize('admin'), async (req, res) => {
     res.json(loan);
   } catch (error) {
     res.status(400).json({ message: error.message });
+  }
+});
+
+// Get borrowers list
+router.get('/borrowers', protect, async (req, res) => {
+  try {
+    const { type } = req.query;
+    let borrowers = [];
+    
+    if (type === 'employee') {
+      const [rows] = await pool.execute('SELECT id, name FROM employees WHERE status = "active"');
+      borrowers = rows;
+    } else if (type === 'contractor') {
+      const [rows] = await pool.execute(`
+        SELECT id, name FROM manufacturing_contractors 
+        UNION 
+        SELECT id, name FROM cutting_contractors
+      `);
+      borrowers = rows;
+    }
+    
+    res.json(borrowers);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get loan schedule
+router.get('/:id/schedule', protect, async (req, res) => {
+  try {
+    const [rows] = await pool.execute(`
+      SELECT * FROM loan_schedule 
+      WHERE loan_id = ?
+      ORDER BY period_number ASC
+    `, [req.params.id]);
+    
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 });
 

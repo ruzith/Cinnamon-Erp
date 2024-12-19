@@ -132,12 +132,31 @@ const AssetManagement = () => {
 
   const handleMaintenance = (asset) => {
     setSelectedAsset(asset);
+    setMaintenanceFormData({
+      assetId: asset.id,
+      type: 'routine',
+      description: '',
+      date: new Date().toISOString().split('T')[0],
+      cost: '',
+      performedBy: '',
+      nextMaintenanceDate: '',
+      status: 'completed',
+      notes: ''
+    });
     setOpenMaintenanceDialog(true);
   };
 
-  const handleViewHistory = (asset) => {
-    setSelectedAsset(asset);
-    setOpenHistoryDialog(true);
+  const handleViewHistory = async (asset) => {
+    try {
+      const response = await axios.get(`/api/assets/${asset.id}/maintenance`);
+      setSelectedAsset({
+        ...asset,
+        maintenanceHistory: response.data
+      });
+      setOpenHistoryDialog(true);
+    } catch (error) {
+      console.error('Error fetching maintenance history:', error);
+    }
   };
 
   const handleCloseDialog = () => {
@@ -187,7 +206,7 @@ const AssetManagement = () => {
   const handleMaintenanceSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('/api/assets/maintenance', maintenanceFormData);
+      await axios.post(`/api/assets/${selectedAsset.id}/maintenance`, maintenanceFormData);
       fetchMaintenanceRecords();
       handleCloseMaintenanceDialog();
     } catch (error) {
@@ -278,6 +297,170 @@ const AssetManagement = () => {
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString();
   };
+
+  // Add maintenance dialog
+  const MaintenanceDialog = () => (
+    <Dialog 
+      open={openMaintenanceDialog} 
+      onClose={handleCloseMaintenanceDialog}
+      maxWidth="md"
+      fullWidth
+    >
+      <DialogTitle>Add Maintenance Record</DialogTitle>
+      <DialogContent>
+        <Grid container spacing={2} sx={{ mt: 1 }}>
+          <Grid item xs={12} sm={6}>
+            <FormControl fullWidth>
+              <InputLabel>Type</InputLabel>
+              <Select
+                name="type"
+                value={maintenanceFormData.type}
+                label="Type"
+                onChange={handleMaintenanceInputChange}
+              >
+                <MenuItem value="routine">Routine</MenuItem>
+                <MenuItem value="repair">Repair</MenuItem>
+                <MenuItem value="upgrade">Upgrade</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              label="Date"
+              name="date"
+              type="date"
+              value={maintenanceFormData.date}
+              onChange={handleMaintenanceInputChange}
+              InputLabelProps={{ shrink: true }}
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="Description"
+              name="description"
+              multiline
+              rows={2}
+              value={maintenanceFormData.description}
+              onChange={handleMaintenanceInputChange}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              label="Cost"
+              name="cost"
+              type="number"
+              value={maintenanceFormData.cost}
+              onChange={handleMaintenanceInputChange}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              label="Performed By"
+              name="performedBy"
+              value={maintenanceFormData.performedBy}
+              onChange={handleMaintenanceInputChange}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              label="Next Maintenance Date"
+              name="nextMaintenanceDate"
+              type="date"
+              value={maintenanceFormData.nextMaintenanceDate}
+              onChange={handleMaintenanceInputChange}
+              InputLabelProps={{ shrink: true }}
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="Notes"
+              name="notes"
+              multiline
+              rows={2}
+              value={maintenanceFormData.notes}
+              onChange={handleMaintenanceInputChange}
+            />
+          </Grid>
+        </Grid>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={handleCloseMaintenanceDialog}>Cancel</Button>
+        <Button variant="contained" onClick={handleMaintenanceSubmit}>
+          Save
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+
+  // Add history dialog
+  const HistoryDialog = () => (
+    <Dialog 
+      open={openHistoryDialog} 
+      onClose={handleCloseHistoryDialog}
+      maxWidth="md"
+      fullWidth
+    >
+      <DialogTitle>Maintenance History</DialogTitle>
+      <DialogContent>
+        {selectedAsset?.maintenanceHistory?.length > 0 ? (
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Date</TableCell>
+                  <TableCell>Type</TableCell>
+                  <TableCell>Description</TableCell>
+                  <TableCell>Cost</TableCell>
+                  <TableCell>Performed By</TableCell>
+                  <TableCell>Status</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {selectedAsset.maintenanceHistory.map((record) => (
+                  <TableRow key={record.id}>
+                    <TableCell>{formatDate(record.maintenance_date)}</TableCell>
+                    <TableCell>
+                      <Chip 
+                        label={record.type}
+                        color={record.type === 'repair' ? 'error' : 
+                               record.type === 'upgrade' ? 'info' : 'default'}
+                        size="small"
+                        sx={{ textTransform: 'capitalize' }}
+                      />
+                    </TableCell>
+                    <TableCell>{record.description}</TableCell>
+                    <TableCell>{formatCurrency(record.cost)}</TableCell>
+                    <TableCell>{record.performed_by}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={record.status}
+                        color={getMaintenanceStatusColor(record.status)}
+                        size="small"
+                        sx={{ textTransform: 'capitalize' }}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        ) : (
+          <Typography sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}>
+            No maintenance records found
+          </Typography>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={handleCloseHistoryDialog}>Close</Button>
+      </DialogActions>
+    </Dialog>
+  );
 
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
@@ -670,6 +853,10 @@ const AssetManagement = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Add these dialogs to your return statement */}
+      <MaintenanceDialog />
+      <HistoryDialog />
     </Box>
   );
 };

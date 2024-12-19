@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useDispatch } from 'react-redux';
 import {
   Box,
   Typography,
@@ -23,6 +24,8 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -34,8 +37,15 @@ import {
   TrendingUp as TrendingUpIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
+import {
+  getDesignations,
+  createDesignation,
+  updateDesignation,
+  deleteDesignation
+} from '../features/designations/designationSlice';
 
 const EmployeeManagement = () => {
+  const dispatch = useDispatch();
   const [employees, setEmployees] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
@@ -54,6 +64,15 @@ const EmployeeManagement = () => {
     account_name: ''
   });
   const [salaryStructures, setSalaryStructures] = useState([]);
+  const [designations, setDesignations] = useState([]);
+  const [designationDialog, setDesignationDialog] = useState(false);
+  const [selectedDesignation, setSelectedDesignation] = useState(null);
+  const [designationFormData, setDesignationFormData] = useState({
+    title: '',
+    description: '',
+    department: ''
+  });
+  const [activeTab, setActiveTab] = useState(0);
 
   useEffect(() => {
     fetchEmployees();
@@ -70,6 +89,19 @@ const EmployeeManagement = () => {
     };
     
     fetchSalaryStructures();
+  }, []);
+
+  useEffect(() => {
+    const fetchDesignations = async () => {
+      try {
+        const response = await axios.get('/api/designations');
+        setDesignations(response.data);
+      } catch (error) {
+        console.error('Error fetching designations:', error);
+      }
+    };
+    
+    fetchDesignations();
   }, []);
 
   const fetchEmployees = async () => {
@@ -184,6 +216,59 @@ const EmployeeManagement = () => {
     }
   };
 
+  const handleOpenDesignationDialog = (designation = null) => {
+    if (designation) {
+      setSelectedDesignation(designation);
+      setDesignationFormData({
+        title: designation.title,
+        description: designation.description || '',
+        department: designation.department
+      });
+    } else {
+      setSelectedDesignation(null);
+      setDesignationFormData({
+        title: '',
+        description: '',
+        department: ''
+      });
+    }
+    setDesignationDialog(true);
+  };
+
+  const handleCloseDesignationDialog = () => {
+    setDesignationDialog(false);
+    setSelectedDesignation(null);
+  };
+
+  const handleDesignationInputChange = (e) => {
+    setDesignationFormData(prev => ({
+      ...prev,
+      [e.target.name]: e.target.value
+    }));
+  };
+
+  const handleDesignationSubmit = () => {
+    if (selectedDesignation) {
+      dispatch(updateDesignation({
+        id: selectedDesignation.id,
+        designationData: designationFormData
+      }));
+    } else {
+      dispatch(createDesignation(designationFormData));
+    }
+    handleCloseDesignationDialog();
+  };
+
+  const handleDeleteDesignation = (id) => {
+    if (window.confirm('Are you sure you want to delete this designation?')) {
+      dispatch(deleteDesignation(id));
+    }
+  };
+
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
+  };
+
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
       {/* Header */}
@@ -191,16 +276,25 @@ const EmployeeManagement = () => {
         <Typography variant="h4" sx={{ fontWeight: 600 }}>
           Employee Management
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => handleOpenDialog()}
-        >
-          New Employee
-        </Button>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="outlined"
+            startIcon={<AddIcon />}
+            onClick={() => handleOpenDesignationDialog()}
+          >
+            New Designation
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => handleOpenDialog()}
+          >
+            New Employee
+          </Button>
+        </Box>
       </Box>
 
-      {/* Summary Cards */}
+      {/* Summary Stats Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
           <Paper
@@ -281,64 +375,178 @@ const EmployeeManagement = () => {
         </Grid>
       </Grid>
 
-      {/* Employee Table */}
+      {/* Content Card with Tabs */}
       <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Name</TableCell>
-                <TableCell>NIC</TableCell>
-                <TableCell>Phone</TableCell>
-                <TableCell>Designation</TableCell>
-                <TableCell>Employment Type</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {employees.map((employee) => (
-                <TableRow key={employee.id} hover>
-                  <TableCell>{employee.name}</TableCell>
-                  <TableCell>{employee.nic}</TableCell>
-                  <TableCell>{employee.phone}</TableCell>
-                  <TableCell>{employee.designation_title}</TableCell>
-                  <TableCell>
-                    <Chip
-                      label={employee.employment_type === 'permanent' ? 'Permanent' : 'Temporary'}
-                      color={employee.employment_type === 'permanent' ? 'primary' : 'default'}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={employee.status}
-                      color={getStatusColor(employee.status)}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell align="right">
-                    <IconButton 
-                      size="small" 
-                      onClick={() => handleOpenDialog(employee)}
-                      sx={{ color: 'primary.main' }}
-                    >
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton 
-                      size="small" 
-                      onClick={() => handleDeleteEmployee(employee.id)}
-                      sx={{ color: 'error.main', ml: 1 }}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </TableCell>
+        <Tabs 
+          value={activeTab} 
+          onChange={handleTabChange}
+          sx={{ borderBottom: 1, borderColor: 'divider', px: 2, pt: 2 }}
+        >
+          <Tab label="Employees" />
+          <Tab label="Designations" />
+        </Tabs>
+
+        {/* Employees Tab Content */}
+        {activeTab === 0 && (
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Name</TableCell>
+                  <TableCell>NIC</TableCell>
+                  <TableCell>Address</TableCell>
+                  <TableCell>Birthday</TableCell>
+                  <TableCell>Designation</TableCell>
+                  <TableCell>Employee Group</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="right">Actions</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+              </TableHead>
+              <TableBody>
+                {employees.map((employee) => (
+                  <TableRow key={employee.id} hover>
+                    <TableCell>{employee.name}</TableCell>
+                    <TableCell>{employee.nic}</TableCell>
+                    <TableCell>{employee.address}</TableCell>
+                    <TableCell>
+                      {employee.birthday ? new Date(employee.birthday).toLocaleDateString() : 'N/A'}
+                    </TableCell>
+                    <TableCell>{employee.designation_title || 'N/A'}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={employee.employment_type}
+                        color={employee.employment_type === 'permanent' ? 'primary' : 'default'}
+                        size="small"
+                        sx={{ textTransform: 'capitalize' }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={employee.status}
+                        color={getStatusColor(employee.status)}
+                        size="small"
+                        sx={{ textTransform: 'capitalize' }}
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <IconButton 
+                        size="small" 
+                        onClick={() => handleOpenDialog(employee)}
+                        sx={{ color: 'primary.main' }}
+                      >
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton 
+                        size="small" 
+                        onClick={() => handleDeleteEmployee(employee.id)}
+                        sx={{ color: 'error.main', ml: 1 }}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+
+        {/* Designations Tab Content */}
+        {activeTab === 1 && (
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Title</TableCell>
+                  <TableCell>Department</TableCell>
+                  <TableCell>Description</TableCell>
+                  <TableCell>Employee Count</TableCell>
+                  <TableCell align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {designations.map((designation) => (
+                  <TableRow key={designation.id}>
+                    <TableCell>{designation.title}</TableCell>
+                    <TableCell>{designation.department}</TableCell>
+                    <TableCell>{designation.description}</TableCell>
+                    <TableCell>{designation.employee_count}</TableCell>
+                    <TableCell align="right">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpenDesignationDialog(designation)}
+                        sx={{ color: 'primary.main' }}
+                      >
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDeleteDesignation(designation.id)}
+                        sx={{ color: 'error.main', ml: 1 }}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
       </Paper>
+
+      {/* Designation Dialog */}
+      <Dialog
+        open={designationDialog}
+        onClose={handleCloseDesignationDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          {selectedDesignation ? 'Edit Designation' : 'New Designation'}
+        </DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Title"
+                name="title"
+                value={designationFormData.title}
+                onChange={handleDesignationInputChange}
+                required
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Department"
+                name="department"
+                value={designationFormData.department}
+                onChange={handleDesignationInputChange}
+                required
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Description"
+                name="description"
+                value={designationFormData.description}
+                onChange={handleDesignationInputChange}
+                multiline
+                rows={3}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDesignationDialog}>Cancel</Button>
+          <Button variant="contained" onClick={handleDesignationSubmit}>
+            {selectedDesignation ? 'Update' : 'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Employee Dialog - Keep your existing dialog code */}
       <Dialog 
@@ -402,22 +610,38 @@ const EmployeeManagement = () => {
               />
             </Grid>
             <Grid item xs={6}>
-              <TextField
-                name="designation_id"
-                label="Designation"
-                fullWidth
-                value={formData.designation_id}
-                onChange={handleInputChange}
-              />
+              <FormControl fullWidth>
+                <InputLabel>Designation</InputLabel>
+                <Select
+                  name="designation_id"
+                  value={formData.designation_id}
+                  label="Designation"
+                  onChange={handleInputChange}
+                  required
+                >
+                  <MenuItem value="">Select Designation</MenuItem>
+                  {designations.map((designation) => (
+                    <MenuItem key={designation.id} value={designation.id}>
+                      {designation.title} - {designation.department}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             </Grid>
             <Grid item xs={6}>
-              <TextField
-                name="employment_type"
-                label="Employment Type"
-                fullWidth
-                value={formData.employment_type}
-                onChange={handleInputChange}
-              />
+              <FormControl fullWidth>
+                <InputLabel>Employment Type</InputLabel>
+                <Select
+                  name="employment_type"
+                  value={formData.employment_type}
+                  label="Employment Type"
+                  onChange={handleInputChange}
+                  required
+                >
+                  <MenuItem value="permanent">Permanent</MenuItem>
+                  <MenuItem value="temporary">Temporary</MenuItem>
+                </Select>
+              </FormControl>
             </Grid>
             <Grid item xs={6}>
               <TextField

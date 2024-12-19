@@ -57,8 +57,22 @@ class SalesInvoice extends BaseModel {
   }
 
   async createWithItems(invoiceData, items) {
-    await this.pool.beginTransaction();
+    const connection = await this.pool.getConnection();
     try {
+      await connection.beginTransaction();
+
+      // Validate stock availability
+      for (const item of items) {
+        const [inventory] = await connection.execute(
+          'SELECT quantity FROM inventory WHERE id = ? AND product_type = "finished_good"',
+          [item.product_id]
+        );
+
+        if (!inventory[0] || inventory[0].quantity < item.quantity) {
+          throw new Error(`Insufficient stock for product ID: ${item.product_id}`);
+        }
+      }
+
       // Calculate totals
       const subTotal = items.reduce((sum, item) => sum + item.sub_total, 0);
       let total = subTotal - (invoiceData.discount || 0);
@@ -70,7 +84,7 @@ class SalesInvoice extends BaseModel {
       const invoiceNumber = await this.generateInvoiceNumber();
       
       // Create invoice
-      const [result] = await this.pool.execute(
+      const [result] = await connection.execute(
         'INSERT INTO sales_invoices SET ?',
         { 
           ...invoiceData, 
@@ -83,20 +97,20 @@ class SalesInvoice extends BaseModel {
 
       // Create items and update inventory
       for (const item of items) {
-        await this.pool.execute(
+        await connection.execute(
           'INSERT INTO sales_items SET ?',
           { ...item, invoice_id: invoiceId }
         );
 
         if (invoiceData.status === 'confirmed') {
           // Update inventory
-          await this.pool.execute(
+          await connection.execute(
             'UPDATE inventory SET quantity = quantity - ? WHERE id = ?',
             [item.quantity, item.product_id]
           );
 
-          // Create inventory transaction
-          await this.pool.execute(
+          // Create inventory transaction record
+          await connection.execute(
             'INSERT INTO inventory_transactions SET ?',
             {
               item_id: item.product_id,
@@ -109,11 +123,56 @@ class SalesInvoice extends BaseModel {
         }
       }
 
-      await this.pool.commit();
+      await connection.commit();
       return this.getWithDetails(invoiceId);
     } catch (error) {
-      await this.pool.rollback();
+      await connection.rollback();
       throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async processSaleReturn(invoiceId, returnedItems) {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      const [invoice] = await connection.execute(
+        'SELECT invoice_number FROM sales_invoices WHERE id = ?',
+        [invoiceId]
+      );
+
+      if (!invoice[0]) {
+        throw new Error('Invoice not found');
+      }
+
+      for (const item of returnedItems) {
+        // Update inventory quantity
+        await connection.execute(
+          'UPDATE inventory SET quantity = quantity + ? WHERE id = ?',
+          [item.quantity, item.product_id]
+        );
+
+        // Create return transaction record
+        await connection.execute(
+          'INSERT INTO inventory_transactions SET ?',
+          {
+            item_id: item.product_id,
+            type: 'IN',
+            quantity: item.quantity,
+            reference: invoice[0].invoice_number,
+            notes: 'Sales Return'
+          }
+        );
+      }
+
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
     }
   }
 }

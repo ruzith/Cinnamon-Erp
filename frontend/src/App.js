@@ -21,6 +21,8 @@ import PrivateRoute from './components/common/PrivateRoute';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import getTheme from './theme';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 
 function App() {
   const [darkMode, setDarkMode] = useState(() => {
@@ -37,37 +39,39 @@ function App() {
   };
 
   return (
-    <ThemeProvider theme={getTheme(darkMode)}>
-      <CssBaseline />
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        
-        <Route path="/*" element={
-          <PrivateRoute>
-            <Layout darkMode={darkMode} toggleDarkMode={toggleDarkMode}>
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/lands/*" element={<LandManagement />} />
-                <Route path="/users/*" element={<UserManagement />} />
-                <Route path="/employees/*" element={<EmployeeManagement />} />
-                <Route path="/tasks/*" element={<TaskManagement />} />
-                <Route path="/cutting/*" element={<CuttingManagement />} />
-                <Route path="/manufacturing/*" element={<Manufacturing />} />
-                <Route path="/inventory/*" element={<Inventory />} />
-                <Route path="/sales/*" element={<Sales />} />
-                <Route path="/assets/*" element={<AssetManagement />} />
-                <Route path="/accounting/*" element={<Accounting />} />
-                <Route path="/loans/*" element={<LoanBook />} />
-                <Route path="/reports/*" element={<Reports />} />
-                <Route path="/settings/*" element={<Settings />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </Layout>
-          </PrivateRoute>
-        } />
-      </Routes>
-    </ThemeProvider>
+    <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <ThemeProvider theme={getTheme(darkMode)}>
+        <CssBaseline />
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          
+          <Route path="/*" element={
+            <PrivateRoute>
+              <Layout darkMode={darkMode} toggleDarkMode={toggleDarkMode}>
+                <Routes>
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/lands/*" element={<LandManagement />} />
+                  <Route path="/users/*" element={<UserManagement />} />
+                  <Route path="/employees/*" element={<EmployeeManagement />} />
+                  <Route path="/tasks/*" element={<TaskManagement />} />
+                  <Route path="/cutting/*" element={<CuttingManagement />} />
+                  <Route path="/manufacturing/*" element={<Manufacturing />} />
+                  <Route path="/inventory/*" element={<Inventory />} />
+                  <Route path="/sales/*" element={<Sales />} />
+                  <Route path="/assets/*" element={<AssetManagement />} />
+                  <Route path="/accounting/*" element={<Accounting />} />
+                  <Route path="/loans/*" element={<LoanBook />} />
+                  <Route path="/reports/*" element={<Reports />} />
+                  <Route path="/settings/*" element={<Settings />} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </Layout>
+            </PrivateRoute>
+          } />
+        </Routes>
+      </ThemeProvider>
+    </LocalizationProvider>
   );
 }
 

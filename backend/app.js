@@ -10,6 +10,7 @@ app.use(express.json());
 
 // Routes
 app.use('/api/payroll', payrollRoutes);
+app.use('/api/reports', require('./routes/reportRoutes'));
 
 // Error handling middleware should be last
 app.use(notFound);

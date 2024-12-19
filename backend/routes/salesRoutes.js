@@ -4,6 +4,7 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 const SalesInvoice = require('../models/SalesInvoice');
 const Inventory = require('../models/Inventory');
 const { validateSalesInvoice } = require('../validators/salesValidator');
+const PDFDocument = require('pdfkit');
 
 // Get all sales invoices
 router.get('/', protect, async (req, res) => {
@@ -58,6 +59,164 @@ router.post('/', protect, authorize('admin', 'manager', 'sales'), async (req, re
     res.status(201).json(invoice);
   } catch (error) {
     res.status(400).json({ message: error.message });
+  }
+});
+
+// Update this route handler
+router.get('/:id/print', protect, async (req, res) => {
+  try {
+    const sale = await SalesInvoice.getWithDetails(req.params.id);
+    if (!sale) {
+      return res.status(404).json({ message: 'Sale not found' });
+    }
+
+    // Create PDF document
+    const doc = new PDFDocument({
+      size: 'A4',
+      margin: 50
+    });
+    
+    // Set response headers
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=invoice-${sale.invoice_number}.pdf`);
+    
+    // Pipe PDF to response
+    doc.pipe(res);
+
+    // Helper function to draw a line
+    const drawLine = (y) => {
+      doc.moveTo(50, y).lineTo(550, y).stroke();
+    };
+
+    // Add company header
+    doc.fontSize(24).text('COMPANY NAME', { align: 'center' });
+    doc.moveDown(0.5);
+    doc.fontSize(12).text('123 Business Street', { align: 'center' });
+    doc.text('City, Country', { align: 'center' });
+    doc.text('Phone: (123) 456-7890', { align: 'center' });
+    doc.text('Email: info@company.com', { align: 'center' });
+    
+    drawLine(doc.y + 10);
+    doc.moveDown();
+
+    // Add invoice details
+    doc.fontSize(16).text('INVOICE', { align: 'center' });
+    doc.moveDown();
+
+    // Two-column layout for invoice details
+    const leftColumn = 50;
+    const rightColumn = 300;
+    const startY = doc.y;
+
+    // Left column - Invoice details
+    doc.fontSize(10);
+    doc.text('INVOICE TO:', leftColumn, startY);
+    doc.fontSize(12);
+    doc.text(sale.customer_name, leftColumn, startY + 20);
+    doc.fontSize(10);
+    doc.text(sale.customer_address || '', leftColumn, startY + 40);
+    doc.text(sale.customer_phone || '', leftColumn, startY + 55);
+    doc.text(sale.customer_email || '', leftColumn, startY + 70);
+
+    // Right column - Invoice metadata
+    doc.fontSize(10);
+    doc.text('INVOICE DETAILS:', rightColumn, startY);
+    doc.fontSize(12);
+    doc.text(`Invoice Number: ${sale.invoice_number}`, rightColumn, startY + 20);
+    doc.text(`Date: ${new Date(sale.date).toLocaleDateString()}`, rightColumn, startY + 40);
+    doc.text(`Due Date: ${new Date(sale.due_date || sale.date).toLocaleDateString()}`, rightColumn, startY + 60);
+
+    // Move to items table
+    doc.moveDown(5);
+
+    // Add items table header
+    const tableTop = doc.y + 10;
+    drawLine(tableTop - 5);
+    doc.fontSize(10);
+    doc.font('Helvetica-Bold');
+    doc.text('Item', 50, tableTop);
+    doc.text('Quantity', 250, tableTop);
+    doc.text('Unit Price', 350, tableTop);
+    doc.text('Total', 450, tableTop);
+    drawLine(tableTop + 15);
+    doc.font('Helvetica');
+
+    // Add items
+    let tableY = tableTop + 30;
+    sale.items.forEach(item => {
+      const unitPrice = parseFloat(item.unit_price || item.price || 0);
+      const quantity = parseFloat(item.quantity || 0);
+      const total = unitPrice * quantity;
+
+      doc.text(item.product_name, 50, tableY);
+      doc.text(quantity.toString(), 250, tableY);
+      doc.text(unitPrice.toFixed(2), 350, tableY, { align: 'right', width: 70 });
+      doc.text(total.toFixed(2), 450, tableY, { align: 'right', width: 70 });
+      tableY += 20;
+    });
+
+    // Draw line after items
+    drawLine(tableY + 5);
+
+    // Add totals
+    const subTotal = parseFloat(sale.sub_total || 0);
+    const tax = parseFloat(sale.tax || 0);
+    const total = parseFloat(sale.total || 0);
+    const discount = parseFloat(sale.discount || 0);
+
+    tableY += 20;
+    doc.text('Subtotal:', 350, tableY);
+    doc.text(subTotal.toFixed(2), 450, tableY, { align: 'right', width: 70 });
+    
+    if (discount > 0) {
+      tableY += 20;
+      doc.text('Discount:', 350, tableY);
+      doc.text(`-${discount.toFixed(2)}`, 450, tableY, { align: 'right', width: 70 });
+    }
+    
+    tableY += 20;
+    doc.text('Tax:', 350, tableY);
+    doc.text(tax.toFixed(2), 450, tableY, { align: 'right', width: 70 });
+    
+    tableY += 5;
+    drawLine(tableY + 5);
+    
+    tableY += 20;
+    doc.fontSize(12).font('Helvetica-Bold');
+    doc.text('Total:', 350, tableY);
+    doc.text(total.toFixed(2), 450, tableY, { align: 'right', width: 70 });
+    doc.font('Helvetica');
+
+    // Add footer
+    doc.fontSize(10);
+    const bottomY = doc.page.height - 100;
+    drawLine(bottomY);
+    
+    doc.text('Payment Terms:', 50, bottomY + 15);
+    doc.text('Due within 30 days', 120, bottomY + 15);
+    
+    doc.text('Notes:', 50, bottomY + 35);
+    doc.text(sale.notes || 'Thank you for your business!', 120, bottomY + 35);
+
+    // Add page numbers
+    const pages = doc.bufferedPageRange();
+    for (let i = 0; i < pages.count; i++) {
+      doc.switchToPage(i);
+      doc.fontSize(8);
+      doc.text(
+        `Page ${i + 1} of ${pages.count}`,
+        50,
+        doc.page.height - 50,
+        { align: 'center' }
+      );
+    }
+
+    // Finalize PDF
+    doc.end();
+
+  } catch (error) {
+    console.error('PDF Generation Error:', error);
+    res.status(500).json({ message: error.message });
   }
 });
 

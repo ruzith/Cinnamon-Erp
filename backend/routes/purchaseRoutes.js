@@ -4,11 +4,12 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 const Grade = require('../models/Grade');
 const PurchaseInvoice = require('../models/PurchaseInvoice');
 const CuttingPayment = require('../models/CuttingPayment');
+const AdvancePayment = require('../models/AdvancePayment');
 
 // Grade routes
 router.get('/grades', protect, async (req, res) => {
   try {
-    const grades = await Grade.find({ status: 'active' });
+    const grades = await Grade.getActiveGrades();
     res.json(grades);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -86,6 +87,19 @@ router.get('/invoices/contractor/:contractorId', protect, async (req, res) => {
       .populate(['contractor', 'items.grade', 'advancePayments'])
       .sort('-date');
     res.json(invoices);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Add route to get advance payments for a contractor
+router.get('/advance-payments/contractor/:contractorId', protect, async (req, res) => {
+  try {
+    const payments = await AdvancePayment.find({ 
+      contractor: req.params.contractorId,
+      status: { $ne: 'used' }
+    });
+    res.json(payments);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

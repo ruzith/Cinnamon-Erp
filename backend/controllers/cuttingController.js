@@ -91,14 +91,10 @@ exports.deleteContractor = async (req, res) => {
     }
 
     // Check if contractor has active assignments
-    const [rows] = await CuttingContractor.pool.execute(
-      'SELECT COUNT(*) as count FROM land_assignments WHERE contractor_id = ? AND status = "active"',
-      [req.params.id]
-    );
-
-    if (rows[0].count > 0) {
-      return res.status(400).json({
-        message: 'Cannot delete contractor with active assignments'
+    const hasActiveAssignments = await CuttingContractor.hasActiveAssignments(req.params.id);
+    if (hasActiveAssignments) {
+      return res.status(400).json({ 
+        message: 'Cannot delete contractor with active assignments. Please complete or reassign all assignments first.' 
       });
     }
 
@@ -247,5 +243,208 @@ exports.updateAssignment = async (req, res) => {
     res.status(200).json(updatedAssignment[0]);
   } catch (error) {
     res.status(400).json({ message: error.message });
+  }
+};
+
+// @desc    Delete assignment
+// @route   DELETE /api/cutting/assignments/:id
+// @access  Private/Admin
+exports.deleteAssignment = async (req, res) => {
+  try {
+    const [assignment] = await CuttingContractor.pool.execute(
+      'SELECT * FROM land_assignments WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (!assignment[0]) {
+      return res.status(404).json({ message: 'Assignment not found' });
+    }
+
+    // Check if assignment can be deleted (e.g., not completed or in progress)
+    if (assignment[0].status === 'completed' || assignment[0].status === 'in_progress') {
+      return res.status(400).json({ 
+        message: 'Cannot delete completed or in-progress assignments' 
+      });
+    }
+
+    await CuttingContractor.pool.execute(
+      'DELETE FROM land_assignments WHERE id = ?',
+      [req.params.id]
+    );
+
+    res.status(200).json({ message: 'Assignment deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get all tasks
+// @route   GET /api/cutting/tasks
+// @access  Private
+exports.getTasks = async (req, res) => {
+  try {
+    const [rows] = await CuttingContractor.pool.execute(`
+      SELECT ct.*, 
+             la.start_date,
+             la.end_date,
+             cc.name as contractor_name,
+             l.parcel_number,
+             l.location
+      FROM cutting_tasks ct
+      JOIN land_assignments la ON ct.assignment_id = la.id
+      JOIN cutting_contractors cc ON la.contractor_id = cc.id
+      JOIN lands l ON la.land_id = l.id
+      ORDER BY ct.created_at DESC
+    `);
+    res.status(200).json(rows);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get single task
+// @route   GET /api/cutting/tasks/:id
+// @access  Private
+exports.getTask = async (req, res) => {
+  try {
+    const [rows] = await CuttingContractor.pool.execute(
+      `SELECT ct.*, 
+              la.start_date,
+              la.end_date,
+              cc.name as contractor_name,
+              l.parcel_number,
+              l.location
+       FROM cutting_tasks ct
+       JOIN land_assignments la ON ct.assignment_id = la.id
+       JOIN cutting_contractors cc ON la.contractor_id = cc.id
+       JOIN lands l ON la.land_id = l.id
+       WHERE ct.id = ?`,
+      [req.params.id]
+    );
+
+    if (!rows[0]) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    res.status(200).json(rows[0]);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Create task
+// @route   POST /api/cutting/tasks
+// @access  Private
+exports.createTask = async (req, res) => {
+  try {
+    // Check if assignment exists and is active
+    const [assignment] = await CuttingContractor.pool.execute(
+      'SELECT * FROM land_assignments WHERE id = ? AND status = "active"',
+      [req.body.assignment_id]
+    );
+
+    if (!assignment[0]) {
+      return res.status(400).json({ message: 'Invalid or inactive assignment' });
+    }
+
+    const [result] = await CuttingContractor.pool.execute(
+      'INSERT INTO cutting_tasks SET ?',
+      [{
+        ...req.body,
+        created_by: req.user.id,
+        status: 'pending'
+      }]
+    );
+
+    const [task] = await CuttingContractor.pool.execute(
+      `SELECT ct.*, 
+              la.start_date,
+              la.end_date,
+              cc.name as contractor_name,
+              l.parcel_number,
+              l.location
+       FROM cutting_tasks ct
+       JOIN land_assignments la ON ct.assignment_id = la.id
+       JOIN cutting_contractors cc ON la.contractor_id = cc.id
+       JOIN lands l ON la.land_id = l.id
+       WHERE ct.id = ?`,
+      [result.insertId]
+    );
+
+    res.status(201).json(task[0]);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+// @desc    Update task
+// @route   PUT /api/cutting/tasks/:id
+// @access  Private
+exports.updateTask = async (req, res) => {
+  try {
+    const [task] = await CuttingContractor.pool.execute(
+      'SELECT * FROM cutting_tasks WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (!task[0]) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    await CuttingContractor.pool.execute(
+      'UPDATE cutting_tasks SET ? WHERE id = ?',
+      [req.body, req.params.id]
+    );
+
+    const [updatedTask] = await CuttingContractor.pool.execute(
+      `SELECT ct.*, 
+              la.start_date,
+              la.end_date,
+              cc.name as contractor_name,
+              l.parcel_number,
+              l.location
+       FROM cutting_tasks ct
+       JOIN land_assignments la ON ct.assignment_id = la.id
+       JOIN cutting_contractors cc ON la.contractor_id = cc.id
+       JOIN lands l ON la.land_id = l.id
+       WHERE ct.id = ?`,
+      [req.params.id]
+    );
+
+    res.status(200).json(updatedTask[0]);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+// @desc    Delete task
+// @route   DELETE /api/cutting/tasks/:id
+// @access  Private/Admin
+exports.deleteTask = async (req, res) => {
+  try {
+    const [task] = await CuttingContractor.pool.execute(
+      'SELECT * FROM cutting_tasks WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (!task[0]) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    // Check if task can be deleted (e.g., not completed)
+    if (task[0].status === 'completed') {
+      return res.status(400).json({ 
+        message: 'Cannot delete completed tasks' 
+      });
+    }
+
+    await CuttingContractor.pool.execute(
+      'DELETE FROM cutting_tasks WHERE id = ?',
+      [req.params.id]
+    );
+
+    res.status(200).json({ message: 'Task deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 }; 

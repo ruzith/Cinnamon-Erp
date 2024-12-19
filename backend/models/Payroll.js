@@ -139,6 +139,71 @@ class Payroll extends BaseModel {
     payroll[0].items = items;
     return payroll[0];
   }
+
+  async calculateEmployeeSalary(employeeId) {
+    try {
+      // Get employee details with salary structure
+      const [employee] = await this.pool.execute(`
+        SELECT e.*, 
+               s.name as structure_name,
+               s.basic_salary,
+               s.components
+        FROM employees e
+        LEFT JOIN salary_structures s ON e.salary_structure_id = s.id
+        WHERE e.id = ?
+      `, [employeeId]);
+
+      if (!employee[0]) {
+        throw new Error('Employee not found');
+      }
+
+      const emp = employee[0];
+      if (!emp.salary_structure_id) {
+        throw new Error('No salary structure assigned');
+      }
+
+      // Get salary components
+      const [components] = await this.pool.execute(`
+        SELECT * FROM salary_structure_components 
+        WHERE structure_id = ?
+      `, [emp.salary_structure_id]);
+
+      // Calculate salary details
+      const basicSalary = Number(emp.basic_salary);
+      let grossSalary = basicSalary;
+      const earnings = [];
+      const deductions = [];
+
+      components.forEach(component => {
+        const amount = component.is_percentage ? 
+          (basicSalary * component.amount / 100) : 
+          component.amount;
+
+        if (component.type === 'earning') {
+          earnings.push({ name: component.name, amount });
+          grossSalary += amount;
+        } else {
+          deductions.push({ name: component.name, amount });
+        }
+      });
+
+      const totalDeductions = deductions.reduce((sum, d) => sum + d.amount, 0);
+      const netSalary = grossSalary - totalDeductions;
+
+      return {
+        employeeId: emp.id,
+        employeeName: emp.name,
+        basicSalary,
+        earnings,
+        deductions,
+        grossSalary,
+        totalDeductions,
+        netSalary
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
 }
 
 module.exports = new Payroll(); 

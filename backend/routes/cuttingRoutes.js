@@ -9,7 +9,13 @@ const {
   deleteContractor,
   createAssignment,
   updateAssignment,
-  getAssignments
+  getAssignments,
+  getTasks,
+  createTask,
+  getTask,
+  updateTask,
+  deleteTask,
+  deleteAssignment
 } = require('../controllers/cuttingController');
 
 // Contractor routes
@@ -23,5 +29,13 @@ router.delete('/contractors/:id', protect, authorize('admin'), deleteContractor)
 router.get('/assignments', protect, getAssignments);
 router.post('/assignments', protect, authorize('admin', 'manager'), createAssignment);
 router.put('/assignments/:id', protect, authorize('admin', 'manager'), updateAssignment);
+router.delete('/assignments/:id', protect, authorize('admin'), deleteAssignment);
+
+// Task routes
+router.get('/tasks', protect, getTasks);
+router.post('/tasks', protect, createTask);
+router.get('/tasks/:id', protect, getTask);
+router.put('/tasks/:id', protect, updateTask);
+router.delete('/tasks/:id', protect, authorize('admin'), deleteTask);
 
 module.exports = router; 

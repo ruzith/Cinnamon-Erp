@@ -35,8 +35,22 @@ import {
   TrendingUp as IncomeIcon,
   TrendingDown as ExpenseIcon,
   Balance as BalanceIcon,
+  FileDownload as FileDownloadIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import dayjs from 'dayjs';
+import isBetween from 'dayjs/plugin/isBetween';
+import customParseFormat from 'dayjs/plugin/customParseFormat';
+import localizedFormat from 'dayjs/plugin/localizedFormat';
+import weekOfYear from 'dayjs/plugin/weekOfYear';
+
+dayjs.extend(isBetween);
+dayjs.extend(customParseFormat);
+dayjs.extend(localizedFormat);
+dayjs.extend(weekOfYear);
 
 const TabPanel = (props) => {
   const { children, value, index, ...other } = props;
@@ -107,11 +121,33 @@ const Accounting = () => {
     status: 'active'
   });
 
+  const [ledgerEntries, setLedgerEntries] = useState([]);
+  const [dateRange, setDateRange] = useState([
+    dayjs().startOf('month'),
+    dayjs().endOf('month')
+  ]);
+
+  const [reportData, setReportData] = useState({
+    trialBalance: null,
+    profitLoss: null,
+    balanceSheet: null,
+    cashFlow: null
+  });
+
+  const [openReportDialog, setOpenReportDialog] = useState(false);
+  const [currentReport, setCurrentReport] = useState(null);
+
   useEffect(() => {
     fetchTransactions();
     fetchAccounts();
     fetchSummary();
   }, []);
+
+  useEffect(() => {
+    if (selectedAccount && dateRange[0] && dateRange[1]) {
+      fetchLedgerEntries();
+    }
+  }, [selectedAccount, dateRange]);
 
   const fetchTransactions = async () => {
     try {
@@ -137,6 +173,20 @@ const Accounting = () => {
       setSummary(response.data);
     } catch (error) {
       console.error('Error fetching summary:', error);
+    }
+  };
+
+  const fetchLedgerEntries = async () => {
+    try {
+      const response = await axios.get(`/api/accounting/ledger/${selectedAccount}`, {
+        params: {
+          startDate: dateRange[0].format('YYYY-MM-DD'),
+          endDate: dateRange[1].format('YYYY-MM-DD')
+        }
+      });
+      setLedgerEntries(response.data);
+    } catch (error) {
+      console.error('Error fetching ledger entries:', error);
     }
   };
 
@@ -323,6 +373,431 @@ const Accounting = () => {
     }
   };
 
+  const handleGenerateReport = async (reportType) => {
+    try {
+      const response = await axios.get(`/api/accounting/reports/${reportType}`, {
+        params: {
+          startDate: dateRange[0].format('YYYY-MM-DD'),
+          endDate: dateRange[1].format('YYYY-MM-DD')
+        }
+      });
+      
+      setReportData(prev => ({
+        ...prev,
+        [reportType]: response.data
+      }));
+      
+      setCurrentReport(reportType);
+      setOpenReportDialog(true);
+    } catch (error) {
+      console.error(`Error generating ${reportType} report:`, error);
+      // You might want to add error handling UI here
+    }
+  };
+
+  const handleExportReport = async (type, data) => {
+    try {
+      const response = await axios.post(`/api/accounting/reports/${type}/export`, {
+        data,
+        format: 'excel', // You can make this configurable if you want to support multiple formats
+        dateRange: {
+          startDate: dateRange[0].format('YYYY-MM-DD'),
+          endDate: dateRange[1].format('YYYY-MM-DD')
+        }
+      }, {
+        responseType: 'blob' // Important for handling file downloads
+      });
+
+      // Create a download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${type}-report-${dayjs().format('YYYY-MM-DD')}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error(`Error exporting ${type} report:`, error);
+      // You might want to add error handling UI here
+    }
+  };
+
+  const ReportDialog = ({ open, onClose, type, data }) => {
+    if (!data) return null;
+
+    const renderReportContent = () => {
+      switch (type) {
+        case 'trial-balance':
+          return (
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Account Code</TableCell>
+                    <TableCell>Account Name</TableCell>
+                    <TableCell align="right">Debit</TableCell>
+                    <TableCell align="right">Credit</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {data.accounts?.map((account) => (
+                    <TableRow key={account.code}>
+                      <TableCell>{account.code}</TableCell>
+                      <TableCell>{account.name}</TableCell>
+                      <TableCell align="right">${(account.debit || 0).toFixed(2)}</TableCell>
+                      <TableCell align="right">${(account.credit || 0).toFixed(2)}</TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow>
+                    <TableCell colSpan={2}><strong>Total</strong></TableCell>
+                    <TableCell align="right"><strong>${(data.totalDebit || 0).toFixed(2)}</strong></TableCell>
+                    <TableCell align="right"><strong>${(data.totalCredit || 0).toFixed(2)}</strong></TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </TableContainer>
+          );
+
+        case 'profit-loss':
+          return (
+            <Box>
+              <Typography variant="h6" gutterBottom>Revenue</Typography>
+              <TableContainer>
+                <Table>
+                  <TableBody>
+                    {data.revenue?.map((item) => (
+                      <TableRow key={item.code}>
+                        <TableCell>{item.name}</TableCell>
+                        <TableCell align="right">${(item.total || 0).toFixed(2)}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow>
+                      <TableCell><strong>Total Revenue</strong></TableCell>
+                      <TableCell align="right"><strong>${(data.totalRevenue || 0).toFixed(2)}</strong></TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
+              <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>Expenses</Typography>
+              <TableContainer>
+                <Table>
+                  <TableBody>
+                    {data.expenses?.map((item) => (
+                      <TableRow key={item.code}>
+                        <TableCell>{item.name}</TableCell>
+                        <TableCell align="right">${(item.total || 0).toFixed(2)}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow>
+                      <TableCell><strong>Total Expenses</strong></TableCell>
+                      <TableCell align="right"><strong>${(data.totalExpenses || 0).toFixed(2)}</strong></TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
+              <Box sx={{ mt: 2, p: 2, bgcolor: 'background.paper' }}>
+                <Typography variant="h6">
+                  Net Profit: ${(data.netProfit || 0).toFixed(2)}
+                </Typography>
+              </Box>
+            </Box>
+          );
+
+        case 'balance-sheet':
+          return (
+            <Box>
+              {/* Assets Section */}
+              <Typography variant="h6" gutterBottom>Assets</Typography>
+              <TableContainer>
+                <Table>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell colSpan={2}><Typography variant="subtitle1">Current Assets</Typography></TableCell>
+                    </TableRow>
+                    {data.assets?.current?.map((item) => (
+                      <TableRow key={item.code}>
+                        <TableCell>{item.name}</TableCell>
+                        <TableCell align="right">${(item.total || 0).toFixed(2)}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow>
+                      <TableCell><strong>Total Current Assets</strong></TableCell>
+                      <TableCell align="right"><strong>${(data.assets?.totalCurrent || 0).toFixed(2)}</strong></TableCell>
+                    </TableRow>
+
+                    <TableRow>
+                      <TableCell colSpan={2}><Typography variant="subtitle1" sx={{ mt: 2 }}>Fixed Assets</Typography></TableCell>
+                    </TableRow>
+                    {data.assets?.fixed?.map((item) => (
+                      <TableRow key={item.code}>
+                        <TableCell>{item.name}</TableCell>
+                        <TableCell align="right">${(item.total || 0).toFixed(2)}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow>
+                      <TableCell><strong>Total Fixed Assets</strong></TableCell>
+                      <TableCell align="right"><strong>${(data.assets?.totalFixed || 0).toFixed(2)}</strong></TableCell>
+                    </TableRow>
+
+                    <TableRow>
+                      <TableCell><strong>Total Assets</strong></TableCell>
+                      <TableCell align="right"><strong>${(data.assets?.total || 0).toFixed(2)}</strong></TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
+              {/* Liabilities Section */}
+              <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>Liabilities</Typography>
+              <TableContainer>
+                <Table>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell colSpan={2}><Typography variant="subtitle1">Current Liabilities</Typography></TableCell>
+                    </TableRow>
+                    {data.liabilities?.current?.map((item) => (
+                      <TableRow key={item.code}>
+                        <TableCell>{item.name}</TableCell>
+                        <TableCell align="right">${(item.total || 0).toFixed(2)}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow>
+                      <TableCell><strong>Total Current Liabilities</strong></TableCell>
+                      <TableCell align="right"><strong>${(data.liabilities?.totalCurrent || 0).toFixed(2)}</strong></TableCell>
+                    </TableRow>
+
+                    <TableRow>
+                      <TableCell colSpan={2}><Typography variant="subtitle1" sx={{ mt: 2 }}>Long-term Liabilities</Typography></TableCell>
+                    </TableRow>
+                    {data.liabilities?.longTerm?.map((item) => (
+                      <TableRow key={item.code}>
+                        <TableCell>{item.name}</TableCell>
+                        <TableCell align="right">${(item.total || 0).toFixed(2)}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow>
+                      <TableCell><strong>Total Long-term Liabilities</strong></TableCell>
+                      <TableCell align="right"><strong>${(data.liabilities?.totalLongTerm || 0).toFixed(2)}</strong></TableCell>
+                    </TableRow>
+
+                    <TableRow>
+                      <TableCell><strong>Total Liabilities</strong></TableCell>
+                      <TableCell align="right"><strong>${(data.liabilities?.total || 0).toFixed(2)}</strong></TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
+              {/* Equity Section */}
+              <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>Equity</Typography>
+              <TableContainer>
+                <Table>
+                  <TableBody>
+                    {data.equity?.items?.map((item) => (
+                      <TableRow key={item.code}>
+                        <TableCell>{item.name}</TableCell>
+                        <TableCell align="right">${(item.total || 0).toFixed(2)}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow>
+                      <TableCell><strong>Total Equity</strong></TableCell>
+                      <TableCell align="right"><strong>${(data.equity?.total || 0).toFixed(2)}</strong></TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
+              {/* Total Liabilities and Equity */}
+              <Box sx={{ mt: 2, p: 2, bgcolor: 'background.paper' }}>
+                <Typography variant="h6">
+                  Total Liabilities and Equity: ${((data.liabilities?.total || 0) + (data.equity?.total || 0)).toFixed(2)}
+                </Typography>
+              </Box>
+            </Box>
+          );
+
+        case 'cash-flow':
+          return (
+            <Box>
+              {/* Operating Activities */}
+              <Typography variant="h6" gutterBottom>Operating Activities</Typography>
+              <TableContainer>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Description</TableCell>
+                      <TableCell align="right">Amount</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {/* Inflows */}
+                    <TableRow>
+                      <TableCell colSpan={2}>
+                        <Typography variant="subtitle2">Cash Inflows</Typography>
+                      </TableCell>
+                    </TableRow>
+                    {data.operating?.inflows?.map((item, index) => (
+                      <TableRow key={`inflow-${index}`}>
+                        <TableCell>{item.description || 'Operating Inflow'}</TableCell>
+                        <TableCell align="right">${Math.abs(item.credit - item.debit).toFixed(2)}</TableCell>
+                      </TableRow>
+                    ))}
+                    
+                    {/* Outflows */}
+                    <TableRow>
+                      <TableCell colSpan={2}>
+                        <Typography variant="subtitle2">Cash Outflows</Typography>
+                      </TableCell>
+                    </TableRow>
+                    {data.operating?.outflows?.map((item, index) => (
+                      <TableRow key={`outflow-${index}`}>
+                        <TableCell>{item.description || 'Operating Outflow'}</TableCell>
+                        <TableCell align="right">-${Math.abs(item.debit - item.credit).toFixed(2)}</TableCell>
+                      </TableRow>
+                    ))}
+                    
+                    {/* Operating Total */}
+                    <TableRow>
+                      <TableCell><strong>Net Cash from Operations</strong></TableCell>
+                      <TableCell align="right">
+                        <strong>${(data.operating?.total || 0).toFixed(2)}</strong>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
+              {/* Investing Activities */}
+              <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>Investing Activities</Typography>
+              <TableContainer>
+                <Table>
+                  <TableBody>
+                    {/* Inflows */}
+                    <TableRow>
+                      <TableCell colSpan={2}>
+                        <Typography variant="subtitle2">Cash Inflows</Typography>
+                      </TableCell>
+                    </TableRow>
+                    {data.investing?.inflows?.map((item, index) => (
+                      <TableRow key={`invest-in-${index}`}>
+                        <TableCell>{item.description || 'Investment Inflow'}</TableCell>
+                        <TableCell align="right">${Math.abs(item.credit - item.debit).toFixed(2)}</TableCell>
+                      </TableRow>
+                    ))}
+                    
+                    {/* Outflows */}
+                    <TableRow>
+                      <TableCell colSpan={2}>
+                        <Typography variant="subtitle2">Cash Outflows</Typography>
+                      </TableCell>
+                    </TableRow>
+                    {data.investing?.outflows?.map((item, index) => (
+                      <TableRow key={`invest-out-${index}`}>
+                        <TableCell>{item.description || 'Investment Outflow'}</TableCell>
+                        <TableCell align="right">-${Math.abs(item.debit - item.credit).toFixed(2)}</TableCell>
+                      </TableRow>
+                    ))}
+                    
+                    {/* Investing Total */}
+                    <TableRow>
+                      <TableCell><strong>Net Cash from Investing</strong></TableCell>
+                      <TableCell align="right">
+                        <strong>${(data.investing?.total || 0).toFixed(2)}</strong>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
+              {/* Financing Activities */}
+              <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>Financing Activities</Typography>
+              <TableContainer>
+                <Table>
+                  <TableBody>
+                    {/* Inflows */}
+                    <TableRow>
+                      <TableCell colSpan={2}>
+                        <Typography variant="subtitle2">Cash Inflows</Typography>
+                      </TableCell>
+                    </TableRow>
+                    {data.financing?.inflows?.map((item, index) => (
+                      <TableRow key={`finance-in-${index}`}>
+                        <TableCell>{item.description || 'Financing Inflow'}</TableCell>
+                        <TableCell align="right">${Math.abs(item.credit - item.debit).toFixed(2)}</TableCell>
+                      </TableRow>
+                    ))}
+                    
+                    {/* Outflows */}
+                    <TableRow>
+                      <TableCell colSpan={2}>
+                        <Typography variant="subtitle2">Cash Outflows</Typography>
+                      </TableCell>
+                    </TableRow>
+                    {data.financing?.outflows?.map((item, index) => (
+                      <TableRow key={`finance-out-${index}`}>
+                        <TableCell>{item.description || 'Financing Outflow'}</TableCell>
+                        <TableCell align="right">-${Math.abs(item.debit - item.credit).toFixed(2)}</TableCell>
+                      </TableRow>
+                    ))}
+                    
+                    {/* Financing Total */}
+                    <TableRow>
+                      <TableCell><strong>Net Cash from Financing</strong></TableCell>
+                      <TableCell align="right">
+                        <strong>${(data.financing?.total || 0).toFixed(2)}</strong>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
+              {/* Net Cash Flow */}
+              <Box sx={{ mt: 3, p: 2, bgcolor: 'background.paper' }}>
+                <Typography variant="h6">
+                  Net Change in Cash: ${(data.netCashFlow || 0).toFixed(2)}
+                </Typography>
+              </Box>
+            </Box>
+          );
+
+        default:
+          return <Typography>Report type not supported</Typography>;
+      }
+    };
+
+    return (
+      <Dialog
+        open={open}
+        onClose={onClose}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          {type.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')} Report
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 2 }}>
+            {renderReportContent()}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose}>Close</Button>
+          <Button 
+            onClick={() => handleExportReport(type, data)}
+            startIcon={<FileDownloadIcon />}
+            variant="contained"
+            color="primary"
+          >
+            Export to Excel
+          </Button>
+        </DialogActions>
+      </Dialog>
+    );
+  };
+
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
       {/* Header */}
@@ -412,6 +887,9 @@ const Accounting = () => {
         >
           <Tab label="Transactions" />
           <Tab label="Accounts" />
+          <Tab label="Ledger" />
+          <Tab label="Cash Book" />
+          <Tab label="Reports" />
         </Tabs>
 
         {/* Transactions Tab */}
@@ -565,6 +1043,268 @@ const Accounting = () => {
                 </TableBody>
               </Table>
             </TableContainer>
+          </Box>
+        </TabPanel>
+
+        {/* Ledger Tab */}
+        <TabPanel value={tabValue} index={2}>
+          <Box sx={{ p: 3 }}>
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={4}>
+                <FormControl fullWidth>
+                  <InputLabel>Account</InputLabel>
+                  <Select
+                    value={selectedAccount}
+                    onChange={(e) => setSelectedAccount(e.target.value)}
+                  >
+                    {accounts.map((account) => (
+                      <MenuItem key={account.id} value={account.id}>
+                        {account.code} - {account.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} md={8}>
+                <LocalizationProvider dateAdapter={AdapterDayjs}>
+                  <Box sx={{ display: 'flex', gap: 2 }}>
+                    <DatePicker
+                      label="Start Date"
+                      value={dateRange[0]}
+                      onChange={(newValue) => {
+                        setDateRange([newValue, dateRange[1]]);
+                      }}
+                      slotProps={{
+                        textField: { size: "small", fullWidth: true }
+                      }}
+                    />
+                    <DatePicker
+                      label="End Date"
+                      value={dateRange[1]}
+                      onChange={(newValue) => {
+                        setDateRange([dateRange[0], newValue]);
+                      }}
+                      slotProps={{
+                        textField: { size: "small", fullWidth: true }
+                      }}
+                    />
+                  </Box>
+                </LocalizationProvider>
+              </Grid>
+            </Grid>
+            
+            <TableContainer sx={{ mt: 3 }}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Date</TableCell>
+                    <TableCell>Reference</TableCell>
+                    <TableCell>Description</TableCell>
+                    <TableCell align="right">Debit</TableCell>
+                    <TableCell align="right">Credit</TableCell>
+                    <TableCell align="right">Balance</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {ledgerEntries.map((entry) => (
+                    <TableRow key={entry.id}>
+                      <TableCell>{new Date(entry.date).toLocaleDateString()}</TableCell>
+                      <TableCell>{entry.reference}</TableCell>
+                      <TableCell>{entry.description}</TableCell>
+                      <TableCell align="right">${entry.debit.toFixed(2)}</TableCell>
+                      <TableCell align="right">${entry.credit.toFixed(2)}</TableCell>
+                      <TableCell align="right">${entry.running_balance.toFixed(2)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        </TabPanel>
+
+        {/* Cash Book Tab */}
+        <TabPanel value={tabValue} index={3}>
+          <Box sx={{ p: 3 }}>
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+              <Grid item xs={12} md={8}>
+                <LocalizationProvider dateAdapter={AdapterDayjs}>
+                  <Box sx={{ display: 'flex', gap: 2 }}>
+                    <DatePicker
+                      label="Start Date"
+                      value={dateRange[0]}
+                      onChange={(newValue) => {
+                        setDateRange([newValue, dateRange[1]]);
+                      }}
+                      slotProps={{
+                        textField: { size: "small", fullWidth: true }
+                      }}
+                    />
+                    <DatePicker
+                      label="End Date"
+                      value={dateRange[1]}
+                      onChange={(newValue) => {
+                        setDateRange([dateRange[0], newValue]);
+                      }}
+                      slotProps={{
+                        textField: { size: "small", fullWidth: true }
+                      }}
+                    />
+                  </Box>
+                </LocalizationProvider>
+              </Grid>
+            </Grid>
+
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Date</TableCell>
+                    <TableCell>Reference</TableCell>
+                    <TableCell>Description</TableCell>
+                    <TableCell align="right">Receipts</TableCell>
+                    <TableCell align="right">Payments</TableCell>
+                    <TableCell align="right">Balance</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  <TableRow>
+                    <TableCell>{dateRange[0]?.format('YYYY-MM-DD')}</TableCell>
+                    <TableCell>OB</TableCell>
+                    <TableCell>Opening Balance</TableCell>
+                    <TableCell align="right">-</TableCell>
+                    <TableCell align="right">-</TableCell>
+                    <TableCell align="right">${summary.openingBalance?.toFixed(2) || '0.00'}</TableCell>
+                  </TableRow>
+                  {transactions
+                    .filter(t => t.account?.code === '1001')
+                    .map((transaction) => (
+                      <TableRow key={transaction.id} hover>
+                        <TableCell>{new Date(transaction.date).toLocaleDateString()}</TableCell>
+                        <TableCell>{transaction.reference}</TableCell>
+                        <TableCell>{transaction.description}</TableCell>
+                        <TableCell align="right">
+                          {transaction.type === 'receipt' ? `$${Number(transaction.amount).toFixed(2)}` : '-'}
+                        </TableCell>
+                        <TableCell align="right">
+                          {transaction.type === 'payment' ? `$${Number(transaction.amount).toFixed(2)}` : '-'}
+                        </TableCell>
+                        <TableCell align="right">${Number(transaction.running_balance).toFixed(2)}</TableCell>
+                      </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        </TabPanel>
+
+        {/* Reports Tab */}
+        <TabPanel value={tabValue} index={4}>
+          <Box sx={{ p: 3 }}>
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={6}>
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 2,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    height: '100%'
+                  }}
+                >
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="h6">Trial Balance</Typography>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() => handleGenerateReport('trial-balance')}
+                    >
+                      Generate
+                    </Button>
+                  </Box>
+                  <Typography variant="body2" color="textSecondary">
+                    View the trial balance to ensure your books are balanced
+                  </Typography>
+                </Paper>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 2,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    height: '100%'
+                  }}
+                >
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="h6">Balance Sheet</Typography>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() => handleGenerateReport('balance-sheet')}
+                    >
+                      Generate
+                    </Button>
+                  </Box>
+                  <Typography variant="body2" color="textSecondary">
+                    View your company's financial position at a glance
+                  </Typography>
+                </Paper>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 2,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    height: '100%'
+                  }}
+                >
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="h6">Profit & Loss</Typography>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() => handleGenerateReport('profit-loss')}
+                    >
+                      Generate
+                    </Button>
+                  </Box>
+                  <Typography variant="body2" color="textSecondary">
+                    Analyze your income and expenses over a period
+                  </Typography>
+                </Paper>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 2,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    height: '100%'
+                  }}
+                >
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="h6">Cash Flow</Typography>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() => handleGenerateReport('cash-flow')}
+                    >
+                      Generate
+                    </Button>
+                  </Box>
+                  <Typography variant="body2" color="textSecondary">
+                    Track your cash movements and liquidity position
+                  </Typography>
+                </Paper>
+              </Grid>
+            </Grid>
           </Box>
         </TabPanel>
 
@@ -798,6 +1538,13 @@ const Accounting = () => {
             </Button>
           </DialogActions>
         </Dialog>
+
+        <ReportDialog
+          open={openReportDialog}
+          onClose={() => setOpenReportDialog(false)}
+          type={currentReport}
+          data={reportData[currentReport]}
+        />
       </Paper>
     </Box>
   );

@@ -17,10 +17,34 @@ const updateLoanStatus = async (id, status) => {
   return response.data
 }
 
+const createLoan = async (loanData) => {
+  const response = await axios.post(API_URL, loanData)
+  return response.data
+}
+
+const recordPayment = async (loanId, paymentData) => {
+  const response = await axios.post(`${API_URL}${loanId}/payments`, paymentData)
+  return response.data
+}
+
+const getLoanSchedule = async (loanId) => {
+  const response = await axios.get(`${API_URL}${loanId}/schedule`)
+  return response.data
+}
+
+const getBorrowers = async (type) => {
+  const response = await axios.get(`${API_URL}borrowers?type=${type}`)
+  return response.data
+}
+
 const loanService = {
   getLoans,
   getLoanDetails,
-  updateLoanStatus
+  updateLoanStatus,
+  createLoan,
+  recordPayment,
+  getLoanSchedule,
+  getBorrowers
 }
 
 export default loanService 

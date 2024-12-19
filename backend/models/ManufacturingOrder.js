@@ -1,4 +1,5 @@
 const BaseModel = require('./BaseModel');
+const Inventory = require('./Inventory');
 
 class ManufacturingOrder extends BaseModel {
   constructor() {
@@ -96,6 +97,34 @@ class ManufacturingOrder extends BaseModel {
       'DELETE FROM manufacturing_orders WHERE id = ?',
       [id]
     );
+  }
+
+  async startProduction(id, materials) {
+    const order = await this.getWithDetails(id);
+    if (!order) {
+      throw new Error('Manufacturing order not found');
+    }
+
+    if (order.status !== 'planned') {
+      throw new Error('Order must be in planned status to start production');
+    }
+
+    await Inventory.allocateToManufacturing(id, materials);
+    await this.update(id, { status: 'in_progress' });
+  }
+
+  async completeProduction(id, productData) {
+    const order = await this.getWithDetails(id);
+    if (!order) {
+      throw new Error('Manufacturing order not found');
+    }
+
+    if (order.status !== 'in_progress') {
+      throw new Error('Order must be in progress to complete production');
+    }
+
+    await Inventory.addManufacturedProduct(id, productData);
+    await this.update(id, { status: 'completed' });
   }
 }
 

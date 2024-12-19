@@ -29,6 +29,8 @@ import {
   Forest,
   Agriculture,
   LocationOn,
+  Home,
+  Assignment,
 } from '@mui/icons-material';
 import { getLands, deleteLand } from '../features/lands/landSlice';
 import Dialog from '@mui/material/Dialog';
@@ -70,9 +72,13 @@ const LandManagement = () => {
   // Calculate summary statistics
   const summaryStats = {
     totalLands: lands.length,
-    activeLands: lands.filter(land => land.status === 'active').length,
-    totalArea: lands.reduce((sum, land) => sum + Number(land.area), 0),
-    forestTypes: [...new Set(lands.map(land => land.forestType))].length
+    ownedLands: lands.filter(land => land.ownership_status === 'owned').length,
+    rentedLands: lands.filter(land => land.ownership_status === 'rent').length,
+    totalArea: lands.reduce((sum, land) => sum + Number(land.size), 0),
+    categoryCounts: lands.reduce((acc, land) => {
+      acc[land.category] = (acc[land.category] || 0) + 1;
+      return acc;
+    }, {})
   };
 
   const getStatusColor = (status) => {
@@ -109,16 +115,7 @@ const LandManagement = () => {
       {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(25, 118, 210, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
+          <Paper elevation={0} sx={{ p: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
               <Terrain sx={{ color: 'primary.main', mr: 1 }} />
               <Typography color="textSecondary">Total Lands</Typography>
@@ -127,52 +124,25 @@ const LandManagement = () => {
           </Paper>
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(46, 125, 50, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
+          <Paper elevation={0} sx={{ p: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <Agriculture sx={{ color: 'success.main', mr: 1 }} />
-              <Typography color="textSecondary">Active Lands</Typography>
+              <Home sx={{ color: 'success.main', mr: 1 }} />
+              <Typography color="textSecondary">Owned Lands</Typography>
             </Box>
-            <Typography variant="h4">{summaryStats.activeLands}</Typography>
+            <Typography variant="h4">{summaryStats.ownedLands}</Typography>
           </Paper>
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(251, 140, 0, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
+          <Paper elevation={0} sx={{ p: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <Forest sx={{ color: 'warning.main', mr: 1 }} />
-              <Typography color="textSecondary">Forest Types</Typography>
+              <Assignment sx={{ color: 'warning.main', mr: 1 }} />
+              <Typography color="textSecondary">Rented Lands</Typography>
             </Box>
-            <Typography variant="h4">{summaryStats.forestTypes}</Typography>
+            <Typography variant="h4">{summaryStats.rentedLands}</Typography>
           </Paper>
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(2, 136, 209, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
+          <Paper elevation={0} sx={{ p: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
               <LocationOn sx={{ color: 'info.main', mr: 1 }} />
               <Typography color="textSecondary">Total Area</Typography>
@@ -183,57 +153,74 @@ const LandManagement = () => {
       </Grid>
 
       {/* Lands Table */}
-      <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Parcel Number</TableCell>
-                <TableCell>Location</TableCell>
-                <TableCell>Area</TableCell>
-                <TableCell>Forest Type</TableCell>
-                <TableCell>Soil Type</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell align="right">Actions</TableCell>
+      <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Name</TableCell>
+              <TableCell>Parcel Number</TableCell>
+              <TableCell>Size</TableCell>
+              <TableCell>Category</TableCell>
+              <TableCell>Ownership</TableCell>
+              <TableCell>Location</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell align="right">Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {lands.map((land) => (
+              <TableRow key={land.id} hover>
+                <TableCell>{land.name}</TableCell>
+                <TableCell>{land.parcel_number}</TableCell>
+                <TableCell>{land.size} ha</TableCell>
+                <TableCell>
+                  <Chip
+                    label={land.category}
+                    color={
+                      land.category === 'agricultural' ? 'success' :
+                      land.category === 'residential' ? 'primary' :
+                      land.category === 'commercial' ? 'warning' :
+                      land.category === 'forest' ? 'success' : 'default'
+                    }
+                    size="small"
+                  />
+                </TableCell>
+                <TableCell>
+                  <Chip
+                    label={land.ownership_status}
+                    color={land.ownership_status === 'owned' ? 'success' : 'warning'}
+                    size="small"
+                  />
+                </TableCell>
+                <TableCell>{land.location}</TableCell>
+                <TableCell>
+                  <Chip
+                    label={land.status}
+                    color={getStatusColor(land.status)}
+                    size="small"
+                  />
+                </TableCell>
+                <TableCell align="right">
+                  <IconButton 
+                    size="small" 
+                    onClick={() => handleEdit(land)}
+                    sx={{ color: 'primary.main' }}
+                  >
+                    <EditIcon />
+                  </IconButton>
+                  <IconButton 
+                    size="small" 
+                    onClick={() => handleDelete(land.id)}
+                    sx={{ color: 'error.main', ml: 1 }}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </TableCell>
               </TableRow>
-            </TableHead>
-            <TableBody>
-              {lands.map((land) => (
-                <TableRow key={land.id} hover>
-                  <TableCell>{land.parcel_number}</TableCell>
-                  <TableCell>{land.location}</TableCell>
-                  <TableCell>{land.area} {land.area_unit}</TableCell>
-                  <TableCell>{land.forest_type}</TableCell>
-                  <TableCell>{land.soil_type}</TableCell>
-                  <TableCell>
-                    <Chip
-                      label={land.status}
-                      color={getStatusColor(land.status)}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell align="right">
-                    <IconButton 
-                      size="small" 
-                      onClick={() => handleEdit(land)}
-                      sx={{ color: 'primary.main' }}
-                    >
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton 
-                      size="small" 
-                      onClick={() => handleDelete(land.id)}
-                      sx={{ color: 'error.main', ml: 1 }}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Paper>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
 
       {/* Land Form Dialog */}
       <Dialog open={openDialog} onClose={() => setOpenDialog(false)}>

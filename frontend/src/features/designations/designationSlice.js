@@ -88,14 +88,14 @@ export const designationSlice = createSlice({
         state.isLoading = false;
         state.isSuccess = true;
         state.designations = state.designations.map(designation => 
-          designation._id === action.payload._id ? action.payload : designation
+          designation.id === action.payload.id ? action.payload : designation
         );
       })
       .addCase(deleteDesignation.fulfilled, (state, action) => {
         state.isLoading = false;
         state.isSuccess = true;
         state.designations = state.designations.filter(
-          designation => designation._id !== action.payload.id
+          designation => designation.id !== action.payload.id
         );
       });
   }

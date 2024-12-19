@@ -18,5 +18,18 @@ const assignmentSchema = Joi.object({
   notes: Joi.string().allow(null, '')
 });
 
+const orderSchema = Joi.object({
+  product_id: Joi.number().integer().required(),
+  quantity: Joi.number().integer().positive().required(),
+  assigned_to: Joi.number().integer().required(),
+  status: Joi.string().valid('planned', 'in_progress', 'completed', 'cancelled').default('planned'),
+  priority: Joi.string().valid('low', 'normal', 'high', 'urgent').default('normal'),
+  start_date: Joi.date().required(),
+  end_date: Joi.date().allow(null, ''),
+  notes: Joi.string().allow(null, ''),
+  order_number: Joi.string()
+});
+
 exports.validateContractor = (data) => contractorSchema.validate(data);
-exports.validateAssignment = (data) => assignmentSchema.validate(data); 
+exports.validateAssignment = (data) => assignmentSchema.validate(data);
+exports.validateOrder = (data) => orderSchema.validate(data); 

@@ -92,18 +92,16 @@ const LandForm = ({ land, onClose }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    // Validate required fields
     const requiredFields = ['parcel_number', 'location', 'area', 'area_unit', 'status', 'forest_type', 'acquisition_date'];
     const missingFields = requiredFields.filter(field => !formData[field]);
     
     if (missingFields.length > 0) {
-      // You might want to add error handling/display here
       console.error('Missing required fields:', missingFields);
       return;
     }
 
     if (land) {
-      dispatch(updateLand({ id: land._id, landData: formData }));
+      dispatch(updateLand({ id: land.id, landData: formData }));
     } else {
       dispatch(createLand(formData));
     }

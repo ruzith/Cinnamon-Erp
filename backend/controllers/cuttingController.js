@@ -91,7 +91,7 @@ exports.deleteContractor = async (req, res) => {
     }
 
     // Check if contractor has active assignments
-    const [rows] = await contractor.pool.execute(
+    const [rows] = await CuttingContractor.pool.execute(
       'SELECT COUNT(*) as count FROM land_assignments WHERE contractor_id = ? AND status = "active"',
       [req.params.id]
     );

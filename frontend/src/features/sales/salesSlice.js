@@ -79,7 +79,7 @@ export const salesSlice = createSlice({
       })
       .addCase(updateInvoice.fulfilled, (state, action) => {
         state.invoices = state.invoices.map(invoice => 
-          invoice._id === action.payload._id ? action.payload : invoice
+          invoice.id === action.payload.id ? action.payload : invoice
         );
         state.currentInvoice = action.payload;
       });

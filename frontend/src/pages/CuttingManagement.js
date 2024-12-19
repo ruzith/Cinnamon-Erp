@@ -36,80 +36,56 @@ import {
 import axios from 'axios';
 
 const CuttingManagement = () => {
-  const [cuttingOperations, setCuttingOperations] = useState([]);
-  const [employees, setEmployees] = useState([]);
+  const [contractors, setContractors] = useState([]);
+  const [assignments, setAssignments] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
-  const [selectedOperation, setSelectedOperation] = useState(null);
+  const [selectedContractor, setSelectedContractor] = useState(null);
   const [formData, setFormData] = useState({
-    operation_number: '',
-    land_parcel: '',
-    assigned_workers: [],
-    start_date: '',
-    end_date: '',
-    status: 'pending',
-    tree_count: '',
-    species: '',
-    estimated_volume: '',
-    actual_volume: '',
-    equipment: '',
-    notes: ''
+    name: '',
+    contractor_id: '',
+    phone: '',
+    status: 'active'
   });
 
   useEffect(() => {
-    fetchCuttingOperations();
-    fetchEmployees();
+    fetchContractors();
+    fetchAssignments();
   }, []);
 
-  const fetchCuttingOperations = async () => {
+  const fetchContractors = async () => {
     try {
       const response = await axios.get('/api/cutting/contractors');
-      setCuttingOperations(response.data);
+      setContractors(response.data);
     } catch (error) {
-      console.error('Error fetching cutting operations:', error);
+      console.error('Error fetching contractors:', error);
     }
   };
 
-  const fetchEmployees = async () => {
+  const fetchAssignments = async () => {
     try {
-      const response = await axios.get('/api/employees');
-      setEmployees(response.data);
+      const response = await axios.get('/api/cutting/assignments');
+      setAssignments(response.data);
     } catch (error) {
-      console.error('Error fetching employees:', error);
+      console.error('Error fetching assignments:', error);
     }
   };
 
-  const handleOpenDialog = (operation = null) => {
-    if (operation) {
-      setSelectedOperation(operation);
+  const handleOpenDialog = (contractor = null) => {
+    if (contractor) {
+      setSelectedContractor(contractor);
       setFormData({
-        operation_number: operation.operation_number,
-        land_parcel: operation.land_parcel,
-        assigned_workers: operation.assigned_workers.map(worker => worker._id),
-        start_date: operation.start_date?.split('T')[0] || '',
-        end_date: operation.end_date?.split('T')[0] || '',
-        status: operation.status,
-        tree_count: operation.tree_count,
-        species: operation.species,
-        estimated_volume: operation.estimated_volume,
-        actual_volume: operation.actual_volume,
-        equipment: operation.equipment,
-        notes: operation.notes
+        name: contractor.name,
+        contractor_id: contractor.contractor_id,
+        phone: contractor.phone,
+        status: contractor.status
       });
     } else {
-      setSelectedOperation(null);
+      setSelectedContractor(null);
       setFormData({
-        operation_number: '',
-        land_parcel: '',
-        assigned_workers: [],
-        start_date: '',
-        end_date: '',
-        status: 'pending',
-        tree_count: '',
-        species: '',
-        estimated_volume: '',
-        actual_volume: '',
-        equipment: '',
-        notes: ''
+        name: '',
+        contractor_id: '',
+        phone: '',
+        status: 'active'
       });
     }
     setOpenDialog(true);
@@ -117,39 +93,37 @@ const CuttingManagement = () => {
 
   const handleCloseDialog = () => {
     setOpenDialog(false);
-    setSelectedOperation(null);
+    setSelectedContractor(null);
   };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'assigned_workers' ? 
-        typeof value === 'string' ? value.split(',') : value :
-        value
+      [name]: value
     }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      if (selectedOperation) {
-        await axios.put(`/api/cutting/contractors/${selectedOperation._id}`, formData);
+      if (selectedContractor) {
+        await axios.put(`/api/cutting/contractors/${selectedContractor.id}`, formData);
       } else {
         await axios.post('/api/cutting/contractors', formData);
       }
-      fetchCuttingOperations();
+      fetchContractors();
       handleCloseDialog();
     } catch (error) {
-      console.error('Error saving cutting operation:', error);
+      console.error('Error saving cutting contractor:', error);
     }
   };
 
-  const handleDelete = async (operationId) => {
+  const handleDelete = async (contractorId) => {
     if (window.confirm('Are you sure you want to delete this cutting operation?')) {
       try {
-        await axios.delete(`/api/cutting/contractors/${operationId}`);
-        fetchCuttingOperations();
+        await axios.delete(`/api/cutting/contractors/${contractorId}`);
+        fetchContractors();
       } catch (error) {
         console.error('Error deleting cutting operation:', error);
       }
@@ -158,10 +132,10 @@ const CuttingManagement = () => {
 
   // Calculate summary statistics with snake_case
   const summaryStats = {
-    total_operations: cuttingOperations.length,
-    active_operations: cuttingOperations.filter(op => op.status === 'in_progress').length,
-    total_trees: cuttingOperations.reduce((sum, op) => sum + Number(op.tree_count || 0), 0),
-    total_volume: cuttingOperations.reduce((sum, op) => sum + Number(op.estimated_volume || 0), 0)
+    total_contractors: contractors.length,
+    active_contractors: contractors.filter(c => c.status === 'active').length,
+    total_assignments: assignments.length,
+    active_assignments: assignments.filter(a => a.status === 'active').length
   };
 
   const getStatusColor = (status) => {
@@ -210,9 +184,9 @@ const CuttingManagement = () => {
           >
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
               <ForestIcon sx={{ color: 'primary.main', mr: 1 }} />
-              <Typography color="textSecondary">Total Operations</Typography>
+              <Typography color="textSecondary">Total Contractors</Typography>
             </Box>
-            <Typography variant="h4">{summaryStats.total_operations}</Typography>
+            <Typography variant="h4">{summaryStats.total_contractors}</Typography>
           </Paper>
         </Grid>
 
@@ -229,9 +203,9 @@ const CuttingManagement = () => {
           >
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
               <WorkerIcon sx={{ color: 'success.main', mr: 1 }} />
-              <Typography color="textSecondary">Active Operations</Typography>
+              <Typography color="textSecondary">Active Contractors</Typography>
             </Box>
-            <Typography variant="h4">{summaryStats.active_operations}</Typography>
+            <Typography variant="h4">{summaryStats.active_contractors}</Typography>
           </Paper>
         </Grid>
 
@@ -248,9 +222,9 @@ const CuttingManagement = () => {
           >
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
               <TreeIcon sx={{ color: 'warning.main', mr: 1 }} />
-              <Typography color="textSecondary">Total Trees</Typography>
+              <Typography color="textSecondary">Total Assignments</Typography>
             </Box>
-            <Typography variant="h4">{summaryStats.total_trees}</Typography>
+            <Typography variant="h4">{summaryStats.total_assignments}</Typography>
           </Paper>
         </Grid>
 
@@ -267,9 +241,9 @@ const CuttingManagement = () => {
           >
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
               <VolumeIcon sx={{ color: 'info.main', mr: 1 }} />
-              <Typography color="textSecondary">Total Volume</Typography>
+              <Typography color="textSecondary">Active Assignments</Typography>
             </Box>
-            <Typography variant="h4">{summaryStats.total_volume} m³</Typography>
+            <Typography variant="h4">{summaryStats.active_assignments}</Typography>
           </Paper>
         </Grid>
       </Grid>
@@ -280,41 +254,41 @@ const CuttingManagement = () => {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>Operation #</TableCell>
-                <TableCell>Land Parcel</TableCell>
-                <TableCell>Species</TableCell>
-                <TableCell>Trees</TableCell>
-                <TableCell>Volume (m³)</TableCell>
+                <TableCell>Contractor ID</TableCell>
+                <TableCell>Name</TableCell>
+                <TableCell>Phone</TableCell>
+                <TableCell>Active Assignments</TableCell>
+                <TableCell>Assigned Lands</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {cuttingOperations.map((operation) => (
-                <TableRow key={operation._id} hover>
-                  <TableCell>{operation.operation_number}</TableCell>
-                  <TableCell>{operation.land_parcel}</TableCell>
-                  <TableCell>{operation.species}</TableCell>
-                  <TableCell>{operation.tree_count}</TableCell>
-                  <TableCell>{operation.estimated_volume}</TableCell>
+              {contractors.map((contractor) => (
+                <TableRow key={contractor.id} hover>
+                  <TableCell>{contractor.contractor_id}</TableCell>
+                  <TableCell>{contractor.name}</TableCell>
+                  <TableCell>{contractor.phone}</TableCell>
+                  <TableCell>{contractor.active_assignments || 0}</TableCell>
+                  <TableCell>{contractor.assigned_lands || 'None'}</TableCell>
                   <TableCell>
                     <Chip
-                      label={operation.status}
-                      color={getStatusColor(operation.status)}
+                      label={contractor.status}
+                      color={contractor.status === 'active' ? 'success' : 'default'}
                       size="small"
                     />
                   </TableCell>
                   <TableCell align="right">
                     <IconButton 
                       size="small" 
-                      onClick={() => handleOpenDialog(operation)}
+                      onClick={() => handleOpenDialog(contractor)}
                       sx={{ color: 'primary.main' }}
                     >
                       <EditIcon />
                     </IconButton>
                     <IconButton 
                       size="small" 
-                      onClick={() => handleDelete(operation._id)}
+                      onClick={() => handleDelete(contractor.id)}
                       sx={{ color: 'error.main', ml: 1 }}
                     >
                       <DeleteIcon />
@@ -328,6 +302,64 @@ const CuttingManagement = () => {
       </Paper>
 
       {/* Keep your existing dialog with the current form fields */}
+      <Dialog open={openDialog} onClose={handleCloseDialog}>
+        <DialogTitle>
+          {selectedContractor ? 'Edit Cutting Contractor' : 'New Cutting Contractor'}
+        </DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Name"
+                name="name"
+                value={formData.name}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Contractor ID"
+                name="contractor_id"
+                value={formData.contractor_id}
+                onChange={handleInputChange}
+                required
+                helperText="Unique identifier for the contractor"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Phone"
+                name="phone"
+                value={formData.phone}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel>Status</InputLabel>
+                <Select
+                  name="status"
+                  value={formData.status}
+                  label="Status"
+                  onChange={handleInputChange}
+                >
+                  <MenuItem value="active">Active</MenuItem>
+                  <MenuItem value="inactive">Inactive</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDialog}>Cancel</Button>
+          <Button variant="contained" onClick={handleSubmit}>
+            {selectedContractor ? 'Update' : 'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

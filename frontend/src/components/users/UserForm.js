@@ -28,7 +28,7 @@ const UserForm = ({ user, setIsEditing }) => {
     
     try {
       if (user) {
-        dispatch(updateUser({ id: user._id, userData: formData }));
+        dispatch(updateUser({ id: user.id, userData: formData }));
         setIsEditing(false);
       } else {
         dispatch(createUser(formData));

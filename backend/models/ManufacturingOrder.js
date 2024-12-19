@@ -49,18 +49,32 @@ class ManufacturingOrder extends BaseModel {
     if (!orderData.order_number) {
       orderData.order_number = await this.generateOrderNumber();
     }
+    
+    // Convert object keys and values into arrays for SQL query
+    const columns = Object.keys(orderData);
+    const values = Object.values(orderData);
+    const placeholders = columns.map(() => '?').join(', ');
+    
     const [result] = await this.pool.execute(
-      'INSERT INTO manufacturing_orders SET ?',
-      orderData
+      `INSERT INTO manufacturing_orders (${columns.join(', ')}) VALUES (${placeholders})`,
+      values
     );
+    
     return this.getWithDetails(result.insertId);
   }
 
   async update(id, orderData) {
+    // Convert object into SET clause
+    const setClause = Object.entries(orderData)
+      .map(([key, _]) => `${key} = ?`)
+      .join(', ');
+    const values = [...Object.values(orderData), id];
+
     await this.pool.execute(
-      'UPDATE manufacturing_orders SET ? WHERE id = ?',
-      [orderData, id]
+      `UPDATE manufacturing_orders SET ${setClause} WHERE id = ?`,
+      values
     );
+    
     return this.getWithDetails(id);
   }
 

@@ -43,12 +43,12 @@ const TaskManagement = () => {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    assignedTo: '',
+    assigned_to: '',
     priority: 'medium',
     status: 'pending',
-    dueDate: '',
+    due_date: '',
     category: '',
-    estimatedHours: '',
+    estimated_hours: '',
     notes: ''
   });
 
@@ -81,12 +81,12 @@ const TaskManagement = () => {
       setFormData({
         title: task.title,
         description: task.description,
-        assignedTo: task.assignedTo?._id || '',
+        assigned_to: task.assigned_to?.id || '',
         priority: task.priority,
         status: task.status,
-        dueDate: task.dueDate?.split('T')[0] || '',
+        due_date: task.due_date?.split('T')[0] || '',
         category: task.category,
-        estimatedHours: task.estimatedHours,
+        estimated_hours: task.estimated_hours,
         notes: task.notes
       });
     } else {
@@ -94,12 +94,12 @@ const TaskManagement = () => {
       setFormData({
         title: '',
         description: '',
-        assignedTo: '',
+        assigned_to: '',
         priority: 'medium',
         status: 'pending',
-        dueDate: '',
+        due_date: '',
         category: '',
-        estimatedHours: '',
+        estimated_hours: '',
         notes: ''
       });
     }
@@ -121,10 +121,20 @@ const TaskManagement = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      // Convert estimated_hours to number if it exists
+      const processedFormData = {
+        ...formData,
+        estimated_hours: formData.estimated_hours ? Number(formData.estimated_hours) : null,
+        // Ensure empty strings are sent as null
+        category: formData.category || null,
+        notes: formData.notes || null,
+        assigned_to: formData.assigned_to || null
+      };
+
       if (selectedTask) {
-        await axios.put(`/api/tasks/${selectedTask._id}`, formData);
+        await axios.put(`/api/tasks/${selectedTask.id}`, processedFormData);
       } else {
-        await axios.post('/api/tasks', formData);
+        await axios.post('/api/tasks', processedFormData);
       }
       fetchTasks();
       handleCloseDialog();
@@ -149,7 +159,7 @@ const TaskManagement = () => {
     totalTasks: tasks.length,
     completedTasks: tasks.filter(task => task.status === 'completed').length,
     pendingTasks: tasks.filter(task => task.status === 'pending').length,
-    overdueTasks: tasks.filter(task => task.status === 'overdue').length
+    inProgressTasks: tasks.filter(task => task.status === 'in_progress').length
   };
 
   const getStatusColor = (status) => {
@@ -160,7 +170,7 @@ const TaskManagement = () => {
         return 'info';
       case 'pending':
         return 'warning';
-      case 'overdue':
+      case 'cancelled':
         return 'error';
       default:
         return 'default';
@@ -263,16 +273,16 @@ const TaskManagement = () => {
             sx={{
               p: 3,
               background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(211, 47, 47, 0.05) 100%)`,
+                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(25, 118, 210, 0.05) 100%)`,
               border: '1px solid',
               borderColor: 'divider',
             }}
           >
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <ScheduleIcon sx={{ color: 'error.main', mr: 1 }} />
-              <Typography color="textSecondary">Overdue</Typography>
+              <PendingIcon sx={{ color: 'info.main', mr: 1 }} />
+              <Typography color="textSecondary">In Progress</Typography>
             </Box>
-            <Typography variant="h4">{summaryStats.overdueTasks}</Typography>
+            <Typography variant="h4">{summaryStats.inProgressTasks}</Typography>
           </Paper>
         </Grid>
       </Grid>
@@ -293,7 +303,7 @@ const TaskManagement = () => {
             </TableHead>
             <TableBody>
               {tasks.map((task) => (
-                <TableRow key={task._id} hover>
+                <TableRow key={task.id} hover>
                   <TableCell>
                     <Typography variant="body2" sx={{ fontWeight: 500 }}>
                       {task.title}
@@ -303,10 +313,10 @@ const TaskManagement = () => {
                     </Typography>
                   </TableCell>
                   <TableCell>
-                    {task.assignedTo ? `${task.assignedTo.firstName} ${task.assignedTo.lastName}` : 'Unassigned'}
+                    {task.assigned_to_name || 'Unassigned'}
                   </TableCell>
                   <TableCell>
-                    {new Date(task.dueDate).toLocaleDateString()}
+                    {new Date(task.due_date).toLocaleDateString()}
                   </TableCell>
                   <TableCell>
                     <Chip
@@ -332,7 +342,7 @@ const TaskManagement = () => {
                     </IconButton>
                     <IconButton 
                       size="small" 
-                      onClick={() => handleDeleteTask(task._id)}
+                      onClick={() => handleDeleteTask(task.id)}
                       sx={{ color: 'error.main', ml: 1 }}
                     >
                       <DeleteIcon />
@@ -364,6 +374,7 @@ const TaskManagement = () => {
                 fullWidth
                 value={formData.title}
                 onChange={handleInputChange}
+                required
               />
             </Grid>
             <Grid item xs={12}>
@@ -375,14 +386,15 @@ const TaskManagement = () => {
                 rows={3}
                 value={formData.description}
                 onChange={handleInputChange}
+                required
               />
             </Grid>
             <Grid item xs={12} sm={6}>
               <FormControl fullWidth>
                 <InputLabel>Assigned To</InputLabel>
                 <Select
-                  name="assignedTo"
-                  value={formData.assignedTo}
+                  name="assigned_to"
+                  value={formData.assigned_to}
                   label="Assigned To"
                   onChange={handleInputChange}
                 >
@@ -390,8 +402,8 @@ const TaskManagement = () => {
                     <em>Unassigned</em>
                   </MenuItem>
                   {employees.map((employee) => (
-                    <MenuItem key={employee._id} value={employee._id}>
-                      {`${employee.firstName} ${employee.lastName}`}
+                    <MenuItem key={employee.id} value={employee.id}>
+                      {employee.name}
                     </MenuItem>
                   ))}
                 </Select>
@@ -399,13 +411,14 @@ const TaskManagement = () => {
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
-                name="dueDate"
+                name="due_date"
                 label="Due Date"
                 type="date"
                 fullWidth
                 InputLabelProps={{ shrink: true }}
-                value={formData.dueDate}
+                value={formData.due_date}
                 onChange={handleInputChange}
+                required
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -416,6 +429,7 @@ const TaskManagement = () => {
                   value={formData.priority}
                   label="Priority"
                   onChange={handleInputChange}
+                  required
                 >
                   <MenuItem value="high">High</MenuItem>
                   <MenuItem value="medium">Medium</MenuItem>
@@ -431,13 +445,45 @@ const TaskManagement = () => {
                   value={formData.status}
                   label="Status"
                   onChange={handleInputChange}
+                  required
                 >
                   <MenuItem value="pending">Pending</MenuItem>
                   <MenuItem value="in_progress">In Progress</MenuItem>
                   <MenuItem value="completed">Completed</MenuItem>
-                  <MenuItem value="overdue">Overdue</MenuItem>
+                  <MenuItem value="cancelled">Cancelled</MenuItem>
                 </Select>
               </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                name="category"
+                label="Category"
+                fullWidth
+                value={formData.category}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                name="estimated_hours"
+                label="Estimated Hours"
+                type="number"
+                fullWidth
+                value={formData.estimated_hours}
+                onChange={handleInputChange}
+                InputProps={{ inputProps: { min: 0 } }}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                name="notes"
+                label="Notes"
+                fullWidth
+                multiline
+                rows={3}
+                value={formData.notes}
+                onChange={handleInputChange}
+              />
             </Grid>
           </Grid>
         </DialogContent>

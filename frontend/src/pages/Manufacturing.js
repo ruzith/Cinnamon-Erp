@@ -35,6 +35,8 @@ import {
 } from '@mui/icons-material';
 import axios from 'axios';
 
+const STATUS_OPTIONS = ['planned', 'in_progress', 'completed', 'cancelled'];
+
 const Manufacturing = () => {
   const [manufacturingOrders, setManufacturingOrders] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -47,16 +49,29 @@ const Manufacturing = () => {
     assignedWorkers: [],
     startDate: '',
     endDate: '',
-    status: 'pending',
+    status: 'planned',
     rawMaterials: '',
     machineUsed: '',
     qualityGrade: '',
     notes: ''
   });
+  const [openOrderDialog, setOpenOrderDialog] = useState(false);
+  const [orderFormData, setOrderFormData] = useState({
+    product_id: '',
+    quantity: '',
+    assigned_to: '',
+    status: 'planned',
+    priority: 'normal',
+    start_date: new Date().toISOString().split('T')[0],
+    end_date: '',
+    notes: ''
+  });
+  const [products, setProducts] = useState([]);
 
   useEffect(() => {
     fetchManufacturingOrders();
     fetchEmployees();
+    fetchProducts();
   }, []);
 
   const fetchManufacturingOrders = async () => {
@@ -71,9 +86,19 @@ const Manufacturing = () => {
   const fetchEmployees = async () => {
     try {
       const response = await axios.get('/api/employees');
+      console.log('Employee data:', response.data);
       setEmployees(response.data);
     } catch (error) {
       console.error('Error fetching employees:', error);
+    }
+  };
+
+  const fetchProducts = async () => {
+    try {
+      const response = await axios.get('/api/products');
+      setProducts(response.data);
+    } catch (error) {
+      console.error('Error fetching products:', error);
     }
   };
 
@@ -81,17 +106,17 @@ const Manufacturing = () => {
     if (order) {
       setSelectedOrder(order);
       setFormData({
-        orderNumber: order.orderNumber,
-        productType: order.productType,
+        orderNumber: order.order_number,
+        productType: order.product_name,
         quantity: order.quantity,
-        assignedWorkers: order.assignedWorkers.map(worker => worker._id),
-        startDate: order.startDate?.split('T')[0] || '',
-        endDate: order.endDate?.split('T')[0] || '',
+        assignedWorkers: order.assigned_to ? [order.assigned_to] : [],
+        startDate: order.start_date?.split('T')[0] || '',
+        endDate: order.end_date?.split('T')[0] || '',
         status: order.status,
-        rawMaterials: order.rawMaterials,
-        machineUsed: order.machineUsed,
-        qualityGrade: order.qualityGrade,
-        notes: order.notes
+        rawMaterials: order.raw_materials || '',
+        machineUsed: order.machine_used || '',
+        qualityGrade: order.quality_grade || '',
+        notes: order.notes || ''
       });
     } else {
       setSelectedOrder(null);
@@ -102,7 +127,7 @@ const Manufacturing = () => {
         assignedWorkers: [],
         startDate: '',
         endDate: '',
-        status: 'pending',
+        status: 'planned',
         rawMaterials: '',
         machineUsed: '',
         qualityGrade: '',
@@ -131,7 +156,7 @@ const Manufacturing = () => {
     e.preventDefault();
     try {
       if (selectedOrder) {
-        await axios.put(`/api/manufacturing-orders/${selectedOrder._id}`, formData);
+        await axios.put(`/api/manufacturing-orders/${selectedOrder.id}`, formData);
       } else {
         await axios.post('/api/manufacturing-orders', formData);
       }
@@ -184,6 +209,63 @@ const Manufacturing = () => {
     }
   };
 
+  const handleOpenOrderDialog = (order = null) => {
+    if (order) {
+      setSelectedOrder(order);
+      setOrderFormData({
+        product_id: order.product_id,
+        quantity: order.quantity,
+        assigned_to: order.assigned_to,
+        status: order.status,
+        priority: order.priority,
+        start_date: order.start_date?.split('T')[0] || new Date().toISOString().split('T')[0],
+        end_date: order.end_date?.split('T')[0] || '',
+        notes: order.notes
+      });
+    } else {
+      setSelectedOrder(null);
+      setOrderFormData({
+        product_id: '',
+        quantity: '',
+        assigned_to: '',
+        status: 'planned',
+        priority: 'normal',
+        start_date: new Date().toISOString().split('T')[0],
+        end_date: '',
+        notes: ''
+      });
+    }
+    setOpenOrderDialog(true);
+  };
+
+  const handleCloseOrderDialog = () => {
+    setOpenOrderDialog(false);
+    setSelectedOrder(null);
+  };
+
+  const handleOrderSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!orderFormData.start_date) {
+      alert('Please select a start date');
+      return;
+    }
+
+    try {
+      const { order_number, ...submitData } = orderFormData;
+      
+      if (selectedOrder) {
+        await axios.put(`/api/manufacturing-orders/${selectedOrder.id}`, submitData);
+      } else {
+        await axios.post('/api/manufacturing-orders', submitData);
+      }
+      fetchManufacturingOrders();
+      handleCloseOrderDialog();
+    } catch (error) {
+      console.error('Error saving manufacturing order:', error);
+    }
+  };
+
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
       {/* Header */}
@@ -194,7 +276,7 @@ const Manufacturing = () => {
         <Button
           variant="contained"
           startIcon={<AddIcon />}
-          onClick={() => handleOpenDialog()}
+          onClick={() => handleOpenOrderDialog()}
         >
           New Manufacturing Order
         </Button>
@@ -296,15 +378,15 @@ const Manufacturing = () => {
             </TableHead>
             <TableBody>
               {manufacturingOrders.map((order) => (
-                <TableRow key={order._id} hover>
-                  <TableCell>{order.orderNumber}</TableCell>
-                  <TableCell>{order.productType}</TableCell>
+                <TableRow key={order.id} hover>
+                  <TableCell>{order.order_number}</TableCell>
+                  <TableCell>{order.product_name}</TableCell>
                   <TableCell>{order.quantity}</TableCell>
-                  <TableCell>{new Date(order.startDate).toLocaleDateString()}</TableCell>
+                  <TableCell>{new Date(order.start_date).toLocaleDateString()}</TableCell>
                   <TableCell>
                     <Chip
-                      label={order.qualityGrade || 'N/A'}
-                      color={order.qualityGrade === 'A' ? 'success' : 'default'}
+                      label={order.priority}
+                      color={order.priority === 'urgent' ? 'error' : 'default'}
                       size="small"
                     />
                   </TableCell>
@@ -318,14 +400,14 @@ const Manufacturing = () => {
                   <TableCell align="right">
                     <IconButton 
                       size="small" 
-                      onClick={() => handleOpenDialog(order)}
+                      onClick={() => handleOpenOrderDialog(order)}
                       sx={{ color: 'primary.main' }}
                     >
                       <EditIcon />
                     </IconButton>
                     <IconButton 
                       size="small" 
-                      onClick={() => handleDelete(order._id)}
+                      onClick={() => handleDelete(order.id)}
                       sx={{ color: 'error.main', ml: 1 }}
                     >
                       <DeleteIcon />
@@ -338,7 +420,138 @@ const Manufacturing = () => {
         </TableContainer>
       </Paper>
 
-      {/* Keep your existing dialog with the current form fields */}
+      {/* Add the Manufacturing Order Dialog */}
+      <Dialog open={openOrderDialog} onClose={handleCloseOrderDialog}>
+        <DialogTitle>
+          {selectedOrder ? 'Edit Manufacturing Order' : 'New Manufacturing Order'}
+        </DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Product"
+                name="product_id"
+                select
+                value={orderFormData.product_id}
+                onChange={(e) => setOrderFormData(prev => ({
+                  ...prev,
+                  product_id: e.target.value
+                }))}
+              >
+                {products.map((product) => (
+                  <MenuItem key={product.id} value={product.id}>
+                    {product.name}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Quantity"
+                name="quantity"
+                type="number"
+                value={orderFormData.quantity}
+                onChange={(e) => setOrderFormData(prev => ({
+                  ...prev,
+                  quantity: e.target.value
+                }))}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Assigned To"
+                name="assigned_to"
+                select
+                value={orderFormData.assigned_to}
+                onChange={(e) => setOrderFormData(prev => ({
+                  ...prev,
+                  assigned_to: e.target.value
+                }))}
+              >
+                {employees.map((employee) => (
+                  <MenuItem key={employee.id} value={employee.id}>
+                    {[employee.first_name, employee.last_name].filter(Boolean).join(' ') || 'Unknown Employee'}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid item xs={6}>
+              <TextField
+                required
+                fullWidth
+                label="Start Date"
+                name="start_date"
+                type="date"
+                value={orderFormData.start_date}
+                onChange={(e) => setOrderFormData(prev => ({
+                  ...prev,
+                  start_date: e.target.value
+                }))}
+                InputLabelProps={{ shrink: true }}
+                error={!orderFormData.start_date}
+                helperText={!orderFormData.start_date ? 'Start date is required' : ''}
+              />
+            </Grid>
+            <Grid item xs={6}>
+              <TextField
+                fullWidth
+                label="End Date"
+                name="end_date"
+                type="date"
+                value={orderFormData.end_date}
+                onChange={(e) => setOrderFormData(prev => ({
+                  ...prev,
+                  end_date: e.target.value
+                }))}
+                InputLabelProps={{ shrink: true }}
+                helperText="Optional"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Notes"
+                name="notes"
+                multiline
+                rows={4}
+                value={orderFormData.notes}
+                onChange={(e) => setOrderFormData(prev => ({
+                  ...prev,
+                  notes: e.target.value
+                }))}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Status"
+                name="status"
+                select
+                value={orderFormData.status}
+                onChange={(e) => setOrderFormData(prev => ({
+                  ...prev,
+                  status: e.target.value
+                }))}
+              >
+                {STATUS_OPTIONS.map((status) => (
+                  <MenuItem key={status} value={status}>
+                    {status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ')}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseOrderDialog}>Cancel</Button>
+          <Button variant="contained" onClick={handleOrderSubmit}>
+            {selectedOrder ? 'Update' : 'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

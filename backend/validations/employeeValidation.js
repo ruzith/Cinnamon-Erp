@@ -6,6 +6,11 @@ exports.employeeSchema = Joi.object({
   phone: Joi.string().required(),
   address: Joi.string().required(),
   birthday: Joi.date().required(),
-  designation: Joi.string().required(),
-  group: Joi.string().required().valid('permanent', 'temporary')
+  designation_id: Joi.number().required(),
+  employment_type: Joi.string().required().valid('permanent', 'temporary'),
+  status: Joi.string().required().valid('active', 'inactive', 'on_leave'),
+  salary_structure_id: Joi.number().allow(null, ''),
+  bank_name: Joi.string().allow(''),
+  account_number: Joi.string().allow(''),
+  account_name: Joi.string().allow('')
 }); 

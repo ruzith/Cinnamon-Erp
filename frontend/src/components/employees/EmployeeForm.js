@@ -13,9 +13,13 @@ const EmployeeForm = ({ employee, setIsEditing }) => {
     phone: employee ? employee.phone : '',
     address: employee ? employee.address : '',
     birthday: employee ? new Date(employee.birthday).toISOString().split('T')[0] : '',
-    designation: employee ? employee.designation._id : '',
-    employmentType: employee ? employee.employmentType : 'permanent',
-    status: employee ? employee.status : 'active'
+    designation_id: employee ? employee.designation_id : '',
+    employment_type: employee ? employee.employment_type : 'permanent',
+    status: employee ? employee.status : 'active',
+    salary_structure_id: employee ? employee.salary_structure_id : '',
+    bank_name: employee ? employee.bank_name : '',
+    account_number: employee ? employee.account_number : '',
+    account_name: employee ? employee.account_name : ''
   });
 
   useEffect(() => {
@@ -33,7 +37,7 @@ const EmployeeForm = ({ employee, setIsEditing }) => {
     e.preventDefault();
     
     if (employee) {
-      dispatch(updateEmployee({ id: employee._id, employeeData: formData }));
+      dispatch(updateEmployee({ id: employee.id, employeeData: formData }));
       setIsEditing(false);
     } else {
       dispatch(createEmployee(formData));
@@ -92,14 +96,14 @@ const EmployeeForm = ({ employee, setIsEditing }) => {
       </div>
       <div className="form-group">
         <select 
-          name="designation" 
-          value={formData.designation}
+          name="designation_id" 
+          value={formData.designation_id}
           onChange={onChange}
           required
         >
           <option value="">Select Designation</option>
           {designations.map(designation => (
-            <option key={designation._id} value={designation._id}>
+            <option key={designation.id} value={designation.id}>
               {designation.title}
             </option>
           ))}
@@ -107,8 +111,8 @@ const EmployeeForm = ({ employee, setIsEditing }) => {
       </div>
       <div className="form-group">
         <select
-          name="employmentType"
-          value={formData.employmentType}
+          name="employment_type"
+          value={formData.employment_type}
           onChange={onChange}
           required
         >
@@ -126,6 +130,33 @@ const EmployeeForm = ({ employee, setIsEditing }) => {
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
         </select>
+      </div>
+      <div className="form-group">
+        <input
+          type="text"
+          name="bank_name"
+          value={formData.bank_name}
+          onChange={onChange}
+          placeholder="Bank Name"
+        />
+      </div>
+      <div className="form-group">
+        <input
+          type="text"
+          name="account_number"
+          value={formData.account_number}
+          onChange={onChange}
+          placeholder="Account Number"
+        />
+      </div>
+      <div className="form-group">
+        <input
+          type="text"
+          name="account_name"
+          value={formData.account_name}
+          onChange={onChange}
+          placeholder="Account Name"
+        />
       </div>
       <button type="submit">
         {employee ? 'Update Employee' : 'Add Employee'}

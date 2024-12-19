@@ -6,6 +6,8 @@ const { errorHandler, notFound } = require('./middleware/errorMiddleware');
 const userRoutes = require('./routes/userRoutes')
 const settingsRoutes = require('./routes/settingsRoutes');
 const Report = require('./models/Report');
+const productRoutes = require('./routes/productRoutes');
+const payrollRoutes = require('./routes/payrollRoutes');
 
 // Load env vars
 dotenv.config();
@@ -44,6 +46,8 @@ app.use('/api/tasks', require('./routes/taskRoutes'));
 app.use('/api/manufacturing-orders', require('./routes/manufacturingOrderRoutes'));
 app.use('/api/customers', require('./routes/customerRoutes'));
 app.use('/api/settings', settingsRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/payroll', payrollRoutes);
 
 // Error Handling middlewares
 app.use(notFound);

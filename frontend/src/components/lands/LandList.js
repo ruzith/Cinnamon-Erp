@@ -16,9 +16,9 @@ const LandList = () => {
       {lands.length > 0 ? (
         lands.map((land) => (
           <LandItem
-            key={land._id}
+            key={land.id}
             land={land}
-            onDelete={() => dispatch(deleteLand(land._id))}
+            onDelete={() => dispatch(deleteLand(land.id))}
           />
         ))
       ) : (

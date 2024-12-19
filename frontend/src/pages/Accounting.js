@@ -153,7 +153,7 @@ const Accounting = () => {
         category: transaction.category,
         amount: transaction.amount,
         description: transaction.description,
-        account: transaction.account._id,
+        account: transaction.account.id,
         reference: transaction.reference,
         status: transaction.status,
         paymentMethod: transaction.paymentMethod,
@@ -215,7 +215,7 @@ const Accounting = () => {
   const handleTransactionInputChange = (e) => {
     setTransactionFormData({
       ...transactionFormData,
-      [e.target.name]: e.target.value,
+      [e.target.name]: e.target.name === 'amount' ? Number(e.target.value) : e.target.value,
     });
   };
 
@@ -230,7 +230,7 @@ const Accounting = () => {
     e.preventDefault();
     try {
       if (selectedTransaction) {
-        await axios.put(`/api/accounting/transactions/${selectedTransaction._id}`, transactionFormData);
+        await axios.put(`/api/accounting/transactions/${selectedTransaction.id}`, transactionFormData);
       } else {
         await axios.post('/api/accounting/transactions', transactionFormData);
       }
@@ -246,7 +246,7 @@ const Accounting = () => {
     e.preventDefault();
     try {
       if (selectedAccount) {
-        await axios.put(`/api/accounting/accounts/${selectedAccount._id}`, accountFormData);
+        await axios.put(`/api/accounting/accounts/${selectedAccount.id}`, accountFormData);
       } else {
         await axios.post('/api/accounting/accounts', accountFormData);
       }
@@ -445,17 +445,17 @@ const Accounting = () => {
                 </TableHead>
                 <TableBody>
                   {transactions.map((transaction) => (
-                    <TableRow key={transaction._id} hover>
+                    <TableRow key={transaction.id} hover>
                       <TableCell>{new Date(transaction.date).toLocaleDateString()}</TableCell>
                       <TableCell>{transaction.type}</TableCell>
                       <TableCell>{transaction.description}</TableCell>
-                      <TableCell>{transaction.account}</TableCell>
+                      <TableCell>{transaction.entries?.[0]?.account_name || 'N/A'}</TableCell>
                       <TableCell 
                         sx={{ 
-                          color: transaction.type === 'income' ? 'success.main' : 'error.main'
+                          color: transaction.type === 'revenue' ? 'success.main' : 'error.main'
                         }}
                       >
-                        ${transaction.amount.toFixed(2)}
+                        ${Number(transaction.amount).toFixed(2)}
                       </TableCell>
                       <TableCell>
                         <Chip
@@ -474,7 +474,7 @@ const Accounting = () => {
                         </IconButton>
                         <IconButton 
                           size="small"
-                          onClick={() => handleDeleteTransaction(transaction._id)}
+                          onClick={() => handleDeleteTransaction(transaction.id)}
                           sx={{ color: 'error.main', ml: 1 }}
                         >
                           <DeleteIcon />
@@ -519,7 +519,7 @@ const Accounting = () => {
                 </TableHead>
                 <TableBody>
                   {accounts.map((account) => (
-                    <TableRow key={account._id} hover>
+                    <TableRow key={account.id} hover>
                       <TableCell>{account.code}</TableCell>
                       <TableCell>{account.name}</TableCell>
                       <TableCell>
@@ -554,7 +554,7 @@ const Accounting = () => {
                         </IconButton>
                         <IconButton 
                           size="small"
-                          onClick={() => handleDeleteAccount(account._id)}
+                          onClick={() => handleDeleteAccount(account.id)}
                           sx={{ color: 'error.main', ml: 1 }}
                         >
                           <DeleteIcon />
@@ -626,7 +626,7 @@ const Accounting = () => {
                     onChange={handleTransactionInputChange}
                   >
                     {accounts.map((account) => (
-                      <MenuItem key={account._id} value={account._id}>
+                      <MenuItem key={account.id} value={account.id}>
                         {account.name}
                       </MenuItem>
                     ))}

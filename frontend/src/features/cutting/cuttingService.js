@@ -2,19 +2,19 @@ import axios from 'axios'
 
 const API_URL = '/api/cutting/'
 
-const getCuttings = async () => {
-  const response = await axios.get(API_URL)
+const getContractors = async () => {
+  const response = await axios.get(API_URL + 'contractors')
   return response.data
 }
 
-const createCutting = async (cuttingData) => {
-  const response = await axios.post(API_URL, cuttingData)
+const createContractor = async (contractorData) => {
+  const response = await axios.post(API_URL + 'contractors', contractorData)
   return response.data
 }
 
 const cuttingService = {
-  getCuttings,
-  createCutting
+  getContractors,
+  createContractor
 }
 
 export default cuttingService 

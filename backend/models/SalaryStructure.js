@@ -1,57 +1,40 @@
-const mongoose = require('mongoose');
+const BaseModel = require('./BaseModel');
 
-const salaryComponentSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  type: {
-    type: String,
-    enum: ['earning', 'deduction'],
-    required: true
-  },
-  amount: {
-    type: Number,
-    required: true
-  },
-  isPercentage: {
-    type: Boolean,
-    default: false
-  },
-  calculatedOn: {
-    type: String,
-    enum: ['basic', 'gross'],
-    default: 'basic'
+class SalaryStructure extends BaseModel {
+  constructor() {
+    super('salary_structures');
   }
-});
 
-const salaryStructureSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true
-  },
-  basicSalary: {
-    type: Number,
-    required: true,
-    min: 0
-  },
-  components: [salaryComponentSchema],
-  description: {
-    type: String,
-    trim: true
-  },
-  status: {
-    type: String,
-    enum: ['active', 'inactive'],
-    default: 'active'
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
+  async find(conditions = {}) {
+    try {
+      let query = 'SELECT * FROM salary_structures WHERE 1=1';
+      const values = [];
+
+      if (conditions.status) {
+        query += ' AND status = ?';
+        values.push(conditions.status);
+      }
+
+      const [rows] = await this.pool.execute(query, values);
+      return rows;
+    } catch (error) {
+      console.error('Error in SalaryStructure.find:', error);
+      throw error;
+    }
   }
-});
 
-module.exports = mongoose.model('SalaryStructure', salaryStructureSchema); 
+  async findById(id) {
+    try {
+      const [rows] = await this.pool.execute(
+        'SELECT * FROM salary_structures WHERE id = ?',
+        [id]
+      );
+      return rows[0];
+    } catch (error) {
+      console.error('Error in SalaryStructure.findById:', error);
+      throw error;
+    }
+  }
+}
+
+module.exports = new SalaryStructure(); 

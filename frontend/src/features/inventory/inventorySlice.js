@@ -67,7 +67,7 @@ export const inventorySlice = createSlice({
       .addCase(createTransaction.fulfilled, (state, action) => {
         state.transactions.push(action.payload);
         // Update product stock in products array
-        const product = state.products.find(p => p._id === action.payload.product._id);
+        const product = state.products.find(p => p.id === action.payload.product.id);
         if (product) {
           product.currentStock = action.payload.newStock;
         }

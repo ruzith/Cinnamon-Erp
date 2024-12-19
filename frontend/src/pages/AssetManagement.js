@@ -113,66 +113,29 @@ const AssetManagement = () => {
     setTabValue(newValue);
   };
 
-  const handleOpenDialog = (asset = null) => {
-    if (asset) {
-      setSelectedAsset(asset);
-      setAssetFormData({
-        assetNumber: asset.assetNumber,
-        name: asset.name,
-        category: asset.category,
-        type: asset.type,
-        manufacturer: asset.manufacturer,
-        model: asset.model,
-        purchaseDate: asset.purchaseDate?.split('T')[0] || '',
-        purchasePrice: asset.purchasePrice,
-        currentValue: asset.currentValue,
-        location: asset.location,
-        status: asset.status,
-        assignedTo: asset.assignedTo,
-        specifications: asset.specifications,
-        warrantyInfo: asset.warrantyInfo,
-        notes: asset.notes
-      });
-    } else {
-      setSelectedAsset(null);
-      setAssetFormData({
-        assetNumber: '',
-        name: '',
-        category: '',
-        type: '',
-        manufacturer: '',
-        model: '',
-        purchaseDate: '',
-        purchasePrice: '',
-        currentValue: '',
-        location: '',
-        status: 'active',
-        assignedTo: '',
-        specifications: '',
-        warrantyInfo: '',
-        notes: ''
-      });
-    }
+  const handleEdit = (asset) => {
+    setSelectedAsset(asset);
+    setAssetFormData({
+      assetNumber: asset.asset_number,
+      name: asset.name,
+      category: asset.category_id,
+      type: asset.type,
+      purchaseDate: asset.purchase_date.split('T')[0],
+      purchasePrice: asset.purchase_price,
+      currentValue: asset.current_value,
+      status: asset.status,
+      assignedTo: asset.assigned_to,
+      // ... other fields ...
+    });
     setOpenDialog(true);
   };
 
-  const handleOpenMaintenanceDialog = (asset) => {
+  const handleMaintenance = (asset) => {
     setSelectedAsset(asset);
-    setMaintenanceFormData({
-      assetId: asset._id,
-      type: 'routine',
-      description: '',
-      date: '',
-      cost: '',
-      performedBy: '',
-      nextMaintenanceDate: '',
-      status: 'completed',
-      notes: ''
-    });
     setOpenMaintenanceDialog(true);
   };
 
-  const handleOpenHistoryDialog = (asset) => {
+  const handleViewHistory = (asset) => {
     setSelectedAsset(asset);
     setOpenHistoryDialog(true);
   };
@@ -210,7 +173,7 @@ const AssetManagement = () => {
     e.preventDefault();
     try {
       if (selectedAsset) {
-        await axios.put(`/api/assets/${selectedAsset._id}`, assetFormData);
+        await axios.put(`/api/assets/${selectedAsset.id}`, assetFormData);
       } else {
         await axios.post('/api/assets', assetFormData);
       }
@@ -283,6 +246,39 @@ const AssetManagement = () => {
     activeMaintenanceJobs: maintenanceRecords.filter(record => record.status === 'in_progress').length
   };
 
+  const handleInputChange = (e) => {
+    setAssetFormData({
+      ...assetFormData,
+      [e.target.name]: e.target.value,
+    });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      if (selectedAsset) {
+        await axios.put(`/api/assets/${selectedAsset.id}`, assetFormData);
+      } else {
+        await axios.post('/api/assets', assetFormData);
+      }
+      fetchAssets();
+      handleCloseDialog();
+    } catch (error) {
+      console.error('Error saving asset:', error);
+    }
+  };
+
+  const formatCurrency = (value) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(value);
+  };
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString();
+  };
+
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
       {/* Header */}
@@ -293,7 +289,7 @@ const AssetManagement = () => {
         <Button
           variant="contained"
           startIcon={<AddIcon />}
-          onClick={() => handleOpenDialog()}
+          onClick={() => handleEdit(null)}
         >
           New Asset
         </Button>
@@ -394,58 +390,58 @@ const AssetManagement = () => {
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>Asset #</TableCell>
+                  <TableCell>Asset Number</TableCell>
                   <TableCell>Name</TableCell>
                   <TableCell>Category</TableCell>
-                  <TableCell>Location</TableCell>
+                  <TableCell>Type</TableCell>
+                  <TableCell>Purchase Date</TableCell>
+                  <TableCell>Purchase Price</TableCell>
+                  <TableCell>Current Value</TableCell>
                   <TableCell>Status</TableCell>
-                  <TableCell>Value</TableCell>
-                  <TableCell align="right">Actions</TableCell>
+                  <TableCell>Assigned To</TableCell>
+                  <TableCell>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {assets.map((asset) => (
-                  <TableRow key={asset._id} hover>
-                    <TableCell>{asset.assetNumber}</TableCell>
+                  <TableRow key={asset.id} hover>
+                    <TableCell>{asset.asset_number}</TableCell>
                     <TableCell>{asset.name}</TableCell>
-                    <TableCell>{asset.category}</TableCell>
-                    <TableCell>{asset.location}</TableCell>
+                    <TableCell>{asset.category_name}</TableCell>
+                    <TableCell style={{ textTransform: 'capitalize' }}>{asset.type}</TableCell>
+                    <TableCell>{formatDate(asset.purchase_date)}</TableCell>
+                    <TableCell>{formatCurrency(asset.purchase_price)}</TableCell>
+                    <TableCell>{formatCurrency(asset.current_value)}</TableCell>
                     <TableCell>
-                      <Chip 
+                      <Chip
                         label={asset.status}
                         color={getStatusColor(asset.status)}
                         size="small"
+                        style={{ textTransform: 'capitalize' }}
                       />
                     </TableCell>
-                    <TableCell>${asset.currentValue}</TableCell>
-                    <TableCell align="right">
-                      <IconButton 
+                    <TableCell>{asset.well_name}</TableCell>
+                    <TableCell>
+                      <IconButton
                         size="small"
-                        onClick={() => handleOpenMaintenanceDialog(asset)}
-                        sx={{ color: 'warning.main' }}
+                        onClick={() => handleEdit(asset)}
+                        title="Edit Asset"
                       >
-                        <BuildIcon />
+                        <EditIcon fontSize="small" />
                       </IconButton>
-                      <IconButton 
+                      <IconButton
                         size="small"
-                        onClick={() => handleOpenHistoryDialog(asset)}
-                        sx={{ color: 'info.main', ml: 1 }}
+                        onClick={() => handleMaintenance(asset)}
+                        title="Maintenance"
                       >
-                        <TimelineIcon />
+                        <BuildIcon fontSize="small" />
                       </IconButton>
-                      <IconButton 
+                      <IconButton
                         size="small"
-                        onClick={() => handleOpenDialog(asset)}
-                        sx={{ color: 'primary.main', ml: 1 }}
+                        onClick={() => handleViewHistory(asset)}
+                        title="View History"
                       >
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton 
-                        size="small"
-                        onClick={() => handleDelete(asset._id)}
-                        sx={{ color: 'error.main', ml: 1 }}
-                      >
-                        <DeleteIcon />
+                        <TimelineIcon fontSize="small" />
                       </IconButton>
                     </TableCell>
                   </TableRow>
@@ -464,30 +460,41 @@ const AssetManagement = () => {
                   <TableCell>Asset</TableCell>
                   <TableCell>Type</TableCell>
                   <TableCell>Description</TableCell>
-                  <TableCell>Status</TableCell>
+                  <TableCell>Performed By</TableCell>
                   <TableCell>Cost</TableCell>
                   <TableCell>Next Maintenance</TableCell>
+                  <TableCell>Status</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {maintenanceRecords.map((record) => (
-                  <TableRow key={record._id} hover>
-                    <TableCell>{new Date(record.date).toLocaleDateString()}</TableCell>
-                    <TableCell>{record.assetId?.name}</TableCell>
-                    <TableCell>{record.type}</TableCell>
-                    <TableCell>{record.description}</TableCell>
+                  <TableRow key={record.id} hover>
+                    <TableCell>{formatDate(record.maintenance_date)}</TableCell>
                     <TableCell>
-                      <Chip 
-                        label={record.status}
-                        color={getMaintenanceStatusColor(record.status)}
+                      {record.asset_name}
+                      <Typography variant="caption" display="block" color="textSecondary">
+                        {record.asset_code}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={record.type}
+                        color={record.type === 'repair' ? 'error' : 
+                               record.type === 'upgrade' ? 'info' : 'default'}
                         size="small"
+                        sx={{ textTransform: 'capitalize' }}
                       />
                     </TableCell>
-                    <TableCell>${record.cost}</TableCell>
+                    <TableCell>{record.description}</TableCell>
+                    <TableCell>{record.performed_by}</TableCell>
+                    <TableCell>{formatCurrency(record.cost)}</TableCell>
+                    <TableCell>{record.next_maintenance_date ? formatDate(record.next_maintenance_date) : 'N/A'}</TableCell>
                     <TableCell>
-                      {record.nextMaintenanceDate ? 
-                        new Date(record.nextMaintenanceDate).toLocaleDateString() : 
-                        'N/A'}
+                      {new Date(record.next_maintenance_date) < new Date() ? (
+                        <Chip label="Overdue" color="error" size="small" />
+                      ) : (
+                        <Chip label="Scheduled" color="success" size="small" />
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -498,6 +505,171 @@ const AssetManagement = () => {
       </Paper>
 
       {/* Keep your existing dialogs with current form fields */}
+      <Dialog 
+        open={openDialog} 
+        onClose={handleCloseDialog}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          {selectedAsset ? 'Edit Asset' : 'New Asset'}
+        </DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Asset Name"
+                name="name"
+                value={assetFormData.name}
+                onChange={handleInputChange}
+                required
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Category"
+                name="category"
+                value={assetFormData.category}
+                onChange={handleInputChange}
+                required
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Type"
+                name="type"
+                value={assetFormData.type}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Manufacturer"
+                name="manufacturer"
+                value={assetFormData.manufacturer}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Model"
+                name="model"
+                value={assetFormData.model}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Purchase Date"
+                name="purchaseDate"
+                type="date"
+                value={assetFormData.purchaseDate}
+                onChange={handleInputChange}
+                InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Purchase Price"
+                name="purchasePrice"
+                type="number"
+                value={assetFormData.purchasePrice}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Current Value"
+                name="currentValue"
+                type="number"
+                value={assetFormData.currentValue}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Location"
+                name="location"
+                value={assetFormData.location}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel>Status</InputLabel>
+                <Select
+                  name="status"
+                  value={assetFormData.status}
+                  label="Status"
+                  onChange={handleInputChange}
+                >
+                  <MenuItem value="active">Active</MenuItem>
+                  <MenuItem value="maintenance">In Maintenance</MenuItem>
+                  <MenuItem value="retired">Retired</MenuItem>
+                  <MenuItem value="disposed">Disposed</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Assigned To"
+                name="assignedTo"
+                value={assetFormData.assignedTo}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Specifications"
+                name="specifications"
+                multiline
+                rows={2}
+                value={assetFormData.specifications}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Warranty Information"
+                name="warrantyInfo"
+                multiline
+                rows={2}
+                value={assetFormData.warrantyInfo}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Notes"
+                name="notes"
+                multiline
+                rows={2}
+                value={assetFormData.notes}
+                onChange={handleInputChange}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDialog}>Cancel</Button>
+          <Button variant="contained" onClick={handleSubmit}>
+            {selectedAsset ? 'Update' : 'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

@@ -32,19 +32,39 @@ class Task extends BaseModel {
   }
 
   async create(taskData) {
+    const columns = Object.keys(taskData).join(', ');
+    const placeholders = Object.keys(taskData).map(() => '?').join(', ');
+    const values = Object.values(taskData);
+
     const [result] = await this.pool.execute(
-      'INSERT INTO tasks SET ?',
-      taskData
+      `INSERT INTO tasks (${columns}) VALUES (${placeholders})`,
+      values
     );
     return this.getWithDetails(result.insertId);
   }
 
   async update(id, taskData) {
+    const setClause = Object.keys(taskData).map(key => `${key} = ?`).join(', ');
+    const values = [...Object.values(taskData), id];
+
     await this.pool.execute(
-      'UPDATE tasks SET ? WHERE id = ?',
-      [taskData, id]
+      `UPDATE tasks SET ${setClause} WHERE id = ?`,
+      values
     );
     return this.getWithDetails(id);
+  }
+
+  async delete(id) {
+    const task = await this.getWithDetails(id);
+    if (!task) {
+      throw new Error('Task not found');
+    }
+
+    await this.pool.execute(
+      'DELETE FROM tasks WHERE id = ?',
+      [id]
+    );
+    return task;
   }
 }
 

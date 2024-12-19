@@ -65,7 +65,7 @@ export const purchaseSlice = createSlice({
       })
       .addCase(updateInvoice.fulfilled, (state, action) => {
         state.invoices = state.invoices.map(invoice => 
-          invoice._id === action.payload._id ? action.payload : invoice
+          invoice.id === action.payload.id ? action.payload : invoice
         );
       });
   }

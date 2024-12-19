@@ -177,7 +177,7 @@ const LoanBook = () => {
   const handleOpenPaymentDialog = (loan) => {
     setSelectedLoan(loan);
     setPaymentFormData({
-      loanId: loan._id,
+      loanId: loan.id,
       amount: '',
       date: '',
       paymentMethod: '',
@@ -225,7 +225,7 @@ const LoanBook = () => {
     e.preventDefault();
     try {
       if (selectedLoan) {
-        await axios.put(`/api/loans/${selectedLoan._id}`, loanFormData);
+        await axios.put(`/api/loans/${selectedLoan.id}`, loanFormData);
       } else {
         await axios.post('/api/loans', loanFormData);
       }
@@ -279,7 +279,7 @@ const LoanBook = () => {
 
   const calculateRemainingAmount = (loan) => {
     const paidAmount = payments
-      .filter(payment => payment.loanId === loan._id)
+      .filter(payment => payment.loanId === loan.id)
       .reduce((sum, payment) => sum + payment.amount, 0);
     return loan.amount - paidAmount;
   };
@@ -414,23 +414,25 @@ const LoanBook = () => {
             <Table>
               <TableHead>
                 <TableRow>
+                  <TableCell>Loan Number</TableCell>
                   <TableCell>Borrower</TableCell>
                   <TableCell>Amount</TableCell>
                   <TableCell>Remaining</TableCell>
                   <TableCell>Interest Rate</TableCell>
-                  <TableCell>Start Date</TableCell>
+                  <TableCell>Term (Months)</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {loans.map((loan) => (
-                  <TableRow key={loan._id}>
-                    <TableCell>{loan.borrowerName}</TableCell>
-                    <TableCell>${loan.amount}</TableCell>
-                    <TableCell>${calculateRemainingAmount(loan)}</TableCell>
-                    <TableCell>{loan.interestRate}%</TableCell>
-                    <TableCell>{new Date(loan.startDate).toLocaleDateString()}</TableCell>
+                  <TableRow key={loan.id}>
+                    <TableCell>{loan.loan_number}</TableCell>
+                    <TableCell>{loan.borrower_name}</TableCell>
+                    <TableCell>${Number(loan.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</TableCell>
+                    <TableCell>${Number(loan.remaining_balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}</TableCell>
+                    <TableCell>{loan.interest_rate}%</TableCell>
+                    <TableCell>{loan.term_months}</TableCell>
                     <TableCell>
                       <Chip 
                         label={loan.status}
@@ -439,16 +441,32 @@ const LoanBook = () => {
                       />
                     </TableCell>
                     <TableCell>
-                      <IconButton onClick={() => handleOpenPaymentDialog(loan)}>
+                      <IconButton 
+                        size="small"
+                        onClick={() => handleOpenPaymentDialog(loan)}
+                        sx={{ color: 'success.main' }}
+                      >
                         <PaymentIcon />
                       </IconButton>
-                      <IconButton onClick={() => handleOpenHistoryDialog(loan)}>
+                      <IconButton 
+                        size="small"
+                        onClick={() => handleOpenHistoryDialog(loan)}
+                        sx={{ color: 'info.main' }}
+                      >
                         <HistoryIcon />
                       </IconButton>
-                      <IconButton onClick={() => handleOpenLoanDialog(loan)}>
+                      <IconButton 
+                        size="small"
+                        onClick={() => handleOpenLoanDialog(loan)}
+                        sx={{ color: 'primary.main' }}
+                      >
                         <EditIcon />
                       </IconButton>
-                      <IconButton onClick={() => handleDeleteLoan(loan._id)}>
+                      <IconButton 
+                        size="small"
+                        onClick={() => handleDeleteLoan(loan.id)}
+                        sx={{ color: 'error.main' }}
+                      >
                         <DeleteIcon />
                       </IconButton>
                     </TableCell>
@@ -466,22 +484,34 @@ const LoanBook = () => {
               <TableHead>
                 <TableRow>
                   <TableCell>Date</TableCell>
-                  <TableCell>Borrower</TableCell>
+                  <TableCell>Loan Number</TableCell>
                   <TableCell>Amount</TableCell>
-                  <TableCell>Payment Method</TableCell>
                   <TableCell>Reference</TableCell>
+                  <TableCell>Status</TableCell>
                   <TableCell>Notes</TableCell>
+                  <TableCell>Created By</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {payments.map((payment) => (
-                  <TableRow key={payment._id}>
-                    <TableCell>{new Date(payment.date).toLocaleDateString()}</TableCell>
-                    <TableCell>{payment.loanId?.borrowerName}</TableCell>
-                    <TableCell>${payment.amount}</TableCell>
-                    <TableCell>{payment.paymentMethod}</TableCell>
+                  <TableRow key={payment.id}>
+                    <TableCell>
+                      {new Date(payment.payment_date).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>{payment.loan_number}</TableCell>
+                    <TableCell>
+                      ${Number(payment.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </TableCell>
                     <TableCell>{payment.reference}</TableCell>
+                    <TableCell>
+                      <Chip 
+                        label={payment.status}
+                        color={getStatusColor(payment.status)}
+                        size="small"
+                      />
+                    </TableCell>
                     <TableCell>{payment.notes}</TableCell>
+                    <TableCell>{payment.created_by_name}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -751,20 +781,30 @@ const LoanBook = () => {
                       <TableRow>
                         <TableCell>Date</TableCell>
                         <TableCell>Amount</TableCell>
-                        <TableCell>Method</TableCell>
                         <TableCell>Reference</TableCell>
+                        <TableCell>Status</TableCell>
                         <TableCell>Notes</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
                       {payments
-                        .filter(payment => payment.loanId === selectedLoan._id)
+                        .filter(payment => payment.loan_id === selectedLoan?.id)
                         .map((payment) => (
-                          <TableRow key={payment._id}>
-                            <TableCell>{new Date(payment.date).toLocaleDateString()}</TableCell>
-                            <TableCell>${payment.amount}</TableCell>
-                            <TableCell>{payment.paymentMethod}</TableCell>
+                          <TableRow key={payment.id}>
+                            <TableCell>
+                              {new Date(payment.payment_date).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell>
+                              ${Number(payment.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                            </TableCell>
                             <TableCell>{payment.reference}</TableCell>
+                            <TableCell>
+                              <Chip 
+                                label={payment.status}
+                                color={getStatusColor(payment.status)}
+                                size="small"
+                              />
+                            </TableCell>
                             <TableCell>{payment.notes}</TableCell>
                           </TableRow>
                         ))}

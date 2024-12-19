@@ -84,14 +84,14 @@ export const employeeSlice = createSlice({
         state.isLoading = false;
         state.isSuccess = true;
         state.employees = state.employees.map(employee => 
-          employee._id === action.payload._id ? action.payload : employee
+          employee.id === action.payload.id ? action.payload : employee
         );
       })
       .addCase(deleteEmployee.fulfilled, (state, action) => {
         state.isLoading = false;
         state.isSuccess = true;
         state.employees = state.employees.filter(
-          employee => employee._id !== action.payload.id
+          employee => employee.id !== action.payload.id
         );
       });
   }

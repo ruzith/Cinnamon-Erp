@@ -105,7 +105,7 @@ export const landSlice = createSlice({
         state.isLoading = false;
         state.isSuccess = true;
         state.lands = state.lands.map(land => 
-          land._id === action.payload._id ? action.payload : land
+          land.id === action.payload.id ? action.payload : land
         );
       })
       .addCase(updateLand.rejected, (state, action) => {
@@ -119,7 +119,7 @@ export const landSlice = createSlice({
       .addCase(deleteLand.fulfilled, (state, action) => {
         state.isLoading = false;
         state.isSuccess = true;
-        state.lands = state.lands.filter(land => land._id !== action.payload.id);
+        state.lands = state.lands.filter(land => land.id !== action.payload.id);
         state.message = 'Land deleted successfully';
       })
       .addCase(deleteLand.rejected, (state, action) => {

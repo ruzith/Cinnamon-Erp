@@ -39,4 +39,20 @@ router.put('/:id', protect, authorize('admin', 'manager'), async (req, res) => {
   }
 });
 
+// Delete task
+router.delete('/:id', protect, authorize('admin', 'manager'), async (req, res) => {
+  try {
+    const task = await Task.delete(req.params.id);
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+    res.json({ message: 'Task removed' });
+  } catch (error) {
+    if (error.message.includes('not found')) {
+      return res.status(404).json({ message: error.message });
+    }
+    res.status(500).json({ message: error.message });
+  }
+});
+
 module.exports = router; 

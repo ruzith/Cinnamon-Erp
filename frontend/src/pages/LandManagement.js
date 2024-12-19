@@ -177,7 +177,7 @@ const LandManagement = () => {
               <LocationOn sx={{ color: 'info.main', mr: 1 }} />
               <Typography color="textSecondary">Total Area</Typography>
             </Box>
-            <Typography variant="h4">{summaryStats.totalArea} ha</Typography>
+            <Typography variant="h4">{summaryStats.totalArea.toFixed(2)} ha</Typography>
           </Paper>
         </Grid>
       </Grid>
@@ -199,7 +199,7 @@ const LandManagement = () => {
             </TableHead>
             <TableBody>
               {lands.map((land) => (
-                <TableRow key={land._id} hover>
+                <TableRow key={land.id} hover>
                   <TableCell>{land.parcel_number}</TableCell>
                   <TableCell>{land.location}</TableCell>
                   <TableCell>{land.area} {land.area_unit}</TableCell>
@@ -222,7 +222,7 @@ const LandManagement = () => {
                     </IconButton>
                     <IconButton 
                       size="small" 
-                      onClick={() => handleDelete(land._id)}
+                      onClick={() => handleDelete(land.id)}
                       sx={{ color: 'error.main', ml: 1 }}
                     >
                       <DeleteIcon />

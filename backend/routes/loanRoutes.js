@@ -92,15 +92,19 @@ router.get('/payments', protect, async (req, res) => {
     const [rows] = await LoanPayment.pool.execute(`
       SELECT lp.*,
              l.loan_number,
-             u.name as created_by_name
+             l.borrower_name,
+             u.name as created_by_name,
+             ls.period_number,
+             ls.payment_amount as scheduled_amount
       FROM loan_payments lp
       JOIN loans l ON lp.loan_id = l.id
       LEFT JOIN users u ON lp.created_by = u.id
+      LEFT JOIN loan_schedule ls ON lp.schedule_item_id = ls.id
       ORDER BY lp.payment_date DESC
     `);
     res.json(rows);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(400).json({ message: error.message });
   }
 });
 

@@ -1,152 +1,144 @@
-const mongoose = require('mongoose');
+const BaseModel = require('./BaseModel');
 
-const payrollItemSchema = new mongoose.Schema({
-  employee: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Employee',
-    required: true
-  },
-  basicSalary: {
-    type: Number,
-    required: true,
-    min: 0
-  },
-  earnings: [{
-    name: String,
-    amount: Number
-  }],
-  deductions: [{
-    name: String,
-    amount: Number
-  }],
-  grossSalary: {
-    type: Number,
-    required: true,
-    min: 0
-  },
-  netSalary: {
-    type: Number,
-    required: true,
-    min: 0
-  },
-  status: {
-    type: String,
-    enum: ['pending', 'approved', 'paid'],
-    default: 'pending'
-  },
-  paymentDetails: {
-    method: {
-      type: String,
-      enum: ['bank', 'cash', 'cheque'],
-      required: true
-    },
-    reference: String,
-    date: Date
+class Payroll extends BaseModel {
+  constructor() {
+    super('payrolls');
   }
-});
 
-const payrollSchema = new mongoose.Schema({
-  payrollId: {
-    type: String,
-    required: true,
-    unique: true
-  },
-  month: {
-    type: Number,
-    required: true,
-    min: 1,
-    max: 12
-  },
-  year: {
-    type: Number,
-    required: true
-  },
-  fromDate: {
-    type: Date,
-    required: true
-  },
-  toDate: {
-    type: Date,
-    required: true
-  },
-  items: [payrollItemSchema],
-  totalBasicSalary: {
-    type: Number,
-    required: true,
-    min: 0
-  },
-  totalGrossSalary: {
-    type: Number,
-    required: true,
-    min: 0
-  },
-  totalDeductions: {
-    type: Number,
-    required: true,
-    min: 0
-  },
-  totalNetSalary: {
-    type: Number,
-    required: true,
-    min: 0
-  },
-  status: {
-    type: String,
-    enum: ['draft', 'processing', 'approved', 'completed'],
-    default: 'draft'
-  },
-  approvedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  },
-  approvedAt: Date,
-  notes: {
-    type: String,
-    trim: true
-  },
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
+  async create(data) {
+    try {
+      // Begin transaction
+      await this.pool.beginTransaction();
+
+      // Generate payroll ID
+      const date = new Date();
+      const year = date.getFullYear().toString().substr(-2);
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const [countResult] = await this.pool.execute('SELECT COUNT(*) as count FROM payrolls');
+      const count = countResult[0].count + 1;
+      const payrollId = `PAY${year}${month}${count.toString().padStart(4, '0')}`;
+
+      // Insert main payroll record
+      const [result] = await this.pool.execute(
+        'INSERT INTO payrolls SET ?',
+        {
+          payroll_id: payrollId,
+          month: data.month,
+          year: data.year,
+          from_date: data.fromDate,
+          to_date: data.toDate,
+          status: 'draft',
+          created_by: data.createdBy,
+          created_at: new Date()
+        }
+      );
+
+      // Insert payroll items
+      let totalBasic = 0;
+      let totalGross = 0;
+      let totalDeductions = 0;
+      let totalNet = 0;
+
+      for (const item of data.items) {
+        const [itemResult] = await this.pool.execute(
+          'INSERT INTO payroll_items SET ?',
+          {
+            payroll_id: result.insertId,
+            employee_id: item.employee,
+            basic_salary: item.basicSalary,
+            gross_salary: item.grossSalary,
+            net_salary: item.netSalary,
+            status: 'pending',
+            payment_method: item.paymentDetails.method
+          }
+        );
+
+        // Insert earnings and deductions
+        for (const earning of item.earnings) {
+          await this.pool.execute(
+            'INSERT INTO payroll_components SET ?',
+            {
+              payroll_item_id: itemResult.insertId,
+              type: 'earning',
+              name: earning.name,
+              amount: earning.amount
+            }
+          );
+        }
+
+        for (const deduction of item.deductions) {
+          await this.pool.execute(
+            'INSERT INTO payroll_components SET ?',
+            {
+              payroll_item_id: itemResult.insertId,
+              type: 'deduction',
+              name: deduction.name,
+              amount: deduction.amount
+            }
+          );
+        }
+
+        totalBasic += item.basicSalary;
+        totalGross += item.grossSalary;
+        totalDeductions += item.deductions.reduce((sum, d) => sum + d.amount, 0);
+        totalNet += item.netSalary;
+      }
+
+      // Update payroll totals
+      await this.pool.execute(
+        `UPDATE payrolls SET 
+          total_basic_salary = ?,
+          total_gross_salary = ?,
+          total_deductions = ?,
+          total_net_salary = ?
+        WHERE id = ?`,
+        [totalBasic, totalGross, totalDeductions, totalNet, result.insertId]
+      );
+
+      await this.pool.commit();
+      return this.getWithDetails(result.insertId);
+    } catch (error) {
+      await this.pool.rollback();
+      throw error;
+    }
   }
-});
 
-// Generate payroll ID before saving
-payrollSchema.pre('save', async function(next) {
-  if (!this.payrollId) {
-    const date = new Date();
-    const year = date.getFullYear().toString().substr(-2);
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const count = await this.constructor.countDocuments() + 1;
-    this.payrollId = `PAY${year}${month}${count.toString().padStart(4, '0')}`;
+  async getWithDetails(id) {
+    const [payroll] = await this.pool.execute(`
+      SELECT p.*, 
+             u1.name as created_by_name,
+             u2.name as approved_by_name
+      FROM payrolls p
+      LEFT JOIN users u1 ON p.created_by = u1.id
+      LEFT JOIN users u2 ON p.approved_by = u2.id
+      WHERE p.id = ?
+    `, [id]);
+
+    if (!payroll[0]) return null;
+
+    const [items] = await this.pool.execute(`
+      SELECT pi.*,
+             e.name as employee_name,
+             e.employee_id as employee_code
+      FROM payroll_items pi
+      JOIN employees e ON pi.employee_id = e.id
+      WHERE pi.payroll_id = ?
+    `, [id]);
+
+    for (const item of items) {
+      const [components] = await this.pool.execute(`
+        SELECT * FROM payroll_components
+        WHERE payroll_item_id = ?
+        ORDER BY type, name
+      `, [item.id]);
+
+      item.earnings = components.filter(c => c.type === 'earning');
+      item.deductions = components.filter(c => c.type === 'deduction');
+    }
+
+    payroll[0].items = items;
+    return payroll[0];
   }
-  next();
-});
+}
 
-// Calculate totals before saving
-payrollSchema.pre('save', function(next) {
-  let totalBasic = 0;
-  let totalGross = 0;
-  let totalDeductions = 0;
-  let totalNet = 0;
-
-  this.items.forEach(item => {
-    totalBasic += item.basicSalary;
-    totalGross += item.grossSalary;
-    totalDeductions += item.deductions.reduce((sum, d) => sum + d.amount, 0);
-    totalNet += item.netSalary;
-  });
-
-  this.totalBasicSalary = totalBasic;
-  this.totalGrossSalary = totalGross;
-  this.totalDeductions = totalDeductions;
-  this.totalNetSalary = totalNet;
-
-  next();
-});
-
-module.exports = mongoose.model('Payroll', payrollSchema); 
+module.exports = new Payroll(); 

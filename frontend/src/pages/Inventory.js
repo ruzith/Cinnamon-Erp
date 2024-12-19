@@ -61,15 +61,15 @@ const Inventory = () => {
   const [openTransactionDialog, setOpenTransactionDialog] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [formData, setFormData] = useState({
-    productName: '',
+    product_name: '',
     category: '',
     quantity: '',
     unit: '',
-    minStockLevel: '',
-    maxStockLevel: '',
+    min_stock_level: '',
+    max_stock_level: '',
     location: '',
     description: '',
-    unitPrice: ''
+    unit_price: ''
   });
 
   const [transactionData, setTransactionData] = useState({
@@ -111,28 +111,28 @@ const Inventory = () => {
     if (item) {
       setSelectedItem(item);
       setFormData({
-        productName: item.productName,
+        product_name: item.product_name,
         category: item.category,
         quantity: item.quantity,
         unit: item.unit,
-        minStockLevel: item.minStockLevel,
-        maxStockLevel: item.maxStockLevel,
+        min_stock_level: item.min_stock_level,
+        max_stock_level: item.max_stock_level,
         location: item.location,
         description: item.description,
-        unitPrice: item.unitPrice
+        unit_price: item.unit_price
       });
     } else {
       setSelectedItem(null);
       setFormData({
-        productName: '',
+        product_name: '',
         category: '',
         quantity: '',
         unit: '',
-        minStockLevel: '',
-        maxStockLevel: '',
+        min_stock_level: '',
+        max_stock_level: '',
         location: '',
         description: '',
-        unitPrice: ''
+        unit_price: ''
       });
     }
     setOpenDialog(true);
@@ -141,7 +141,7 @@ const Inventory = () => {
   const handleOpenTransactionDialog = (item, type) => {
     setSelectedItem(item);
     setTransactionData({
-      productId: item._id,
+      productId: item.id,
       type: type,
       quantity: '',
       reason: '',
@@ -177,10 +177,22 @@ const Inventory = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      const payload = {
+        product_name: formData.product_name,
+        category: formData.category,
+        quantity: Number(formData.quantity),
+        unit: formData.unit,
+        min_stock_level: Number(formData.min_stock_level),
+        max_stock_level: Number(formData.max_stock_level),
+        location: formData.location,
+        unit_price: Number(formData.unit_price),
+        description: formData.description
+      };
+
       if (selectedItem) {
-        await axios.put(`/api/inventory/${selectedItem._id}`, formData);
+        await axios.put(`/api/inventory/${selectedItem.id}`, payload);
       } else {
-        await axios.post('/api/inventory', formData);
+        await axios.post('/api/inventory', payload);
       }
       fetchInventory();
       handleCloseDialog();
@@ -214,23 +226,23 @@ const Inventory = () => {
 
   const getStockLevelLabel = (item) => {
     if (!item) return 'Unknown';
-    if (item.quantity <= item.minStockLevel) return 'Low Stock';
-    if (item.quantity >= item.maxStockLevel) return 'Overstocked';
+    if (item.quantity <= item.min_stock_level) return 'Low Stock';
+    if (item.quantity >= item.max_stock_level) return 'Overstocked';
     return 'Normal';
   };
 
   const getStockLevelColor = (item) => {
     if (!item) return 'default';
-    if (item.quantity <= item.minStockLevel) return 'error';
-    if (item.quantity >= item.maxStockLevel) return 'warning';
+    if (item.quantity <= item.min_stock_level) return 'error';
+    if (item.quantity >= item.max_stock_level) return 'warning';
     return 'success';
   };
 
   // Calculate summary statistics
   const summaryStats = {
     totalItems: inventory.length,
-    lowStock: inventory.filter(item => item.quantity <= item.minStockLevel).length,
-    totalValue: inventory.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0).toFixed(2),
+    lowStock: inventory.filter(item => item.quantity <= item.min_stock_level).length,
+    totalValue: inventory.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0).toFixed(2),
     activeTransactions: transactions.filter(t => t.status === 'pending').length
   };
 
@@ -340,7 +352,7 @@ const Inventory = () => {
           <Tab label="Transactions History" />
         </Tabs>
 
-        <Box sx={{ p: 3 }}>
+        <TabPanel value={tabValue} index={0}>
           <TableContainer>
             <Table>
               <TableHead>
@@ -357,13 +369,13 @@ const Inventory = () => {
               </TableHead>
               <TableBody>
                 {inventory.map((item) => (
-                  <TableRow key={item._id} hover>
-                    <TableCell>{item.productName}</TableCell>
+                  <TableRow key={item.id} hover>
+                    <TableCell>{item.product_name}</TableCell>
                     <TableCell>{item.category}</TableCell>
                     <TableCell>{item.quantity}</TableCell>
                     <TableCell>{item.unit}</TableCell>
                     <TableCell>{item.location}</TableCell>
-                    <TableCell>${item.unitPrice}</TableCell>
+                    <TableCell>${item.unit_price}</TableCell>
                     <TableCell>
                       <Chip
                         label={getStockLevelLabel(item)}
@@ -381,7 +393,7 @@ const Inventory = () => {
                       </IconButton>
                       <IconButton 
                         size="small" 
-                        onClick={() => handleDelete(item._id)}
+                        onClick={() => handleDelete(item.id)}
                         sx={{ color: 'error.main', ml: 1 }}
                       >
                         <DeleteIcon />
@@ -392,10 +404,156 @@ const Inventory = () => {
               </TableBody>
             </Table>
           </TableContainer>
-        </Box>
+        </TabPanel>
+
+        <TabPanel value={tabValue} index={1}>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Date</TableCell>
+                  <TableCell>Product</TableCell>
+                  <TableCell>Type</TableCell>
+                  <TableCell>Quantity</TableCell>
+                  <TableCell>Reference</TableCell>
+                  <TableCell>Notes</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {transactions.map((transaction) => (
+                  <TableRow key={transaction.id} hover>
+                    <TableCell>{new Date(transaction.created_at).toLocaleDateString()}</TableCell>
+                    <TableCell>{transaction.product_name}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={transaction.type}
+                        color={transaction.type === 'IN' ? 'success' : transaction.type === 'OUT' ? 'error' : 'warning'}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>{transaction.quantity}</TableCell>
+                    <TableCell>{transaction.reference}</TableCell>
+                    <TableCell>{transaction.notes}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </TabPanel>
       </Paper>
 
       {/* Keep your existing dialog with the current form fields */}
+      <Dialog 
+        open={openDialog} 
+        onClose={handleCloseDialog}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          {selectedItem ? 'Edit Inventory Item' : 'New Inventory Item'}
+        </DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Product Name"
+                name="product_name"
+                value={formData.product_name}
+                onChange={handleInputChange}
+                required
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Category"
+                name="category"
+                value={formData.category}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Quantity"
+                name="quantity"
+                type="number"
+                value={formData.quantity}
+                onChange={handleInputChange}
+                required
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Unit"
+                name="unit"
+                value={formData.unit}
+                onChange={handleInputChange}
+                required
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Minimum Stock Level"
+                name="min_stock_level"
+                type="number"
+                value={formData.min_stock_level}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Maximum Stock Level"
+                name="max_stock_level"
+                type="number"
+                value={formData.max_stock_level}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Location"
+                name="location"
+                value={formData.location}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Unit Price"
+                name="unit_price"
+                type="number"
+                value={formData.unit_price}
+                onChange={handleInputChange}
+                required
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Description"
+                name="description"
+                multiline
+                rows={3}
+                value={formData.description}
+                onChange={handleInputChange}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDialog}>Cancel</Button>
+          <Button variant="contained" onClick={handleSubmit}>
+            {selectedItem ? 'Update' : 'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

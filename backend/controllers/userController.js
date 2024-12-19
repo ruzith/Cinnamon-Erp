@@ -27,7 +27,9 @@ const registerUser = asyncHandler(async (req, res) => {
     name,
     email,
     password,
-    role: 'staff' // Set default role for registration
+    role: 'staff', // Set default role for registration
+    status: 'active', // Set default status
+    department: null // No department by default for self-registration
   });
 
   if (user) {
@@ -36,6 +38,8 @@ const registerUser = asyncHandler(async (req, res) => {
       name: user.name,
       email: user.email,
       role: user.role,
+      status: user.status,
+      department: user.department,
       token: generateToken(user.id)
     });
   } else {
@@ -122,7 +126,7 @@ const generateToken = (id) => {
 // @route   POST /api/users
 // @access  Private/Admin
 const createUser = asyncHandler(async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password, role, department, status } = req.body;
 
   if (!name || !email || !password) {
     res.status(400);
@@ -138,11 +142,15 @@ const createUser = asyncHandler(async (req, res) => {
 
   // Create user with role validation
   const validRoles = ['admin', 'staff', 'accountant', 'manager'];
+  const validStatuses = ['active', 'inactive'];
+  
   const user = await User.create({
     name,
     email,
     password,
-    role: validRoles.includes(role) ? role : 'staff'
+    role: validRoles.includes(role) ? role : 'staff',
+    status: validStatuses.includes(status) ? status : 'active',
+    department: department || null
   });
 
   if (user) {
@@ -150,7 +158,9 @@ const createUser = asyncHandler(async (req, res) => {
       _id: user.id,
       name: user.name,
       email: user.email,
-      role: user.role
+      role: user.role,
+      status: user.status,
+      department: user.department
     });
   } else {
     res.status(400);

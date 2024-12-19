@@ -58,9 +58,13 @@ export const deleteUser = createAsyncThunk('users/delete', async (id, thunkAPI) 
 });
 
 export const userSlice = createSlice({
-  name: 'user',
+  name: 'users',
   initialState,
   reducers: {
+    setUsers: (state, action) => {
+      state.users = action.payload;
+      state.isLoading = false;
+    },
     reset: (state) => initialState
   },
   extraReducers: (builder) => {
@@ -88,13 +92,13 @@ export const userSlice = createSlice({
         state.isLoading = false;
         state.isSuccess = true;
         state.users = state.users.map(user => 
-          user._id === action.payload._id ? action.payload : user
+          user.id === action.payload.id ? action.payload : user
         );
       })
       .addCase(deleteUser.fulfilled, (state, action) => {
         state.isLoading = false;
         state.isSuccess = true;
-        state.users = state.users.filter(user => user._id !== action.payload.id);
+        state.users = state.users.filter(user => user.id !== action.payload.id);
       });
   }
 });

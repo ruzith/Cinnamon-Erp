@@ -56,6 +56,8 @@ CREATE TABLE users (
   email VARCHAR(255) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
   role ENUM('admin', 'staff', 'accountant', 'manager') NOT NULL DEFAULT 'staff',
+  department VARCHAR(100),
+  status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -219,8 +221,12 @@ CREATE TABLE land_assignments (
 CREATE TABLE tasks (
   id INT PRIMARY KEY AUTO_INCREMENT,
   title VARCHAR(255) NOT NULL,
-  description TEXT NOT NULL,
-  status ENUM('pending', 'in-progress', 'completed') DEFAULT 'pending',
+  description TEXT,
+  priority ENUM('low', 'medium', 'high') NOT NULL DEFAULT 'medium',
+  status ENUM('pending', 'in_progress', 'completed', 'cancelled') NOT NULL DEFAULT 'pending',
+  category VARCHAR(100),
+  estimated_hours DECIMAL(5,2),
+  notes TEXT,
   due_date DATE,
   assigned_to INT,
   created_by INT NOT NULL,
@@ -418,22 +424,6 @@ CREATE TABLE loans (
   FOREIGN KEY (created_by) REFERENCES users(id)
 );
 
--- Loan Payments table
-CREATE TABLE loan_payments (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  loan_id INT NOT NULL,
-  amount DECIMAL(15,2) NOT NULL,
-  payment_date DATE NOT NULL,
-  reference VARCHAR(20) UNIQUE,
-  status ENUM('pending', 'completed', 'cancelled') DEFAULT 'completed',
-  notes TEXT,
-  created_by INT NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (loan_id) REFERENCES loans(id),
-  FOREIGN KEY (created_by) REFERENCES users(id)
-);
-
 -- Loan Schedule table
 CREATE TABLE loan_schedule (
   id INT PRIMARY KEY AUTO_INCREMENT,
@@ -450,6 +440,24 @@ CREATE TABLE loan_schedule (
   FOREIGN KEY (loan_id) REFERENCES loans(id)
 );
 
+-- Loan Payments table
+CREATE TABLE loan_payments (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  loan_id INT NOT NULL,
+  amount DECIMAL(15,2) NOT NULL,
+  payment_date DATE NOT NULL,
+  reference VARCHAR(20) UNIQUE,
+  status ENUM('pending', 'completed', 'cancelled') DEFAULT 'completed',
+  notes TEXT,
+  created_by INT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  schedule_item_id INT,
+  FOREIGN KEY (loan_id) REFERENCES loans(id),
+  FOREIGN KEY (created_by) REFERENCES users(id),
+  FOREIGN KEY (schedule_item_id) REFERENCES loan_schedule(id)
+);
+
 -- Manufacturing Orders table
 CREATE TABLE manufacturing_orders (
   id INT PRIMARY KEY AUTO_INCREMENT,
@@ -459,6 +467,7 @@ CREATE TABLE manufacturing_orders (
   start_date DATE NOT NULL,
   end_date DATE,
   status ENUM('planned', 'in_progress', 'completed', 'cancelled') DEFAULT 'planned',
+  priority ENUM('low', 'normal', 'high', 'urgent') DEFAULT 'normal',
   notes TEXT,
   assigned_to INT,
   created_by INT NOT NULL,
@@ -605,3 +614,5 @@ CREATE TABLE report_columns (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (report_id) REFERENCES reports(id)
 ); 
+
+

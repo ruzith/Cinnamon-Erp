@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/authMiddleware');
 const ManufacturingOrder = require('../models/ManufacturingOrder');
+const { validateOrder } = require('../validators/manufacturingValidator');
 
 // Get all manufacturing orders
 router.get('/', protect, async (req, res) => {
@@ -16,6 +17,11 @@ router.get('/', protect, async (req, res) => {
 // Create manufacturing order
 router.post('/', protect, authorize('admin', 'manager'), async (req, res) => {
   try {
+    const { error } = validateOrder(req.body);
+    if (error) {
+      return res.status(400).json({ message: error.details[0].message });
+    }
+
     const order = await ManufacturingOrder.create({
       ...req.body,
       created_by: req.user.id

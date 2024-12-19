@@ -34,7 +34,7 @@ import {
     Security as SecurityIcon,
     Group as GroupIcon,
 } from '@mui/icons-material';
-import { getUsers, deleteUser } from '../features/users/userSlice';
+import { getUsers, deleteUser, updateUser, createUser } from '../features/users/userSlice';
 
 const UserManagement = () => {
     const dispatch = useDispatch();
@@ -76,10 +76,42 @@ const UserManagement = () => {
                 return 'error';
             case 'manager':
                 return 'warning';
-            case 'user':
+            case 'accountant':
                 return 'info';
+            case 'staff':
+                return 'success';
             default:
                 return 'default';
+        }
+    };
+
+    const handleSubmit = async () => {
+        try {
+            const form = document.querySelector('form');
+            const formData = new FormData(form);
+            
+            const userData = {
+                name: formData.get('name'),
+                email: formData.get('email'),
+                role: formData.get('role'),
+                status: formData.get('status'),
+                department: formData.get('department'),
+                ...(selectedUser ? {} : {
+                    password: formData.get('password')
+                })
+            };
+
+            if (selectedUser) {
+                await dispatch(updateUser({ id: selectedUser.id, userData }));
+            } else {
+                await dispatch(createUser(userData));
+            }
+            
+            setOpenDialog(false);
+            setSelectedUser(null);
+            dispatch(getUsers());
+        } catch (error) {
+            console.error('Error saving user:', error);
         }
     };
 
@@ -185,7 +217,7 @@ const UserManagement = () => {
                     <Table>
                         <TableHead>
                             <TableRow>
-                                <TableCell>Username</TableCell>
+                                <TableCell>Full Name</TableCell>
                                 <TableCell>Email</TableCell>
                                 <TableCell>Department</TableCell>
                                 <TableCell>Role</TableCell>
@@ -195,8 +227,8 @@ const UserManagement = () => {
                         </TableHead>
                         <TableBody>
                             {users.map((user) => (
-                                <TableRow key={user._id} hover>
-                                    <TableCell>{user.username}</TableCell>
+                                <TableRow key={user.id} hover>
+                                    <TableCell>{user.name}</TableCell>
                                     <TableCell>{user.email}</TableCell>
                                     <TableCell>{user.department}</TableCell>
                                     <TableCell>
@@ -223,7 +255,7 @@ const UserManagement = () => {
                                         </IconButton>
                                         <IconButton
                                             size="small"
-                                            onClick={() => handleDelete(user._id)}
+                                            onClick={() => handleDelete(user.id)}
                                             sx={{ color: 'error.main', ml: 1 }}
                                         >
                                             <DeleteIcon />
@@ -250,64 +282,85 @@ const UserManagement = () => {
                     {selectedUser ? 'Edit User' : 'Add New User'}
                 </DialogTitle>
                 <DialogContent>
-                    <Grid container spacing={2} sx={{ mt: 1 }}>
-                        <Grid item xs={12} sm={6}>
-                            <TextField
-                                fullWidth
-                                label="Username"
-                                name="username"
-                                defaultValue={selectedUser?.username}
-                            />
+                    <form id="userForm">
+                        <Grid container spacing={2} sx={{ mt: 1 }}>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Full Name"
+                                    name="name"
+                                    defaultValue={selectedUser?.name}
+                                    required
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Email"
+                                    name="email"
+                                    type="email"
+                                    defaultValue={selectedUser?.email}
+                                    required
+                                />
+                            </Grid>
+                            {/* Add password field only for new user creation */}
+                            {!selectedUser && (
+                                <Grid item xs={12}>
+                                    <TextField
+                                        fullWidth
+                                        label="Password"
+                                        name="password"
+                                        type="password"
+                                        required
+                                    />
+                                </Grid>
+                            )}
+                            <Grid item xs={12} sm={6}>
+                                <FormControl fullWidth>
+                                    <InputLabel>Role</InputLabel>
+                                    <Select
+                                        label="Role"
+                                        name="role"
+                                        defaultValue={selectedUser?.role || 'staff'}
+                                    >
+                                        <MenuItem value="admin">Administrator</MenuItem>
+                                        <MenuItem value="staff">Staff</MenuItem>
+                                        <MenuItem value="accountant">Accountant</MenuItem>
+                                        <MenuItem value="manager">Manager</MenuItem>
+                                    </Select>
+                                </FormControl>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <FormControl fullWidth>
+                                    <InputLabel>Status</InputLabel>
+                                    <Select
+                                        label="Status"
+                                        name="status"
+                                        defaultValue={selectedUser?.status || 'active'}
+                                    >
+                                        <MenuItem value="active">Active</MenuItem>
+                                        <MenuItem value="inactive">Inactive</MenuItem>
+                                    </Select>
+                                </FormControl>
+                            </Grid>
+                            <Grid item xs={12}>
+                                <TextField
+                                    fullWidth
+                                    label="Department"
+                                    name="department"
+                                    defaultValue={selectedUser?.department || ''}
+                                />
+                            </Grid>
                         </Grid>
-                        <Grid item xs={12} sm={6}>
-                            <TextField
-                                fullWidth
-                                label="Email"
-                                name="email"
-                                type="email"
-                                defaultValue={selectedUser?.email}
-                            />
-                        </Grid>
-                        <Grid item xs={12} sm={6}>
-                            <FormControl fullWidth>
-                                <InputLabel>Role</InputLabel>
-                                <Select
-                                    label="Role"
-                                    name="role"
-                                    defaultValue={selectedUser?.role || 'user'}
-                                >
-                                    <MenuItem value="admin">Administrator</MenuItem>
-                                    <MenuItem value="manager">Manager</MenuItem>
-                                    <MenuItem value="user">User</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </Grid>
-                        <Grid item xs={12} sm={6}>
-                            <FormControl fullWidth>
-                                <InputLabel>Status</InputLabel>
-                                <Select
-                                    label="Status"
-                                    name="status"
-                                    defaultValue={selectedUser?.status || 'active'}
-                                >
-                                    <MenuItem value="active">Active</MenuItem>
-                                    <MenuItem value="inactive">Inactive</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </Grid>
-                        <Grid item xs={12}>
-                            <TextField
-                                fullWidth
-                                label="Department"
-                                name="department"
-                                defaultValue={selectedUser?.department}
-                            />
-                        </Grid>
-                    </Grid>
+                    </form>
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
-                    <Button variant="contained" color="primary">
+                    <Button 
+                        variant="contained" 
+                        color="primary"
+                        onClick={handleSubmit}
+                    >
                         {selectedUser ? 'Update' : 'Create'}
                     </Button>
                 </DialogActions>

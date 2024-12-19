@@ -41,6 +41,19 @@ class LoanPayment extends BaseModel {
         paymentData.reference = await this.generateReference();
       }
 
+      // Get schedule item if not provided
+      if (!paymentData.schedule_item_id) {
+        const [scheduleItems] = await this.pool.execute(`
+          SELECT id FROM loan_schedule 
+          WHERE loan_id = ? AND status != 'paid'
+          ORDER BY due_date ASC LIMIT 1
+        `, [paymentData.loan_id]);
+        
+        if (scheduleItems.length > 0) {
+          paymentData.schedule_item_id = scheduleItems[0].id;
+        }
+      }
+
       // Create payment record
       const [result] = await this.pool.execute(
         'INSERT INTO loan_payments SET ?',

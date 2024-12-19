@@ -124,7 +124,7 @@ const Sales = () => {
       setSelectedSale(sale);
       setSaleFormData({
         orderNumber: sale.orderNumber,
-        customerId: sale.customerId._id,
+        customerId: sale.customerId.id,
         items: sale.items,
         status: sale.status,
         paymentStatus: sale.paymentStatus,
@@ -227,7 +227,7 @@ const Sales = () => {
     e.preventDefault();
     try {
       if (selectedSale) {
-        await axios.put(`/api/sales/${selectedSale._id}`, saleFormData);
+        await axios.put(`/api/sales/${selectedSale.id}`, saleFormData);
       } else {
         await axios.post('/api/sales', saleFormData);
       }
@@ -242,7 +242,7 @@ const Sales = () => {
     e.preventDefault();
     try {
       if (selectedCustomer) {
-        await axios.put(`/api/customers/${selectedCustomer._id}`, customerFormData);
+        await axios.put(`/api/customers/${selectedCustomer.id}`, customerFormData);
       } else {
         await axios.post('/api/customers', customerFormData);
       }
@@ -265,13 +265,10 @@ const Sales = () => {
   };
 
   const getStatusColor = (status) => {
-    if (!status) return 'default';
-    switch (status.toLowerCase()) {
-      case 'completed':
+    switch (status) {
+      case 'confirmed':
         return 'success';
-      case 'processing':
-        return 'info';
-      case 'pending':
+      case 'draft':
         return 'warning';
       case 'cancelled':
         return 'error';
@@ -281,11 +278,10 @@ const Sales = () => {
   };
 
   const getPaymentStatusColor = (status) => {
-    if (!status) return 'default';
-    switch (status.toLowerCase()) {
+    switch (status) {
       case 'paid':
         return 'success';
-      case 'partially_paid':
+      case 'partial':
         return 'warning';
       case 'pending':
         return 'error';
@@ -297,9 +293,18 @@ const Sales = () => {
   // Calculate summary statistics
   const summaryStats = {
     totalSales: sales.length,
-    totalRevenue: sales.reduce((sum, sale) => sum + sale.totalAmount, 0).toFixed(2),
+    totalRevenue: sales.reduce((sum, sale) => sum + (sale.totalAmount || 0), 0).toFixed(2),
     pendingOrders: sales.filter(sale => sale.status === 'pending').length,
-    activeCustomers: new Set(sales.map(sale => sale.customerId?._id)).size
+    activeCustomers: new Set(sales.map(sale => sale.customerId?.id)).size
+  };
+
+  const handleViewDetails = (sale) => {
+    setSelectedSale(sale);
+    setOpenDetailsDialog(true);
+  };
+
+  const handleEdit = (sale) => {
+    handleOpenDialog(sale);
   };
 
   return (
@@ -403,58 +408,63 @@ const Sales = () => {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>Order #</TableCell>
-                <TableCell>Customer</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Payment Status</TableCell>
-                <TableCell>Total Amount</TableCell>
                 <TableCell>Date</TableCell>
-                <TableCell align="right">Actions</TableCell>
+                <TableCell>Invoice #</TableCell>
+                <TableCell>Customer</TableCell>
+                <TableCell align="right">Items</TableCell>
+                <TableCell align="right">Total</TableCell>
+                <TableCell>Payment</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {sales.map((sale) => (
-                <TableRow key={sale._id} hover>
-                  <TableCell>{sale.orderNumber}</TableCell>
-                  <TableCell>{sale.customerId?.name}</TableCell>
+                <TableRow key={sale.id} hover>
+                  <TableCell>{new Date(sale.date).toLocaleDateString()}</TableCell>
+                  <TableCell>{sale.invoice_number}</TableCell>
                   <TableCell>
-                    <Chip 
+                    <Typography variant="body2">{sale.customer_name}</Typography>
+                    <Typography variant="caption" color="textSecondary">
+                      {sale.customer_phone}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right">{sale.total_items}</TableCell>
+                  <TableCell align="right">
+                    {new Intl.NumberFormat('en-US', {
+                      style: 'currency',
+                      currency: 'LKR'
+                    }).format(sale.total)}
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      size="small"
+                      label={sale.payment_status}
+                      color={getPaymentStatusColor(sale.payment_status)}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      size="small"
                       label={sale.status}
                       color={getStatusColor(sale.status)}
-                      size="small"
                     />
                   </TableCell>
                   <TableCell>
-                    <Chip 
-                      label={sale.paymentStatus}
-                      color={getPaymentStatusColor(sale.paymentStatus)}
+                    <IconButton
                       size="small"
-                    />
-                  </TableCell>
-                  <TableCell>${sale.totalAmount.toFixed(2)}</TableCell>
-                  <TableCell>{new Date(sale.createdAt).toLocaleDateString()}</TableCell>
-                  <TableCell align="right">
-                    <IconButton 
-                      size="small" 
-                      onClick={() => handleOpenDetailsDialog(sale)}
-                      sx={{ color: 'info.main' }}
+                      onClick={() => handleViewDetails(sale)}
                     >
-                      <VisibilityIcon />
+                      <VisibilityIcon fontSize="small" />
                     </IconButton>
-                    <IconButton 
-                      size="small" 
-                      onClick={() => handleOpenDialog(sale)}
-                      sx={{ color: 'primary.main', ml: 1 }}
-                    >
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton 
-                      size="small" 
-                      onClick={() => handleDelete(sale._id)}
-                      sx={{ color: 'error.main', ml: 1 }}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
+                    {sale.status === 'draft' && (
+                      <IconButton
+                        size="small"
+                        onClick={() => handleEdit(sale)}
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -463,7 +473,217 @@ const Sales = () => {
         </TableContainer>
       </Paper>
 
-      {/* Keep your existing dialogs with current form fields */}
+      {/* Add this dialog component before the final closing Box tag */}
+      <Dialog 
+        open={openDialog} 
+        onClose={handleCloseDialog}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          {selectedSale ? 'Edit Sale' : 'New Sale'}
+        </DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel>Customer</InputLabel>
+                <Select
+                  name="customerId"
+                  value={saleFormData.customerId}
+                  label="Customer"
+                  onChange={handleSaleInputChange}
+                  required
+                >
+                  {customers.map((customer) => (
+                    <MenuItem key={customer.id} value={customer.id}>
+                      {customer.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <Autocomplete
+                multiple
+                options={inventory}
+                getOptionLabel={(option) => option.productName}
+                value={selectedItems}
+                onChange={handleItemSelect}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Select Products"
+                    required
+                  />
+                )}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel>Status</InputLabel>
+                <Select
+                  name="status"
+                  value={saleFormData.status}
+                  label="Status"
+                  onChange={handleSaleInputChange}
+                >
+                  <MenuItem value="pending">Pending</MenuItem>
+                  <MenuItem value="confirmed">Confirmed</MenuItem>
+                  <MenuItem value="shipped">Shipped</MenuItem>
+                  <MenuItem value="delivered">Delivered</MenuItem>
+                  <MenuItem value="cancelled">Cancelled</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel>Payment Status</InputLabel>
+                <Select
+                  name="paymentStatus"
+                  value={saleFormData.paymentStatus}
+                  label="Payment Status"
+                  onChange={handleSaleInputChange}
+                >
+                  <MenuItem value="pending">Pending</MenuItem>
+                  <MenuItem value="partial">Partial</MenuItem>
+                  <MenuItem value="paid">Paid</MenuItem>
+                  <MenuItem value="refunded">Refunded</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel>Payment Method</InputLabel>
+                <Select
+                  name="paymentMethod"
+                  value={saleFormData.paymentMethod}
+                  label="Payment Method"
+                  onChange={handleSaleInputChange}
+                >
+                  <MenuItem value="cash">Cash</MenuItem>
+                  <MenuItem value="card">Card</MenuItem>
+                  <MenuItem value="bank_transfer">Bank Transfer</MenuItem>
+                  <MenuItem value="check">Check</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Shipping Address"
+                name="shippingAddress"
+                multiline
+                rows={2}
+                value={saleFormData.shippingAddress}
+                onChange={handleSaleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Notes"
+                name="notes"
+                multiline
+                rows={2}
+                value={saleFormData.notes}
+                onChange={handleSaleInputChange}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDialog}>Cancel</Button>
+          <Button variant="contained" onClick={handleSaleSubmit}>
+            {selectedSale ? 'Update' : 'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Details Dialog */}
+      <Dialog
+        open={openDetailsDialog}
+        onClose={handleCloseDetailsDialog}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Sale Details</DialogTitle>
+        <DialogContent>
+          {selectedSale && (
+            <Grid container spacing={2} sx={{ mt: 1 }}>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2" color="textSecondary">Invoice Number</Typography>
+                <Typography variant="body1">{selectedSale.invoice_number}</Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2" color="textSecondary">Date</Typography>
+                <Typography variant="body1">
+                  {new Date(selectedSale.date).toLocaleDateString()}
+                </Typography>
+              </Grid>
+              <Grid item xs={12}>
+                <Typography variant="subtitle2" color="textSecondary">Customer</Typography>
+                <Typography variant="body1">{selectedSale.customer_name}</Typography>
+                <Typography variant="body2" color="textSecondary">
+                  {selectedSale.customer_phone}
+                </Typography>
+                <Typography variant="body2" color="textSecondary">
+                  {selectedSale.customer_email}
+                </Typography>
+              </Grid>
+              <Grid item xs={12}>
+                <Typography variant="subtitle2" color="textSecondary">Address</Typography>
+                <Typography variant="body1">{selectedSale.customer_address}</Typography>
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <Typography variant="subtitle2" color="textSecondary">Total Items</Typography>
+                <Typography variant="body1">{selectedSale.total_items}</Typography>
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <Typography variant="subtitle2" color="textSecondary">Sub Total</Typography>
+                <Typography variant="body1">
+                  {new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: 'LKR'
+                  }).format(selectedSale.sub_total)}
+                </Typography>
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <Typography variant="subtitle2" color="textSecondary">Total</Typography>
+                <Typography variant="body1">
+                  {new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: 'LKR'
+                  }).format(selectedSale.total)}
+                </Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2" color="textSecondary">Status</Typography>
+                <Chip
+                  size="small"
+                  label={selectedSale.status}
+                  color={getStatusColor(selectedSale.status)}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2" color="textSecondary">Payment Status</Typography>
+                <Chip
+                  size="small"
+                  label={selectedSale.payment_status}
+                  color={getPaymentStatusColor(selectedSale.payment_status)}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <Typography variant="subtitle2" color="textSecondary">Notes</Typography>
+                <Typography variant="body1">{selectedSale.notes}</Typography>
+              </Grid>
+            </Grid>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDetailsDialog}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

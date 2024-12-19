@@ -40,20 +40,36 @@ const EmployeeManagement = () => {
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
+    name: '',
+    nic: '',
     phone: '',
-    position: '',
-    department: '',
-    salary: '',
-    joiningDate: '',
     address: '',
-    status: 'active'
+    birthday: '',
+    designation_id: '',
+    employment_type: 'permanent',
+    status: 'active',
+    salary_structure_id: '',
+    bank_name: '',
+    account_number: '',
+    account_name: ''
   });
+  const [salaryStructures, setSalaryStructures] = useState([]);
 
   useEffect(() => {
     fetchEmployees();
+  }, []);
+
+  useEffect(() => {
+    const fetchSalaryStructures = async () => {
+      try {
+        const response = await axios.get('/api/payroll/structures');
+        setSalaryStructures(response.data);
+      } catch (error) {
+        console.error('Error fetching salary structures:', error);
+      }
+    };
+    
+    fetchSalaryStructures();
   }, []);
 
   const fetchEmployees = async () => {
@@ -69,30 +85,34 @@ const EmployeeManagement = () => {
     if (employee) {
       setSelectedEmployee(employee);
       setFormData({
-        firstName: employee.firstName,
-        lastName: employee.lastName,
-        email: employee.email,
+        name: employee.name,
+        nic: employee.nic,
         phone: employee.phone,
-        position: employee.position,
-        department: employee.department,
-        salary: employee.salary,
-        joiningDate: employee.joiningDate?.split('T')[0] || '',
         address: employee.address,
-        status: employee.status
+        birthday: employee.birthday?.split('T')[0] || '',
+        designation_id: employee.designation_id,
+        employment_type: employee.employment_type,
+        status: employee.status,
+        salary_structure_id: employee.salary_structure_id,
+        bank_name: employee.bank_name || '',
+        account_number: employee.account_number || '',
+        account_name: employee.account_name || ''
       });
     } else {
       setSelectedEmployee(null);
       setFormData({
-        firstName: '',
-        lastName: '',
-        email: '',
+        name: '',
+        nic: '',
         phone: '',
-        position: '',
-        department: '',
-        salary: '',
-        joiningDate: '',
         address: '',
-        status: 'active'
+        birthday: '',
+        designation_id: '',
+        employment_type: 'permanent',
+        status: 'active',
+        salary_structure_id: '',
+        bank_name: '',
+        account_number: '',
+        account_name: ''
       });
     }
     setOpenDialog(true);
@@ -113,10 +133,15 @@ const EmployeeManagement = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      const submitData = {
+        ...formData,
+        salary_structure_id: formData.salary_structure_id || null
+      };
+
       if (selectedEmployee) {
-        await axios.put(`/api/employees/${selectedEmployee._id}`, formData);
+        await axios.put(`/api/employees/${selectedEmployee.id}`, submitData);
       } else {
-        await axios.post('/api/employees', formData);
+        await axios.post('/api/employees', submitData);
       }
       fetchEmployees();
       handleCloseDialog();
@@ -263,20 +288,28 @@ const EmployeeManagement = () => {
             <TableHead>
               <TableRow>
                 <TableCell>Name</TableCell>
-                <TableCell>Email</TableCell>
-                <TableCell>Position</TableCell>
-                <TableCell>Department</TableCell>
+                <TableCell>NIC</TableCell>
+                <TableCell>Phone</TableCell>
+                <TableCell>Designation</TableCell>
+                <TableCell>Employment Type</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {employees.map((employee) => (
-                <TableRow key={employee._id} hover>
-                  <TableCell>{`${employee.firstName} ${employee.lastName}`}</TableCell>
-                  <TableCell>{employee.email}</TableCell>
-                  <TableCell>{employee.position}</TableCell>
-                  <TableCell>{employee.department}</TableCell>
+                <TableRow key={employee.id} hover>
+                  <TableCell>{employee.name}</TableCell>
+                  <TableCell>{employee.nic}</TableCell>
+                  <TableCell>{employee.phone}</TableCell>
+                  <TableCell>{employee.designation_title}</TableCell>
+                  <TableCell>
+                    <Chip
+                      label={employee.employment_type === 'permanent' ? 'Permanent' : 'Temporary'}
+                      color={employee.employment_type === 'permanent' ? 'primary' : 'default'}
+                      size="small"
+                    />
+                  </TableCell>
                   <TableCell>
                     <Chip
                       label={employee.status}
@@ -294,7 +327,7 @@ const EmployeeManagement = () => {
                     </IconButton>
                     <IconButton 
                       size="small" 
-                      onClick={() => handleDeleteEmployee(employee._id)}
+                      onClick={() => handleDeleteEmployee(employee.id)}
                       sx={{ color: 'error.main', ml: 1 }}
                     >
                       <DeleteIcon />
@@ -321,28 +354,19 @@ const EmployeeManagement = () => {
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={6}>
               <TextField
-                name="firstName"
-                label="First Name"
+                name="name"
+                label="Name"
                 fullWidth
-                value={formData.firstName}
+                value={formData.name}
                 onChange={handleInputChange}
               />
             </Grid>
             <Grid item xs={6}>
               <TextField
-                name="lastName"
-                label="Last Name"
+                name="nic"
+                label="NIC"
                 fullWidth
-                value={formData.lastName}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={6}>
-              <TextField
-                name="email"
-                label="Email"
-                fullWidth
-                value={formData.email}
+                value={formData.nic}
                 onChange={handleInputChange}
               />
             </Grid>
@@ -357,45 +381,6 @@ const EmployeeManagement = () => {
             </Grid>
             <Grid item xs={6}>
               <TextField
-                name="position"
-                label="Position"
-                fullWidth
-                value={formData.position}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={6}>
-              <TextField
-                name="department"
-                label="Department"
-                fullWidth
-                value={formData.department}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={6}>
-              <TextField
-                name="salary"
-                label="Salary"
-                type="number"
-                fullWidth
-                value={formData.salary}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={6}>
-              <TextField
-                name="joiningDate"
-                label="Joining Date"
-                type="date"
-                fullWidth
-                InputLabelProps={{ shrink: true }}
-                value={formData.joiningDate}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
                 name="address"
                 label="Address"
                 fullWidth
@@ -404,6 +389,80 @@ const EmployeeManagement = () => {
                 value={formData.address}
                 onChange={handleInputChange}
               />
+            </Grid>
+            <Grid item xs={6}>
+              <TextField
+                name="birthday"
+                label="Birthday"
+                type="date"
+                fullWidth
+                InputLabelProps={{ shrink: true }}
+                value={formData.birthday}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={6}>
+              <TextField
+                name="designation_id"
+                label="Designation"
+                fullWidth
+                value={formData.designation_id}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={6}>
+              <TextField
+                name="employment_type"
+                label="Employment Type"
+                fullWidth
+                value={formData.employment_type}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={6}>
+              <TextField
+                name="bank_name"
+                label="Bank Name"
+                fullWidth
+                value={formData.bank_name}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={6}>
+              <TextField
+                name="account_number"
+                label="Account Number"
+                fullWidth
+                value={formData.account_number}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={6}>
+              <TextField
+                name="account_name"
+                label="Account Name"
+                fullWidth
+                value={formData.account_name}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={6}>
+              <FormControl fullWidth>
+                <InputLabel>Salary Structure</InputLabel>
+                <Select
+                  name="salary_structure_id"
+                  value={formData.salary_structure_id}
+                  label="Salary Structure"
+                  onChange={handleInputChange}
+                >
+                  <MenuItem value="">None</MenuItem>
+                  {salaryStructures.map((structure) => (
+                    <MenuItem key={structure.id} value={structure.id}>
+                      {structure.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             </Grid>
             <Grid item xs={12}>
               <FormControl fullWidth>

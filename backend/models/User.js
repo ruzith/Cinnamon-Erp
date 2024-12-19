@@ -8,7 +8,7 @@ class User extends BaseModel {
 
   async findAll() {
     const [rows] = await this.pool.execute(
-      'SELECT id, name, email, role FROM users'
+      'SELECT id, name, email, role, department, status FROM users'
     );
     return rows;
   }
@@ -23,7 +23,7 @@ class User extends BaseModel {
 
   async findById(id) {
     const [rows] = await this.pool.execute(
-      'SELECT id, name, email, role FROM users WHERE id = ?',
+      'SELECT id, name, email, role, department, status FROM users WHERE id = ?',
       [id]
     );
     return rows[0];
@@ -37,10 +37,16 @@ class User extends BaseModel {
     const validRoles = ['admin', 'staff', 'accountant', 'manager'];
     const role = validRoles.includes(data.role) ? data.role : 'staff';
 
+    // Set default status to 'active' if not provided or invalid
+    const validStatuses = ['active', 'inactive'];
+    const status = validStatuses.includes(data.status) ? data.status : 'active';
+
     return super.create({
       ...otherData,
       password_hash: hashedPassword,
-      role
+      role,
+      status,
+      department: data.department || null
     });
   }
 
@@ -65,9 +71,21 @@ class User extends BaseModel {
       data.role = validRoles.includes(data.role) ? data.role : 'staff';
     }
 
+    // Validate status if it's being updated
+    if (data.status) {
+      const validStatuses = ['active', 'inactive'];
+      data.status = validStatuses.includes(data.status) ? data.status : 'active';
+    }
+
+    // Fix: Use proper MySQL query format
+    const keys = Object.keys(data);
+    const values = Object.values(data);
+    
+    const setClause = keys.map(key => `${key} = ?`).join(', ');
+    
     await this.pool.execute(
-      'UPDATE users SET ? WHERE id = ?',
-      [data, id]
+      `UPDATE users SET ${setClause} WHERE id = ?`,
+      [...values, id]
     );
     
     return this.findById(id);

@@ -74,7 +74,7 @@ export const loanSlice = createSlice({
       .addCase(recordPayment.fulfilled, (state, action) => {
         state.payments.unshift(action.payload);
         // Update loan status if needed
-        const loan = state.loans.find(l => l._id === action.payload.loan._id);
+        const loan = state.loans.find(l => l.id === action.payload.loan.id);
         if (loan) {
           loan.status = action.payload.loan.status;
           loan.remainingBalance = action.payload.loan.remainingBalance;

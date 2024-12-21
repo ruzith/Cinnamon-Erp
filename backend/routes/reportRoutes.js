@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const { protect } = require('../middleware/authMiddleware');
-const Report = require('../models/Report');
-const Transaction = require('../models/Transaction');
-const Account = require('../models/Account');
+const Report = require('../models/domain/Report');
+const Transaction = require('../models/domain/Transaction');
+const Account = require('../models/domain/Account');
 const { authorize } = require('../middleware/authMiddleware');
 const reportTemplates = require('../data/reportTemplates');
 const { pool } = require('../config/db');

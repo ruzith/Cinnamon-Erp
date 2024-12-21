@@ -1,4 +1,4 @@
-const Employee = require('../models/Employee');
+const Employee = require('../models/domain/Employee');
 const { validateEmployee } = require('../validators/employeeValidator');
 
 // @desc    Get all employees

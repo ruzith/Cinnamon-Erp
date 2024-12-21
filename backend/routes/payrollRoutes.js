@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/authMiddleware');
-const SalaryStructure = require('../models/SalaryStructure');
-const Payroll = require('../models/Payroll');
-const Employee = require('../models/Employee');
+const SalaryStructure = require('../models/domain/SalaryStructure');
+const Payroll = require('../models/domain/Payroll');
+const Employee = require('../models/domain/Employee');
 
 // Salary Structure routes
 router.get('/structures', protect, async (req, res) => {

@@ -1,4 +1,4 @@
-const Settings = require('../models/Settings');
+const Settings = require('../models/domain/Settings');
 const { validateSettings } = require('../validators/settingsValidator');
 const { pool } = require('../config/db');
 const fs = require('fs');

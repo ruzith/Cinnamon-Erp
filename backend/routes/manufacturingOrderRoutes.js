@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/authMiddleware');
-const ManufacturingOrder = require('../models/ManufacturingOrder');
+const ManufacturingOrder = require('../models/domain/ManufacturingOrder');
 const { validateOrder } = require('../validators/manufacturingValidator');
 
 // Get all manufacturing orders

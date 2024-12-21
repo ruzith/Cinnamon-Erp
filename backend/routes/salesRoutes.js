@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/authMiddleware');
-const SalesInvoice = require('../models/SalesInvoice');
-const Inventory = require('../models/Inventory');
+const SalesInvoice = require('../models/domain/SalesInvoice');
+const Inventory = require('../models/domain/Inventory');
 const { validateSalesInvoice } = require('../validators/salesValidator');
 const PDFDocument = require('pdfkit');
 

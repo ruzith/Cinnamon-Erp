@@ -1,4 +1,4 @@
-const Inventory = require('../models/Inventory');
+const Inventory = require('../models/domain/Inventory');
 const { validateInventory, validateTransaction } = require('../validators/inventoryValidator');
 
 // @desc    Get all inventory items

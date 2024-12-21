@@ -1,12 +1,13 @@
-const Product = require('../models/Product');
+const Product = require('../models/domain/Product');
 const { validateProduct } = require('../validators/productValidator');
+const { pool } = require('../config/db');
 
 // @desc    Get all products
 // @route   GET /api/products
 // @access  Private
 exports.getProducts = async (req, res) => {
   try {
-    const [rows] = await Product.pool.execute(`
+    const [rows] = await pool.execute(`
       SELECT p.*, pc.name as category_name 
       FROM products p
       LEFT JOIN product_categories pc ON p.category_id = pc.id
@@ -23,7 +24,7 @@ exports.getProducts = async (req, res) => {
 // @access  Private
 exports.getProduct = async (req, res) => {
   try {
-    const [rows] = await Product.pool.execute(`
+    const [rows] = await pool.execute(`
       SELECT p.*, pc.name as category_name 
       FROM products p
       LEFT JOIN product_categories pc ON p.category_id = pc.id
@@ -49,12 +50,12 @@ exports.createProduct = async (req, res) => {
       return res.status(400).json({ message: error.details[0].message });
     }
 
-    const [result] = await Product.pool.execute(
+    const [result] = await pool.execute(
       'INSERT INTO products SET ?',
       [req.body]
     );
     
-    const [product] = await Product.pool.execute(`
+    const [product] = await pool.execute(`
       SELECT p.*, pc.name as category_name 
       FROM products p
       LEFT JOIN product_categories pc ON p.category_id = pc.id
@@ -77,7 +78,7 @@ exports.updateProduct = async (req, res) => {
       return res.status(400).json({ message: error.details[0].message });
     }
 
-    const [result] = await Product.pool.execute(
+    const [result] = await pool.execute(
       'UPDATE products SET ? WHERE id = ?',
       [req.body, req.params.id]
     );
@@ -86,7 +87,7 @@ exports.updateProduct = async (req, res) => {
       return res.status(404).json({ message: 'Product not found' });
     }
 
-    const [product] = await Product.pool.execute(`
+    const [product] = await pool.execute(`
       SELECT p.*, pc.name as category_name 
       FROM products p
       LEFT JOIN product_categories pc ON p.category_id = pc.id
@@ -104,7 +105,7 @@ exports.updateProduct = async (req, res) => {
 // @access  Private/Admin
 exports.deleteProduct = async (req, res) => {
   try {
-    const [result] = await Product.pool.execute(
+    const [result] = await pool.execute(
       'DELETE FROM products WHERE id = ?',
       [req.params.id]
     );

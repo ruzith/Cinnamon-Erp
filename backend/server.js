@@ -1,80 +1,62 @@
-const express = require('express');
 const dotenv = require('dotenv');
-const cors = require('cors');
 const { connectDB } = require('./config/db');
-const { errorHandler, notFound } = require('./middleware/errorMiddleware');
-const userRoutes = require('./routes/userRoutes')
-const settingsRoutes = require('./routes/settingsRoutes');
-const Report = require('./models/Report');
-const productRoutes = require('./routes/productRoutes');
-const payrollRoutes = require('./routes/payrollRoutes');
-const purchaseRoutes = require('./routes/purchaseRoutes');
-const reportRoutes = require('./routes/reportRoutes');
-const path = require('path');
-const currencyRoutes = require('./routes/currencyRoutes');
+const app = require('./app');
+const Report = require('./models/domain/Report');
 
-// Load env vars
+// Load environment variables
 dotenv.config();
 
-// Connect to database
-connectDB().then(async () => {
+// Initialize server
+const PORT = process.env.PORT || 5001;
+let server;
+
+// Database and Server initialization
+const initializeServer = async () => {
   try {
+    // Connect to database
+    await connectDB();
+    
+    // Initialize report templates
     await Report.initializeTemplates();
     console.log('Report templates initialized');
+
+    // Start server
+    server = app.listen(PORT, () => {
+      console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+    });
+
+    // Handle unhandled promise rejections
+    process.on('unhandledRejection', (err) => {
+      console.log('Unhandled Rejection:', err.message);
+      // Gracefully close server & exit process
+      shutdownServer();
+    });
+
+    // Handle uncaught exceptions
+    process.on('uncaughtException', (err) => {
+      console.log('Uncaught Exception:', err.message);
+      // Gracefully close server & exit process
+      shutdownServer();
+    });
+
   } catch (error) {
-    console.error('Error initializing report templates:', error);
+    console.error('Server initialization failed:', error);
+    process.exit(1);
   }
-});
+};
 
-const app = express();
+// Graceful shutdown function
+const shutdownServer = () => {
+  console.log('Shutting down server...');
+  if (server) {
+    server.close(() => {
+      console.log('Server closed');
+      process.exit(1);
+    });
+  } else {
+    process.exit(1);
+  }
+};
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// Routes
-app.use('/api/lands', require('./routes/landRoutes'));
-app.use('/api/users', userRoutes);
-app.use('/api/employees', require('./routes/employeeRoutes'));
-app.use('/api/designations', require('./routes/designationRoutes'));
-app.use('/api/manufacturing', require('./routes/manufacturingRoutes'));
-app.use('/api/cutting', require('./routes/cuttingRoutes'));
-app.use('/api/inventory', require('./routes/inventoryRoutes'));
-app.use('/api/sales', require('./routes/salesRoutes'));
-app.use('/api/assets', require('./routes/assetRoutes'));
-app.use('/api/accounting', require('./routes/accountingRoutes'));
-app.use('/api/loans', require('./routes/loanRoutes'));
-app.use('/api/reports', reportRoutes);
-app.use('/api/tasks', require('./routes/taskRoutes'));
-app.use('/api/manufacturing-orders', require('./routes/manufacturingOrderRoutes'));
-app.use('/api/customers', require('./routes/customerRoutes'));
-app.use('/api/settings', settingsRoutes);
-app.use('/api/products', productRoutes);
-app.use('/api/payroll', payrollRoutes);
-app.use('/api/purchases', purchaseRoutes);
-app.use('/api/currencies', currencyRoutes);
-
-// Error Handling middlewares
-app.use(notFound);
-app.use(errorHandler);
-
-const PORT = process.env.PORT || 5001;
-
-const server = app.listen(PORT, () => {
-  console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
-});
-
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err) => {
-  console.log(`Error: ${err.message}`);
-  // Close server & exit process
-  server.close(() => process.exit(1));
-});
-
-// Handle uncaught exceptions
-process.on('uncaughtException', (err) => {
-  console.log(`Error: ${err.message}`);
-  // Close server & exit process
-  process.exit(1);
-}); 
+// Initialize the server
+initializeServer(); 

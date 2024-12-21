@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/authMiddleware');
-const Asset = require('../models/Asset');
-const AssetCategory = require('../models/AssetCategory');
-const AssetMaintenance = require('../models/AssetMaintenance');
+const Asset = require('../models/domain/Asset');
+const AssetCategory = require('../models/domain/AssetCategory');
+const AssetMaintenance = require('../models/domain/AssetMaintenance');
 
 // Category routes
 router.get('/categories', protect, async (req, res) => {

@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/authMiddleware');
-const Loan = require('../models/Loan');
-const LoanPayment = require('../models/LoanPayment');
+const Loan = require('../models/domain/Loan');
+const LoanPayment = require('../models/domain/LoanPayment');
 
 // Get all loans
 router.get('/', protect, async (req, res) => {

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/authMiddleware');
-const Task = require('../models/Task');
+const Task = require('../models/domain/Task');
 
 // Get all tasks
 router.get('/', protect, async (req, res) => {

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/authMiddleware');
-const Customer = require('../models/Customer');
+const Customer = require('../models/domain/Customer');
 
 // Get all customers
 router.get('/', protect, async (req, res) => {

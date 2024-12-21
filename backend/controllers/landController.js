@@ -1,4 +1,4 @@
-const Land = require('../models/Land');
+const Land = require('../models/domain/Land');
 const { validateLand } = require('../validators/landValidator');
 
 // @desc    Get all lands

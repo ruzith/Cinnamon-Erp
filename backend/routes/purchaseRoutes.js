@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/authMiddleware');
-const Grade = require('../models/Grade');
-const PurchaseInvoice = require('../models/PurchaseInvoice');
-const CuttingPayment = require('../models/CuttingPayment');
-const AdvancePayment = require('../models/AdvancePayment');
+const Grade = require('../models/domain/Grade');
+const PurchaseInvoice = require('../models/domain/PurchaseInvoice');
+const CuttingPayment = require('../models/domain/CuttingPayment');
+const AdvancePayment = require('../models/domain/AdvancePayment');
 
 // Grade routes
 router.get('/grades', protect, async (req, res) => {

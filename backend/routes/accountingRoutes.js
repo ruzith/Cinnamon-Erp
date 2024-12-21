@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/authMiddleware');
-const Account = require('../models/Account');
-const Transaction = require('../models/Transaction');
+const Account = require('../models/domain/Account');
+const Transaction = require('../models/domain/Transaction');
 const ExcelJS = require('exceljs');
 
 // Account routes

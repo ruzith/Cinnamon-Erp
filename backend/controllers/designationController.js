@@ -1,4 +1,4 @@
-const Designation = require('../models/Designation');
+const Designation = require('../models/domain/Designation');
 const { validateDesignation } = require('../validators/designationValidator');
 
 // @desc    Get all designations

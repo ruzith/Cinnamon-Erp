@@ -1,4 +1,4 @@
-const CuttingContractor = require('../models/CuttingContractor');
+const CuttingContractor = require('../models/domain/CuttingContractor');
 const { validateContractor, validateAssignment } = require('../validators/cuttingValidator');
 
 // @desc    Get all contractors

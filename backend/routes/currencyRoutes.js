@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/authMiddleware');
-const Currency = require('../models/Currency');
+const Currency = require('../models/domain/Currency');
 
 // Get all currencies
 router.get('/', protect, async (req, res) => {

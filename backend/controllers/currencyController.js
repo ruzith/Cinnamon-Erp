@@ -1,4 +1,4 @@
-const Currency = require('../models/Currency');
+const Currency = require('../models/domain/Currency');
 
 exports.getAllCurrencies = async (req, res) => {
   try {

@@ -1,8 +1,8 @@
-const ManufacturingContractor = require('../models/ManufacturingContractor');
+const ManufacturingContractor = require('../models/domain/ManufacturingContractor');
 const { validateContractor, validateAssignment, validateAdvancePayment } = require('../validators/manufacturingValidator');
-const pool = require('../config/database');
-const ManufacturingOrder = require('../models/ManufacturingOrder');
-const Inventory = require('../models/Inventory');
+const { pool } = require('../config/db');
+const ManufacturingOrder = require('../models/domain/ManufacturingOrder');
+const Inventory = require('../models/domain/Inventory');
 
 // @desc    Get all contractors
 // @route   GET /api/manufacturing/contractors

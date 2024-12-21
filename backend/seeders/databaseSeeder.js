@@ -508,23 +508,39 @@ const generateTransactions = async (connection, count = 50) => {
   const [leases] = await connection.query('SELECT id FROM leases');
   const [users] = await connection.query('SELECT id FROM users WHERE role = "admin"');
   
-  return Array.from({ length: count }, () => {
-    const date = faker.date.past({ years: 1 });
-    const type = faker.helpers.arrayElement(['revenue', 'expense']);
+  const transactions = [];
+  
+  // Generate some transactions for each month in the last 6 months
+  const today = new Date();
+  for (let i = 0; i < 6; i++) {
+    const month = new Date(today.getFullYear(), today.getMonth() - i, 1);
     
-    return {
-      reference: `TRX-${faker.string.alphanumeric(8).toUpperCase()}`,
-      date: date.toISOString().split('T')[0],
-      type: type,
-      amount: faker.number.float({ min: 1000, max: 50000, multipleOf: 0.01 }),
-      category: faker.helpers.arrayElement(['production', 'maintenance', 'royalty', 'lease']),
-      description: faker.lorem.sentence(),
-      well_id: faker.helpers.arrayElement(wells).id,
-      lease_id: faker.helpers.arrayElement(leases).id,
-      created_by: users[0].id,
-      status: faker.helpers.arrayElement(['draft', 'posted', 'void'])
-    };
-  });
+    // Generate 8-12 transactions per month
+    const monthlyTransactions = Array.from(
+      { length: faker.number.int({ min: 8, max: 12 }) },
+      () => {
+        const date = new Date(month.getFullYear(), month.getMonth(), 
+          faker.number.int({ min: 1, max: 28 }));
+        
+        return {
+          reference: `TRX-${faker.string.alphanumeric(8).toUpperCase()}`,
+          date: date.toISOString().split('T')[0],
+          type: 'revenue',  // Set all to revenue for dashboard demo
+          amount: faker.number.float({ min: 1000, max: 50000, multipleOf: 0.01 }),
+          category: faker.helpers.arrayElement(['production', 'maintenance', 'royalty', 'lease']),
+          description: faker.lorem.sentence(),
+          well_id: faker.helpers.arrayElement(wells).id,
+          lease_id: faker.helpers.arrayElement(leases).id,
+          created_by: users[0].id,
+          status: 'posted'  // Set all to posted for dashboard demo
+        };
+      }
+    );
+    
+    transactions.push(...monthlyTransactions);
+  }
+  
+  return transactions;
 };
 
 // Helper function to generate transaction entries
@@ -1149,6 +1165,42 @@ const generateDesignations = () => [
   }
 ];
 
+// Add this helper function after generateAccounts
+const generateMonthlyTargets = async (connection) => {
+  const [users] = await connection.query('SELECT id FROM users WHERE role = "admin"');
+  const targets = [];
+  
+  // Generate targets for the current year
+  const currentYear = new Date().getFullYear();
+  
+  // Different target amounts for different months to make it more realistic
+  const targetAmounts = {
+    1: 28000,  // January
+    2: 30000,  // February
+    3: 35000,  // March
+    4: 32000,  // April
+    5: 34000,  // May
+    6: 38000,  // June
+    7: 36000,  // July
+    8: 35000,  // August
+    9: 37000,  // September
+    10: 40000, // October
+    11: 42000, // November
+    12: 45000  // December
+  };
+
+  // Generate target for each month
+  for (let month = 1; month <= 12; month++) {
+    targets.push({
+      period: `${currentYear}-${month.toString().padStart(2, '0')}-01`,
+      target_amount: targetAmounts[month],
+      created_by: users[0].id
+    });
+  }
+
+  return targets;
+};
+
 const seedData = async () => {
   const connection = await pool.getConnection();
   
@@ -1169,7 +1221,7 @@ const seedData = async () => {
       'land_assignments', 'cutting_contractors', 'manufacturing_contractors',
       'wells', 'leases', 'lands', 'employees', 'salary_structures',
       'designations', 'products', 'product_categories', 'tasks',
-      'customers', 'accounts', 'settings', 'users'
+      'customers', 'accounts', 'monthly_targets', 'settings', 'users'
     ];
     
     for (const table of tables) {
@@ -1458,6 +1510,13 @@ const seedData = async () => {
     const accounts = generateAccounts();
     for (const account of accounts) {
       await connection.query('INSERT INTO accounts SET ?', account);
+    }
+
+    // Seed monthly targets
+    console.log('Seeding monthly targets...');
+    const monthlyTargets = await generateMonthlyTargets(connection);
+    for (const target of monthlyTargets) {
+      await connection.query('INSERT INTO monthly_targets SET ?', target);
     }
 
     // Seed customers

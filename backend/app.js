@@ -24,6 +24,7 @@ const productRoutes = require('./routes/productRoutes');
 const payrollRoutes = require('./routes/payrollRoutes');
 const purchaseRoutes = require('./routes/purchaseRoutes');
 const currencyRoutes = require('./routes/currencyRoutes');
+const dashboardRoutes = require('./routes/dashboardRoutes');
 
 const app = express();
 
@@ -55,6 +56,7 @@ app.use(`${API_PREFIX}/products`, productRoutes);
 app.use(`${API_PREFIX}/payroll`, payrollRoutes);
 app.use(`${API_PREFIX}/purchases`, purchaseRoutes);
 app.use(`${API_PREFIX}/currencies`, currencyRoutes);
+app.use(`${API_PREFIX}/dashboard`, dashboardRoutes);
 
 // Error handling middleware
 app.use(notFound);

@@ -42,6 +42,7 @@ DROP TABLE IF EXISTS accounts;
 DROP TABLE IF EXISTS wells;
 DROP TABLE IF EXISTS leases;
 DROP TABLE IF EXISTS lands;
+DROP TABLE IF EXISTS monthly_targets;
 DROP TABLE IF EXISTS settings;
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS currencies;
@@ -765,5 +766,27 @@ CREATE TABLE manufacturing_materials (
   FOREIGN KEY (order_id) REFERENCES manufacturing_orders(id),
   FOREIGN KEY (material_id) REFERENCES inventory(id)
 );
+
+-- Monthly Targets table
+CREATE TABLE monthly_targets (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  period DATE NOT NULL,
+  target_amount DECIMAL(15,2) NOT NULL DEFAULT 30000.00,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  created_by INT,
+  FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+-- Insert default targets for the current year
+INSERT INTO monthly_targets (period, target_amount)
+SELECT 
+  DATE(CONCAT(YEAR(CURRENT_DATE()), '-', LPAD(month.num, 2, '0'), '-01')),
+  30000.00
+FROM (
+  SELECT 1 as num UNION SELECT 2 UNION SELECT 3 UNION SELECT 4
+  UNION SELECT 5 UNION SELECT 6 UNION SELECT 7 UNION SELECT 8
+  UNION SELECT 9 UNION SELECT 10 UNION SELECT 11 UNION SELECT 12
+) as month;
 
 

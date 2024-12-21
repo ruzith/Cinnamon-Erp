@@ -3,11 +3,10 @@ import reportService from './reportService';
 import reportTemplates from '../../data/reportTemplates';
 
 const initialState = {
-  templates: reportTemplates || [],
+  templates: [],
   currentReport: null,
-  isError: false,
-  isSuccess: false,
   isLoading: false,
+  isError: false,
   message: ''
 };
 

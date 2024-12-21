@@ -9,6 +9,9 @@ const Report = require('./models/Report');
 const productRoutes = require('./routes/productRoutes');
 const payrollRoutes = require('./routes/payrollRoutes');
 const purchaseRoutes = require('./routes/purchaseRoutes');
+const reportRoutes = require('./routes/reportRoutes');
+const path = require('path');
+const currencyRoutes = require('./routes/currencyRoutes');
 
 // Load env vars
 dotenv.config();
@@ -28,7 +31,7 @@ const app = express();
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static('uploads'));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Routes
 app.use('/api/lands', require('./routes/landRoutes'));
@@ -42,7 +45,7 @@ app.use('/api/sales', require('./routes/salesRoutes'));
 app.use('/api/assets', require('./routes/assetRoutes'));
 app.use('/api/accounting', require('./routes/accountingRoutes'));
 app.use('/api/loans', require('./routes/loanRoutes'));
-app.use('/api/reports', require('./routes/reportRoutes'));
+app.use('/api/reports', reportRoutes);
 app.use('/api/tasks', require('./routes/taskRoutes'));
 app.use('/api/manufacturing-orders', require('./routes/manufacturingOrderRoutes'));
 app.use('/api/customers', require('./routes/customerRoutes'));
@@ -50,6 +53,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/payroll', payrollRoutes);
 app.use('/api/purchases', purchaseRoutes);
+app.use('/api/currencies', currencyRoutes);
 
 // Error Handling middlewares
 app.use(notFound);

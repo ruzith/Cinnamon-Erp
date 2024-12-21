@@ -1,7 +1,7 @@
 const Settings = require('../models/Settings');
-const Currency = require('../models/Currency');
-const { validateSettings, validateCurrency } = require('../validators/settingsValidator');
+const { validateSettings } = require('../validators/settingsValidator');
 const { pool } = require('../config/db');
+const fs = require('fs');
 
 // @desc    Get settings
 // @route   GET /api/settings
@@ -20,15 +20,88 @@ exports.getSettings = async (req, res) => {
 // @access  Private/Admin
 exports.updateSettings = async (req, res) => {
   try {
-    const { error } = validateSettings(req.body);
+    // Create a clean settings object with only allowed fields
+    const settingsData = {
+      company_name: req.body.companyName,
+      company_address: req.body.companyAddress,
+      company_phone: req.body.companyPhone,
+      vat_number: req.body.vatNumber,
+      tax_number: req.body.taxNumber,
+      language: req.body.defaultLanguage,
+      time_zone: req.body.timeZone,
+      default_currency: req.body.defaultCurrency,
+      email_notifications: req.body.emailNotifications,
+      low_stock_alerts: req.body.lowStockAlerts,
+      payment_reminders: req.body.paymentReminders,
+      task_deadlines: req.body.taskDeadlines,
+      maintenance_alerts: req.body.maintenanceAlerts,
+      loan_due_alerts: req.body.loanDueAlerts,
+      auto_backup: req.body.autoBackup,
+      backup_frequency: req.body.backupFrequency,
+      retention_period: req.body.retentionPeriod,
+      backup_location: req.body.backupLocation
+    };
+    
+    // Handle file upload if present
+    if (req.file) {
+      settingsData.logo_url = `/uploads/${req.file.filename}`;
+    }
+
+    // Convert boolean strings to actual booleans
+    const booleanFields = [
+      'email_notifications',
+      'low_stock_alerts',
+      'payment_reminders',
+      'task_deadlines',
+      'maintenance_alerts',
+      'loan_due_alerts',
+      'auto_backup'
+    ];
+
+    booleanFields.forEach(field => {
+      if (field in settingsData) {
+        settingsData[field] = settingsData[field] === 'true' || settingsData[field] === true;
+      }
+    });
+
+    // Remove undefined fields
+    Object.keys(settingsData).forEach(key => 
+      settingsData[key] === undefined && delete settingsData[key]
+    );
+
+    // Validate timezone format
+    const validTimezones = [
+      'Asia/Colombo',
+      'Asia/Kolkata',
+      'Asia/Dubai',
+      'Asia/Singapore',
+      'Europe/London',
+      'America/New_York',
+      'Pacific/Auckland'
+    ];
+
+    if (settingsData.time_zone && !validTimezones.includes(settingsData.time_zone)) {
+      return res.status(400).json({ message: 'Invalid timezone' });
+    }
+
+    // Validate settings
+    const { error } = validateSettings(settingsData);
     if (error) {
+      // If there was a file upload, delete it since validation failed
+      if (req.file) {
+        fs.unlinkSync(req.file.path);
+      }
       return res.status(400).json({ message: error.details[0].message });
     }
 
-    const settings = await Settings.updateSettings(req.body);
+    const settings = await Settings.updateSettings(settingsData);
     res.status(200).json(settings);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    // If there was a file upload, delete it since an error occurred
+    if (req.file) {
+      fs.unlinkSync(req.file.path);
+    }
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -59,101 +132,6 @@ exports.updateSetting = async (req, res) => {
 
     const setting = await Settings.updateSetting(req.params.key, value);
     res.status(200).json(setting);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-};
-
-// @desc    Get all currencies
-// @route   GET /api/settings/currencies
-// @access  Private
-exports.getCurrencies = async (req, res) => {
-  try {
-    const currencies = await Currency.getActiveCurrencies();
-    res.status(200).json(currencies);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// @desc    Add new currency
-// @route   POST /api/settings/currencies
-// @access  Private/Admin
-exports.addCurrency = async (req, res) => {
-  try {
-    const { error } = validateCurrency(req.body);
-    if (error) {
-      return res.status(400).json({ message: error.details[0].message });
-    }
-
-    const connection = await pool.getConnection();
-    try {
-      await connection.beginTransaction();
-
-      const currency = await Currency.create(req.body);
-
-      // If this is the first currency, set it as default in settings
-      const settings = await Settings.getSettings();
-      if (!settings.default_currency) {
-        await Settings.updateSetting('default_currency', currency.code);
-      }
-
-      await connection.commit();
-      res.status(201).json(currency);
-    } catch (err) {
-      await connection.rollback();
-      throw err;
-    } finally {
-      connection.release();
-    }
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-};
-
-// @desc    Edit currency
-// @route   PUT /api/settings/currencies/:code
-// @access  Private/Admin
-exports.editCurrency = async (req, res) => {
-  try {
-    const { error } = validateCurrency(req.body);
-    if (error) {
-      return res.status(400).json({ message: error.details[0].message });
-    }
-
-    const currency = await Currency.findByCode(req.params.code);
-    if (!currency) {
-      return res.status(404).json({ message: 'Currency not found' });
-    }
-
-    const updated = await Currency.update(currency.id, {
-      ...req.body,
-      code: req.params.code // Don't allow code to be changed
-    });
-
-    res.status(200).json(updated);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-};
-
-// @desc    Delete currency
-// @route   DELETE /api/settings/currencies/:code
-// @access  Private/Admin
-exports.deleteCurrency = async (req, res) => {
-  try {
-    const settings = await Settings.getSettings();
-    if (settings.default_currency === req.params.code) {
-      return res.status(400).json({ message: 'Cannot delete default currency' });
-    }
-
-    const currency = await Currency.findByCode(req.params.code);
-    if (!currency) {
-      return res.status(404).json({ message: 'Currency not found' });
-    }
-
-    await Currency.update(currency.id, { status: 'inactive' });
-    res.status(200).json({ message: 'Currency deleted successfully' });
   } catch (error) {
     res.status(400).json({ message: error.message });
   }

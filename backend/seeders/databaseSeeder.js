@@ -3,14 +3,6 @@ const bcrypt = require('bcryptjs');
 const { faker } = require('@faker-js/faker');
 require('dotenv').config();
 
-// Helper function to generate currencies
-const generateCurrencies = () => [
-  { code: 'USD', name: 'US Dollar', symbol: '$', rate: 1.0000 },
-  { code: 'EUR', name: 'Euro', symbol: '€', rate: 0.8500 },
-  { code: 'GBP', name: 'British Pound', symbol: '£', rate: 0.7300 },
-  { code: 'LKR', name: 'Sri Lankan Rupee', symbol: 'Rs', rate: 320.5000 }
-];
-
 // Helper function to generate product categories
 const generateProductCategories = () => [
   { name: 'Cinnamon Quills', description: 'Premium quality cinnamon quills' },
@@ -223,6 +215,10 @@ const generateManufacturingOrders = async (connection, count = 15) => {
   return Array.from({ length: count }, () => {
     const startDate = faker.date.past({ years: 1 });
     const endDate = faker.date.future({ years: 1, refDate: startDate });
+    const status = faker.helpers.arrayElement(['planned', 'in_progress', 'completed', 'cancelled']);
+    
+    // Only generate production metrics for completed orders
+    const isCompleted = status === 'completed';
     
     return {
       order_number: `MO-${faker.string.alphanumeric(8).toUpperCase()}`,
@@ -230,11 +226,20 @@ const generateManufacturingOrders = async (connection, count = 15) => {
       quantity: faker.number.int({ min: 100, max: 5000 }),
       start_date: startDate.toISOString().split('T')[0],
       end_date: endDate.toISOString().split('T')[0],
-      status: faker.helpers.arrayElement(['planned', 'in_progress', 'completed', 'cancelled']),
+      status: status,
       priority: faker.helpers.arrayElement(['low', 'normal', 'high', 'urgent']),
       notes: faker.lorem.sentence(),
       assigned_to: faker.helpers.arrayElement(managers).id,
-      created_by: managers[0].id
+      created_by: managers[0].id,
+      // Add new fields with realistic values for completed orders
+      defect_rate: isCompleted ? faker.number.float({ min: 0, max: 15, multipleOf: 0.01 }) : 0,
+      efficiency: isCompleted ? faker.number.float({ min: 0.5, max: 1, multipleOf: 0.01 }) : 0,
+      downtime_hours: isCompleted ? faker.number.float({ min: 0, max: 24, multipleOf: 0.5 }) : 0,
+      cost_per_unit: isCompleted ? faker.number.float({ min: 50, max: 200, multipleOf: 0.01 }) : 0,
+      production_date: isCompleted ? faker.date.between({
+        from: startDate,
+        to: endDate
+      }).toISOString().split('T')[0] : null
     };
   });
 };
@@ -1164,7 +1169,7 @@ const seedData = async () => {
       'land_assignments', 'cutting_contractors', 'manufacturing_contractors',
       'wells', 'leases', 'lands', 'employees', 'salary_structures',
       'designations', 'products', 'product_categories', 'tasks',
-      'customers', 'accounts', 'settings', 'users', 'currencies'
+      'customers', 'accounts', 'settings', 'users'
     ];
     
     for (const table of tables) {
@@ -1172,13 +1177,6 @@ const seedData = async () => {
     }
     await connection.query('SET FOREIGN_KEY_CHECKS = 1');
     
-    // Seed currencies
-    console.log('Seeding currencies...');
-    const currencies = generateCurrencies();
-    for (const currency of currencies) {
-      await connection.query('INSERT INTO currencies SET ?', currency);
-    }
-
     // Create admin user
     console.log('Creating admin user...');
     const hashedPassword = await bcrypt.hash('admin123', 10);
@@ -1196,14 +1194,60 @@ const seedData = async () => {
 
     // Seed settings
     console.log('Seeding settings...');
+    // First create default currency
+    const defaultCurrency = {
+      code: 'LKR',
+      name: 'Sri Lankan Rupee',
+      symbol: 'Rs.',
+      rate: 1.000000,
+      status: 'active'
+    };
+    
+    const [currencyResult] = await connection.query(
+      'INSERT INTO currencies SET ?',
+      defaultCurrency
+    );
+    
+    // Then create settings with the default currency
     await connection.query('INSERT INTO settings SET ?', {
       company_name: 'Ceylon Cinnamon Co.',
       company_address: '123 Spice Road, Colombo, Sri Lanka',
       company_phone: '+94 11 234 5678',
       vat_number: 'VAT123456789',
       tax_number: 'TAX987654321',
-      default_currency: 'LKR'
+      default_currency: currencyResult.insertId,
+      time_zone: 'Asia/Colombo',
+      language: 'en'
     });
+
+    // Add more currencies
+    const additionalCurrencies = [
+      {
+        code: 'USD',
+        name: 'US Dollar',
+        symbol: '$',
+        rate: 0.003100,
+        status: 'active'
+      },
+      {
+        code: 'EUR',
+        name: 'Euro',
+        symbol: '€',
+        rate: 0.002800,
+        status: 'active'
+      },
+      {
+        code: 'GBP',
+        name: 'British Pound',
+        symbol: '£',
+        rate: 0.002400,
+        status: 'active'
+      }
+    ];
+    
+    for (const currency of additionalCurrencies) {
+      await connection.query('INSERT INTO currencies SET ?', currency);
+    }
 
     // Seed product categories
     console.log('Seeding product categories...');

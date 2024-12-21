@@ -23,42 +23,9 @@ const updateSettings = async (data, token) => {
   return response.data;
 };
 
-const addCurrency = async (data, token) => {
-  const config = {
-    headers: {
-      Authorization: `Bearer ${token}`
-    }
-  };
-  const response = await axios.post(API_URL + 'currencies', data, config);
-  return response.data;
-};
-
-const editCurrency = async (data, token) => {
-  const config = {
-    headers: {
-      Authorization: `Bearer ${token}`
-    }
-  };
-  const response = await axios.put(API_URL + `currencies/${data.code}`, data, config);
-  return response.data;
-};
-
-const deleteCurrency = async (code, token) => {
-  const config = {
-    headers: {
-      Authorization: `Bearer ${token}`
-    }
-  };
-  const response = await axios.delete(API_URL + `currencies/${code}`, config);
-  return response.data;
-};
-
 const settingsService = {
   getSettings,
-  updateSettings,
-  addCurrency,
-  editCurrency,
-  deleteCurrency
+  updateSettings
 };
 
 export default settingsService; 

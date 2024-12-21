@@ -2,8 +2,6 @@
 DROP TABLE IF EXISTS payroll_components;
 DROP TABLE IF EXISTS payroll_items;
 DROP TABLE IF EXISTS payrolls;
-DROP TABLE IF EXISTS salary_structure_components;
-DROP TABLE IF EXISTS salary_structures;
 DROP TABLE IF EXISTS report_columns;
 DROP TABLE IF EXISTS report_filters;
 DROP TABLE IF EXISTS reports;
@@ -36,6 +34,8 @@ DROP TABLE IF EXISTS products;
 DROP TABLE IF EXISTS grades;
 DROP TABLE IF EXISTS product_categories;
 DROP TABLE IF EXISTS employees;
+DROP TABLE IF EXISTS salary_structure_components;
+DROP TABLE IF EXISTS salary_structures;
 DROP TABLE IF EXISTS designations;
 DROP TABLE IF EXISTS customers;
 DROP TABLE IF EXISTS accounts;
@@ -47,15 +47,16 @@ DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS currencies;
 
 -- Currencies table 
-CREATE TABLE currencies (
+CREATE TABLE IF NOT EXISTS currencies (
   id INT PRIMARY KEY AUTO_INCREMENT,
   code VARCHAR(3) NOT NULL UNIQUE,
-  name VARCHAR(100) NOT NULL,
+  name VARCHAR(50) NOT NULL,
   symbol VARCHAR(5) NOT NULL,
-  rate DECIMAL(10,4) NOT NULL DEFAULT 1.0000,
+  rate DECIMAL(15,6) NOT NULL DEFAULT 1.000000,
   status ENUM('active', 'inactive') DEFAULT 'active',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY unique_code (code)
 );
 
 -- Users table
@@ -81,7 +82,8 @@ CREATE TABLE settings (
   tax_number VARCHAR(50),
   logo_url VARCHAR(255),
   language ENUM('en', 'si') DEFAULT 'en',
-  default_currency VARCHAR(3) DEFAULT 'USD',
+  default_currency INT,
+  time_zone VARCHAR(50) DEFAULT 'Asia/Colombo',
   email_notifications BOOLEAN DEFAULT true,
   low_stock_alerts BOOLEAN DEFAULT true,
   payment_reminders BOOLEAN DEFAULT true,
@@ -94,7 +96,7 @@ CREATE TABLE settings (
   backup_location VARCHAR(50) DEFAULT 'cloud',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (default_currency) REFERENCES currencies(code)
+  FOREIGN KEY (default_currency) REFERENCES currencies(id)
 );
 
 -- Designations table
@@ -589,6 +591,11 @@ CREATE TABLE manufacturing_orders (
   notes TEXT,
   assigned_to INT,
   created_by INT NOT NULL,
+  defect_rate DECIMAL(5,2) DEFAULT 0,
+  efficiency DECIMAL(5,2) DEFAULT 0,
+  downtime_hours DECIMAL(5,2) DEFAULT 0,
+  cost_per_unit DECIMAL(10,2) DEFAULT 0,
+  production_date DATE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (product_id) REFERENCES products(id),

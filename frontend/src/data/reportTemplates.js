@@ -239,6 +239,73 @@ const reportTemplates = [
         format: 'percentage'
       }
     ]
+  },
+  // Manufacturing Advanced Report
+  {
+    code: 'MANUFACTURING_ADVANCED',
+    name: {
+      en: 'Manufacturing Advanced Report',
+      si: 'නිෂ්පාදන උසස් වාර්තාව'
+    },
+    category: 'manufacturing',
+    description: {
+      en: 'Detailed analysis of manufacturing processes and efficiency',
+      si: 'නිෂ්පා���න ක්‍රියාවලීන් සහ කාර්යක්ෂමතාව පිළිබඳ සවිස්තර විශ්ලේෂණය'
+    },
+    filters: [
+      {
+        field: 'dateRange',
+        type: 'date',
+        label: { en: 'Date Range', si: 'කාල සීමාව' }
+      },
+      {
+        field: 'productLine',
+        type: 'select',
+        label: { en: 'Product Line', si: 'නිෂ්පාදන පෙළ' },
+        optionsUrl: '/api/reports/product-lines'
+      },
+      {
+        field: 'efficiency',
+        type: 'select',
+        label: { en: 'Efficiency Level', si: 'කාර්යක්ෂමතා මට්ටම' },
+        options: [
+          { value: 'high', label: { en: 'High (>90%)', si: 'ඉහළ (>90%)' } },
+          { value: 'medium', label: { en: 'Medium (70-90%)', si: 'මධ්‍යම (70-90%)' } },
+          { value: 'low', label: { en: 'Low (<70%)', si: 'අඩු (<70%)' } }
+        ]
+      }
+    ],
+    columns: [
+      {
+        field: 'productLine',
+        header: { en: 'Product Line', si: 'නිෂ්පාදන පෙළ' }
+      },
+      {
+        field: 'outputQuantity',
+        header: { en: 'Output Quantity', si: 'නිමැවුම් ප්‍රමාණය' },
+        format: 'number'
+      },
+      {
+        field: 'defectRate',
+        header: { en: 'Defect Rate', si: 'දෝෂ අනුපාතය' },
+        format: 'percentage'
+      },
+      {
+        field: 'efficiency',
+        header: { en: 'Efficiency', si: 'කාර්යක්ෂමතාව' },
+        format: 'percentage'
+      },
+      {
+        field: 'downtime',
+        header: { en: 'Downtime (Hours)', si: 'අක්‍රීය කාලය (පැය)' },
+        format: 'number'
+      },
+      {
+        field: 'costPerUnit',
+        header: { en: 'Cost Per Unit', si: 'ඒකක පිරිවැය' },
+        format: 'currency'
+      }
+    ]
   }
 ];
 

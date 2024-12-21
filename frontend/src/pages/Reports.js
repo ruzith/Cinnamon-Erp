@@ -29,14 +29,7 @@ const Reports = () => {
   const [filters, setFilters] = useState({});
   const [language, setLanguage] = useState('en');
   const [exportFormat, setExportFormat] = useState('json');
-
-  useEffect(() => {
-    if (!templates || templates.length === 0) {
-      console.log('No templates available:', templates);
-    } else {
-      console.log('Templates loaded:', templates);
-    }
-  }, [templates]);
+  const [filterOptions, setFilterOptions] = useState({});
 
   useEffect(() => {
     if (user?.token) {
@@ -44,8 +37,34 @@ const Reports = () => {
     }
   }, [dispatch, user]);
 
+  useEffect(() => {
+    if (templates?.length > 0 && selectedTemplate && user?.token) {
+      const template = templates.find(t => t.code === selectedTemplate);
+      if (!template) {
+        setSelectedTemplate('');
+      } else {
+        template.filters.forEach(filter => {
+          if (filter.optionsUrl) {
+            fetch(filter.optionsUrl, {
+              headers: {
+                Authorization: `Bearer ${user.token}`
+              }
+            })
+              .then(res => res.json())
+              .then(data => setFilterOptions(prev => ({
+                ...prev,
+                [filter.field]: data
+              })))
+              .catch(err => console.error('Error fetching options:', err));
+          }
+        });
+      }
+    }
+  }, [templates, selectedTemplate, user?.token]);
+
   const handleTemplateChange = (event) => {
-    setSelectedTemplate(event.target.value);
+    const value = event.target.value;
+    setSelectedTemplate(value);
     setFilters({});
   };
 
@@ -74,13 +93,17 @@ const Reports = () => {
           <LocalizationProvider dateAdapter={AdapterDateFns}>
             <DatePicker
               label={filter.label[language]}
+              value={filters[filter.field] || null}
               onChange={(date) => handleFilterChange(filter.field, date)}
               renderInput={(params) => <TextField {...params} fullWidth />}
             />
           </LocalizationProvider>
         );
-      
       case 'select':
+        const options = filter.optionsUrl 
+          ? (filterOptions[filter.field] || []) 
+          : (filter.options || []);
+
         return (
           <FormControl fullWidth>
             <InputLabel>{filter.label[language]}</InputLabel>
@@ -88,7 +111,8 @@ const Reports = () => {
               value={filters[filter.field] || ''}
               onChange={(e) => handleFilterChange(filter.field, e.target.value)}
             >
-              {filter.options?.map(option => (
+              <MenuItem value="">All</MenuItem>
+              {options.map(option => (
                 <MenuItem key={option.value} value={option.value}>
                   {option.label[language]}
                 </MenuItem>
@@ -96,16 +120,8 @@ const Reports = () => {
             </Select>
           </FormControl>
         );
-      
       default:
-        return (
-          <TextField
-            fullWidth
-            label={filter.label[language]}
-            value={filters[filter.field] || ''}
-            onChange={(e) => handleFilterChange(filter.field, e.target.value)}
-          />
-        );
+        return null;
     }
   };
 
@@ -131,20 +147,16 @@ const Reports = () => {
                     value={selectedTemplate}
                     onChange={handleTemplateChange}
                     disabled={isLoading}
+                    label="Report Template"
                   >
-                    {isLoading ? (
-                      <MenuItem disabled>Loading templates...</MenuItem>
-                    ) : templates && templates.length > 0 ? (
-                      templates.map(template => (
-                        <MenuItem key={template.code} value={template.code}>
-                          {template.name?.[language] || template.code || 'Unnamed Template'}
-                        </MenuItem>
-                      ))
-                    ) : (
-                      <MenuItem disabled>
-                        {isError ? message || 'Error loading templates' : 'No templates available'}
+                    <MenuItem value="">
+                      <em>Select a template</em>
+                    </MenuItem>
+                    {templates?.map(template => (
+                      <MenuItem key={template.code} value={template.code}>
+                        {template.name?.[language] || template.code || 'Unnamed Template'}
                       </MenuItem>
-                    )}
+                    ))}
                   </Select>
                 </FormControl>
               </Grid>

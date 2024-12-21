@@ -33,42 +33,6 @@ export const updateSettings = createAsyncThunk(
   }
 );
 
-export const addCurrency = createAsyncThunk(
-  'settings/addCurrency',
-  async (data, thunkAPI) => {
-    try {
-      const token = thunkAPI.getState().auth.user.token;
-      return await settingsService.addCurrency(data, token);
-    } catch (error) {
-      return thunkAPI.rejectWithValue(error.response?.data?.message || 'Failed to add currency');
-    }
-  }
-);
-
-export const editCurrency = createAsyncThunk(
-  'settings/editCurrency',
-  async (data, thunkAPI) => {
-    try {
-      const token = thunkAPI.getState().auth.user.token;
-      return await settingsService.editCurrency(data, token);
-    } catch (error) {
-      return thunkAPI.rejectWithValue(error.response?.data?.message || 'Failed to edit currency');
-    }
-  }
-);
-
-export const deleteCurrency = createAsyncThunk(
-  'settings/deleteCurrency',
-  async (code, thunkAPI) => {
-    try {
-      const token = thunkAPI.getState().auth.user.token;
-      return await settingsService.deleteCurrency(code, token);
-    } catch (error) {
-      return thunkAPI.rejectWithValue(error.response?.data?.message || 'Failed to delete currency');
-    }
-  }
-);
-
 export const settingsSlice = createSlice({
   name: 'settings',
   initialState,
@@ -102,16 +66,6 @@ export const settingsSlice = createSlice({
         state.isLoading = false;
         state.isError = true;
         state.message = action.payload;
-      })
-      // Handle currency operations
-      .addCase(addCurrency.fulfilled, (state, action) => {
-        state.settings = action.payload;
-      })
-      .addCase(editCurrency.fulfilled, (state, action) => {
-        state.settings = action.payload;
-      })
-      .addCase(deleteCurrency.fulfilled, (state, action) => {
-        state.settings = action.payload;
       });
   }
 });

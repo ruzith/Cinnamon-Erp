@@ -1,4 +1,5 @@
 const BaseModel = require('../base/BaseModel');
+const { pool } = require('../../config/db');
 
 class Loan extends BaseModel {
   constructor() {
@@ -8,7 +9,7 @@ class Loan extends BaseModel {
   async generateLoanNumber() {
     const date = new Date();
     const year = date.getFullYear().toString().substr(-2);
-    const [result] = await this.pool.execute(
+    const [result] = await pool.execute(
       'SELECT COUNT(*) as count FROM loans WHERE YEAR(created_at) = YEAR(CURRENT_DATE)'
     );
     const count = result[0].count + 1;
@@ -49,8 +50,10 @@ class Loan extends BaseModel {
   }
 
   async createWithSchedule(loanData) {
-    await this.pool.beginTransaction();
+    const connection = await pool.getConnection();
     try {
+      await connection.beginTransaction();
+
       // Generate loan number if not provided
       if (!loanData.loan_number) {
         loanData.loan_number = await this.generateLoanNumber();
@@ -59,25 +62,35 @@ class Loan extends BaseModel {
       // Calculate payment schedule
       const schedule = this.calculatePaymentSchedule(loanData);
       
-      // Create loan record
-      const [result] = await this.pool.execute(
-        'INSERT INTO loans SET ?',
-        loanData
+      // Create loan record - Convert object to array of values
+      const columns = Object.keys(loanData).join(', ');
+      const placeholders = Object.keys(loanData).map(() => '?').join(', ');
+      const values = Object.values(loanData);
+
+      const [result] = await connection.execute(
+        `INSERT INTO loans (${columns}) VALUES (${placeholders})`,
+        values
       );
       const loanId = result.insertId;
 
       // Create schedule records
       for (const item of schedule) {
-        await this.pool.execute(
-          'INSERT INTO loan_schedule SET ?',
-          { ...item, loan_id: loanId }
+        const scheduleColumns = Object.keys(item).join(', ');
+        const schedulePlaceholders = Object.keys(item).map(() => '?').join(', ');
+        const scheduleValues = Object.values({ ...item, loan_id: loanId });
+
+        await connection.execute(
+          `INSERT INTO loan_schedule (${scheduleColumns}) VALUES (${schedulePlaceholders})`,
+          scheduleValues
         );
       }
 
-      await this.pool.commit();
+      await connection.commit();
+      connection.release();
       return this.getWithDetails(loanId);
     } catch (error) {
-      await this.pool.rollback();
+      await connection.rollback();
+      connection.release();
       throw error;
     }
   }

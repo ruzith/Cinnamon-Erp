@@ -158,13 +158,20 @@ const Inventory = () => {
   const handleOpenTransactionDialog = (transaction = null) => {
     console.log('Opening transaction dialog with:', transaction);
     if (transaction && transaction.id) {
+      // Map backend type to frontend type
+      const typeMap = {
+        'IN': 'revenue',
+        'OUT': 'expense',
+        'ADJUSTMENT': 'adjustment'
+      };
+
       setSelectedItem(transaction);
       setTransactionData({
-        date: transaction.date?.split('T')[0] || new Date().toISOString().split('T')[0],
-        type: transaction.type || 'revenue',
-        amount: transaction.amount || '',
+        date: transaction.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
+        type: typeMap[transaction.type] || 'revenue', // Map the type
+        amount: transaction.quantity || '',
         category: transaction.category || 'production',
-        description: transaction.description || '',
+        description: transaction.notes || '',
         well_id: transaction.well_id || '',
         lease_id: transaction.lease_id || '',
         status: transaction.status || 'draft',
@@ -244,8 +251,15 @@ const Inventory = () => {
   const handleTransactionSubmit = async (e) => {
     e.preventDefault();
     try {
+      // Map frontend transaction type to backend type
+      const typeMap = {
+        'revenue': 'IN',
+        'expense': 'OUT'
+      };
+
       const payload = {
         ...transactionData,
+        type: typeMap[transactionData.type], // Map the type
         entries: [
           {
             account_id: '1000',

@@ -27,13 +27,19 @@ router.post('/', protect, authorize('admin', 'accountant'), async (req, res) => 
   try {
     const loanData = {
       ...req.body,
-      created_by: req.user.id
+      created_by: req.user.id,
+      remaining_balance: req.body.amount, // Set initial remaining balance
+      status: 'active'
     };
     
     const loan = await Loan.createWithSchedule(loanData);
     res.status(201).json(loan);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    console.error('Error creating loan:', error);
+    res.status(400).json({ 
+      message: error.message || 'Error creating loan',
+      error: error.toString()
+    });
   }
 });
 

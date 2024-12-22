@@ -97,6 +97,60 @@ router.post('/', protect, authorize('admin'), async (req, res) => {
   }
 });
 
+// Update asset
+router.put('/:id', protect, authorize('admin'), async (req, res) => {
+  try {
+    const asset = await Asset.findById(req.params.id);
+    if (!asset) {
+      return res.status(404).json({ message: 'Asset not found' });
+    }
+
+    // Transform the incoming data to match database fields
+    const assetData = {
+      asset_number: req.body.assetNumber,
+      name: req.body.name,
+      category_id: req.body.category,
+      type: req.body.type.toLowerCase(),
+      purchase_date: req.body.purchaseDate,
+      purchase_price: req.body.purchasePrice,
+      current_value: req.body.currentValue,
+      status: req.body.status
+    };
+
+    const [result] = await Asset.pool.execute(`
+      UPDATE assets 
+      SET asset_number = ?,
+          name = ?,
+          category_id = ?,
+          type = ?,
+          purchase_date = ?,
+          purchase_price = ?,
+          current_value = ?,
+          status = ?
+      WHERE id = ?
+    `, [
+      assetData.asset_number,
+      assetData.name,
+      assetData.category_id,
+      assetData.type,
+      assetData.purchase_date,
+      assetData.purchase_price,
+      assetData.current_value,
+      assetData.status,
+      req.params.id
+    ]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Asset not found' });
+    }
+
+    const updatedAsset = await Asset.getWithDetails(req.params.id);
+    res.json(updatedAsset);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
 // Maintenance routes
 router.post('/:assetId/maintenance', protect, async (req, res) => {
   try {
@@ -107,7 +161,6 @@ router.post('/:assetId/maintenance', protect, async (req, res) => {
 
     const maintenanceData = {
       ...req.body,
-      asset_id: req.params.assetId,
       created_by: req.user.id
     };
 

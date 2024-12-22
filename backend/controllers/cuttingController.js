@@ -85,50 +85,30 @@ exports.updateContractor = async (req, res) => {
 // @route   DELETE /api/cutting/contractors/:id
 // @access  Private/Admin
 exports.deleteContractor = async (req, res) => {
+  const connection = await CuttingContractor.pool.getConnection();
+  
   try {
     const { forceDelete, newContractorId } = req.query;
+    await connection.beginTransaction();
+
     const contractor = await CuttingContractor.findById(req.params.id);
-    
     if (!contractor) {
+      await connection.rollback();
+      connection.release();
       return res.status(404).json({ message: 'Contractor not found' });
     }
 
     // Check for active assignments
-    const hasActive = await CuttingContractor.hasActiveAssignments(req.params.id);
-    if (hasActive) {
-      // If forceDelete is true and newContractorId is provided, reassign assignments first
-      if (forceDelete === 'true' && newContractorId) {
-        // Check if new contractor exists and is active
-        const newContractor = await CuttingContractor.findById(newContractorId);
-        if (!newContractor || newContractor.status !== 'active') {
-          return res.status(400).json({ message: 'Invalid or inactive new contractor' });
-        }
-
-        // Reassign all active assignments to new contractor
-        await CuttingContractor.pool.execute(
-          'UPDATE land_assignments SET contractor_id = ? WHERE contractor_id = ? AND status = "active"',
-          [newContractorId, req.params.id]
-        );
-      } else {
-        // Get active assignments for error message
-        const [assignments] = await CuttingContractor.pool.execute(`
-          SELECT la.*, l.parcel_number 
-          FROM land_assignments la
-          JOIN lands l ON la.land_id = l.id
-          WHERE la.contractor_id = ? AND la.status = "active"`,
-          [req.params.id]
-        );
-
-        return res.status(400).json({
-          message: 'Cannot delete contractor with active assignments',
-          activeAssignments: assignments,
-          assignmentCount: assignments.length
-        });
-      }
-    }
+    const [assignments] = await connection.execute(`
+      SELECT la.*, l.parcel_number 
+      FROM land_assignments la
+      JOIN lands l ON la.land_id = l.id
+      WHERE la.contractor_id = ? AND la.status = "active"`,
+      [req.params.id]
+    );
 
     // Check for pending payments
-    const [payments] = await CuttingContractor.pool.execute(`
+    const [payments] = await connection.execute(`
       SELECT COUNT(*) as count 
       FROM cutting_payments 
       WHERE contractor_id = ? AND status IN ('pending', 'due')`,
@@ -136,18 +116,94 @@ exports.deleteContractor = async (req, res) => {
     );
 
     if (payments[0].count > 0) {
+      await connection.rollback();
+      connection.release();
       return res.status(400).json({ 
         message: 'Cannot delete contractor with pending payments',
         pendingPayments: payments[0].count
       });
     }
 
-    await CuttingContractor.delete(req.params.id);
-    res.status(200).json({ 
-      message: 'Contractor deleted successfully',
-      reassignedAssignments: hasActive ? assignments : undefined
-    });
+    if (assignments.length > 0) {
+      if (forceDelete === 'true' && newContractorId) {
+        // Verify new contractor exists and is active
+        const [newContractor] = await connection.execute(
+          'SELECT * FROM cutting_contractors WHERE id = ? AND status = "active"',
+          [newContractorId]
+        );
+
+        if (!newContractor[0]) {
+          await connection.rollback();
+          connection.release();
+          return res.status(400).json({ message: 'Invalid or inactive new contractor' });
+        }
+
+        // First update all assignments
+        await connection.execute(
+          'UPDATE land_assignments SET contractor_id = ? WHERE contractor_id = ?',
+          [newContractorId, req.params.id]
+        );
+
+        // Then update all payments
+        await connection.execute(
+          'UPDATE cutting_payments SET contractor_id = ? WHERE contractor_id = ?',
+          [newContractorId, req.params.id]
+        );
+
+        // Finally delete the contractor
+        await connection.execute(
+          'DELETE FROM cutting_contractors WHERE id = ?',
+          [req.params.id]
+        );
+
+        await connection.commit();
+        connection.release();
+        
+        return res.status(200).json({ 
+          message: 'Contractor deleted successfully',
+          reassignedAssignments: assignments
+        });
+      } else {
+        await connection.rollback();
+        connection.release();
+        return res.status(400).json({
+          message: 'Cannot delete contractor with active assignments',
+          activeAssignments: assignments,
+          assignmentCount: assignments.length
+        });
+      }
+    } else {
+      // No active assignments, but still need to handle any non-active assignments
+      // Update any existing assignments first
+      if (newContractorId) {
+        await connection.execute(
+          'UPDATE land_assignments SET contractor_id = ? WHERE contractor_id = ?',
+          [newContractorId, req.params.id]
+        );
+        
+        await connection.execute(
+          'UPDATE cutting_payments SET contractor_id = ? WHERE contractor_id = ?',
+          [newContractorId, req.params.id]
+        );
+      }
+
+      // Then delete the contractor
+      await connection.execute(
+        'DELETE FROM cutting_contractors WHERE id = ?',
+        [req.params.id]
+      );
+
+      await connection.commit();
+      connection.release();
+      
+      return res.status(200).json({ 
+        message: 'Contractor deleted successfully'
+      });
+    }
   } catch (error) {
+    console.error('Error in deleteContractor:', error);
+    await connection.rollback();
+    connection.release();
     res.status(500).json({ message: error.message });
   }
 };
@@ -553,11 +609,13 @@ exports.getPayments = async (req, res) => {
     const [rows] = await CuttingPayment.pool.execute(`
       SELECT cp.*, 
              cc.name as contractor_name,
-             la.assignment_number,
+             l.parcel_number,
+             l.location,
              u.name as created_by_name
       FROM cutting_payments cp
       LEFT JOIN cutting_contractors cc ON cp.contractor_id = cc.id
       LEFT JOIN land_assignments la ON cp.assignment_id = la.id
+      LEFT JOIN lands l ON la.land_id = l.id
       LEFT JOIN users u ON cp.created_by = u.id
       ORDER BY cp.payment_date DESC
     `);

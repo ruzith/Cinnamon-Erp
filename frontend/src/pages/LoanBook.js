@@ -94,6 +94,7 @@ const LoanBook = () => {
   const [borrowers, setBorrowers] = useState([]);
   const [openPayrollDialog, setOpenPayrollDialog] = useState(false);
   const [payrollDetails, setPayrollDetails] = useState(null);
+  const [employees, setEmployees] = useState([]);
 
   const { formatCurrency } = useCurrencyFormatter();
 
@@ -101,6 +102,7 @@ const LoanBook = () => {
     fetchLoans();
     fetchPayments();
     fetchSummary();
+    fetchEmployees();
   }, []);
 
   const fetchLoans = async () => {
@@ -150,6 +152,15 @@ const LoanBook = () => {
     } catch (error) {
       console.error('Error fetching borrowers:', error);
       setBorrowers([]);
+    }
+  };
+
+  const fetchEmployees = async () => {
+    try {
+      const response = await axios.get('/api/employees');
+      setEmployees(response.data);
+    } catch (error) {
+      console.error('Error fetching employees:', error);
     }
   };
 
@@ -590,30 +601,24 @@ const LoanBook = () => {
               </FormControl>
             </Grid>
             <Grid item xs={6}>
-              {loanFormData.borrower_type !== 'other' ? (
+              {loanFormData.borrower_type === 'employee' && (
                 <FormControl fullWidth>
-                  <InputLabel>Select {loanFormData.borrower_type}</InputLabel>
+                  <InputLabel>Select Employee</InputLabel>
                   <Select
                     name="borrower_id"
                     value={loanFormData.borrower_id}
-                    label={`Select ${loanFormData.borrower_type}`}
+                    label="Select Employee"
                     onChange={handleLoanInputChange}
+                    required
                   >
-                    {borrowers.map((borrower) => (
-                      <MenuItem key={borrower.id} value={borrower.id}>
-                        {borrower.name}
+                    <MenuItem value="">Select Employee</MenuItem>
+                    {employees.map((employee) => (
+                      <MenuItem key={employee.id} value={employee.id}>
+                        {employee.name} - {employee.nic}
                       </MenuItem>
                     ))}
                   </Select>
                 </FormControl>
-              ) : (
-                <TextField
-                  name="borrowerName"
-                  label="Borrower Name"
-                  fullWidth
-                  value={loanFormData.borrowerName}
-                  onChange={handleLoanInputChange}
-                />
               )}
             </Grid>
             <Grid item xs={6}>

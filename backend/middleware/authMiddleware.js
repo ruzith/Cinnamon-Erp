@@ -16,8 +16,8 @@ const protect = asyncHandler(async (req, res, next) => {
       // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // Get user from token
-      const user = await User.findById(decoded.id).select('-password');
+      // Get user from token - Modified to work with MySQL User model
+      const user = await User.findById(decoded.id);
       if (!user) {
         res.status(401);
         throw new Error('User not found');

@@ -79,24 +79,53 @@ class ManufacturingOrder extends BaseModel {
     return this.getWithDetails(id);
   }
 
-  async delete(id) {
-    const [order] = await this.pool.execute(
-      'SELECT status FROM manufacturing_orders WHERE id = ?',
-      [id]
-    );
+  async delete(id, forceDelete = false) {
+    const connection = await this.pool.getConnection();
+    
+    try {
+      await connection.beginTransaction();
 
-    if (!order[0]) {
-      throw new Error('Manufacturing order not found');
+      // Check if order exists
+      const [order] = await connection.execute(
+        'SELECT status FROM manufacturing_orders WHERE id = ?',
+        [id]
+      );
+
+      if (!order[0]) {
+        throw new Error('Manufacturing order not found');
+      }
+
+      // Only check status if not force deleting
+      if (!forceDelete && ['in_progress', 'completed'].includes(order[0].status)) {
+        throw new Error('Cannot delete orders that are in progress or completed. Use force delete if necessary.');
+      }
+
+      // Delete related manufacturing materials first
+      await connection.execute(
+        'DELETE FROM manufacturing_materials WHERE order_id = ?',
+        [id]
+      );
+
+      // Delete related inventory transactions
+      await connection.execute(
+        'DELETE FROM inventory_transactions WHERE reference = ?',
+        [`MO-${id}`]
+      );
+
+      // Then delete the order itself
+      await connection.execute(
+        'DELETE FROM manufacturing_orders WHERE id = ?',
+        [id]
+      );
+
+      await connection.commit();
+      return true;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
     }
-
-    if (['in-progress', 'completed'].includes(order[0].status)) {
-      throw new Error('Cannot delete orders that are in progress or completed');
-    }
-
-    await this.pool.execute(
-      'DELETE FROM manufacturing_orders WHERE id = ?',
-      [id]
-    );
   }
 
   async startProduction(id, materials) {

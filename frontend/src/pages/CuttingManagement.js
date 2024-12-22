@@ -7,7 +7,6 @@ import {
   Paper,
   Chip,
   IconButton,
-  LinearProgress,
   TableContainer,
   Table,
   TableHead,
@@ -168,10 +167,10 @@ const CuttingManagement = () => {
           setContractorToDelete(contractorId);
         }
       } else if (error.response?.data?.pendingPayments) {
-        alert(`Cannot delete contractor: ${error.response.data.message}`);
+        alert(error.response.data.message);
       } else {
         console.error('Error deleting contractor:', error);
-        alert(error.response?.data?.message || 'Error deleting contractor');
+        alert('Error deleting contractor');
       }
     }
   };
@@ -648,7 +647,7 @@ const CuttingManagement = () => {
                     )
                     .map(assignment => (
                       <MenuItem key={assignment.id} value={assignment.id}>
-                        {`Assignment #${assignment.assignment_number} - ${assignment.land_location || 'No location'} (${assignment.status})`}
+                        {`Land ${assignment.parcel_number} - ${assignment.location} (${assignment.status})`}
                       </MenuItem>
                     ))}
                 </Select>

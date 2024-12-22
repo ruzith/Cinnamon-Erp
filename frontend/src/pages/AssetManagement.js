@@ -92,7 +92,21 @@ const AssetManagement = () => {
   const fetchAssets = async () => {
     try {
       const response = await axios.get('/api/assets');
-      setAssets(response.data);
+      const transformedAssets = response.data.map(asset => ({
+        ...asset,
+        currentValue: asset.current_value,
+        purchaseDate: asset.purchase_date,
+        purchasePrice: asset.purchase_price,
+        assetNumber: asset.asset_number,
+        categoryName: asset.category_name,
+        createdBy: asset.created_by,
+        createdAt: asset.created_at,
+        updatedAt: asset.updated_at,
+        categoryId: asset.category_id,
+        assignedTo: asset.assigned_to,
+        createdByName: asset.created_by_name
+      }));
+      setAssets(transformedAssets);
     } catch (error) {
       console.error('Error fetching assets:', error);
     }
@@ -575,7 +589,7 @@ const AssetManagement = () => {
                     <TableCell style={{ textTransform: 'capitalize' }}>{asset.type}</TableCell>
                     <TableCell>{formatDate(asset.purchase_date)}</TableCell>
                     <TableCell>{formatCurrency(asset.purchase_price)}</TableCell>
-                    <TableCell>{formatCurrency(asset.currentValue)}</TableCell>
+                    <TableCell>{formatCurrency(asset.current_value)}</TableCell>
                     <TableCell>
                       <Chip
                         label={asset.status}

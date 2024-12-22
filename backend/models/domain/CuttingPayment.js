@@ -46,11 +46,13 @@ class CuttingPayment extends BaseModel {
     const [payment] = await this.pool.execute(`
       SELECT cp.*,
              cc.name as contractor_name,
-             la.assignment_number,
+             l.parcel_number,
+             l.location,
              u.name as created_by_name
       FROM cutting_payments cp
       LEFT JOIN cutting_contractors cc ON cp.contractor_id = cc.id
       LEFT JOIN land_assignments la ON cp.assignment_id = la.id
+      LEFT JOIN lands l ON la.land_id = l.id
       LEFT JOIN users u ON cp.created_by = u.id
       WHERE cp.id = ?
     `, [id]);
@@ -62,11 +64,13 @@ class CuttingPayment extends BaseModel {
     const [rows] = await this.pool.execute(`
       SELECT cp.*,
              cc.name as contractor_name,
-             la.assignment_number,
+             l.parcel_number,
+             l.location,
              u.name as created_by_name
       FROM cutting_payments cp
       LEFT JOIN cutting_contractors cc ON cp.contractor_id = cc.id
       LEFT JOIN land_assignments la ON cp.assignment_id = la.id
+      LEFT JOIN lands l ON la.land_id = l.id
       LEFT JOIN users u ON cp.created_by = u.id
       WHERE cp.contractor_id = ?
       ORDER BY cp.payment_date DESC

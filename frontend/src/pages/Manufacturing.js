@@ -89,6 +89,9 @@ const Manufacturing = () => {
   const [currentTab, setCurrentTab] = useState(0);
   const [openPurchaseDialog, setOpenPurchaseDialog] = useState(false);
   const { formatCurrency } = useCurrencyFormatter();
+  const [openReassignDialog, setOpenReassignDialog] = useState(false);
+  const [contractorToDelete, setContractorToDelete] = useState(null);
+  const [newContractorId, setNewContractorId] = useState('');
 
   useEffect(() => {
     fetchManufacturingOrders();
@@ -221,13 +224,25 @@ const Manufacturing = () => {
     }
   };
 
-  const handleDelete = async (orderId) => {
-    if (window.confirm('Are you sure you want to delete this manufacturing order?')) {
+  const handleDelete = async (contractorId) => {
+    if (window.confirm('Are you sure you want to delete this contractor? This action cannot be undone.')) {
       try {
-        await axios.delete(`/api/manufacturing-orders/${orderId}`);
-        fetchManufacturingOrders();
+        await axios.delete(`/api/manufacturing/contractors/${contractorId}`);
+        fetchContractors();
       } catch (error) {
-        console.error('Error deleting manufacturing order:', error);
+        if (error.response?.data?.activeAssignments || error.response?.data?.pendingPayments) {
+          const shouldReassign = window.confirm(
+            `This contractor has ${error.response.data.assignmentCount || 0} active assignments and ${error.response.data.pendingPayments || 0} pending payments. Would you like to reassign them to another contractor?`
+          );
+          
+          if (shouldReassign) {
+            setOpenReassignDialog(true);
+            setContractorToDelete(contractorId);
+          }
+        } else {
+          console.error('Error deleting contractor:', error);
+          alert(error.response?.data?.message || 'Error deleting contractor');
+        }
       }
     }
   };
@@ -297,14 +312,53 @@ const Manufacturing = () => {
     setSelectedOrder(null);
   };
 
+  const handleOpenAssignmentDialog = (assignment = null) => {
+    if (assignment) {
+      setAssignmentFormData({
+        id: assignment.id,
+        contractor_id: assignment.contractor_id,
+        quantity: assignment.quantity,
+        duration: assignment.duration,
+        duration_type: assignment.duration_type,
+        start_date: new Date(assignment.start_date).toISOString().split('T')[0],
+        notes: assignment.notes || ''
+      });
+    } else {
+      setAssignmentFormData({
+        id: null,
+        contractor_id: '',
+        quantity: '',
+        duration: 1,
+        duration_type: 'day',
+        start_date: new Date().toISOString().split('T')[0],
+        notes: ''
+      });
+    }
+    setOpenAssignmentDialog(true);
+  };
+
   const handleAssignmentSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.post('/api/manufacturing/assignments', assignmentFormData);
-      fetchAssignments();
+      let response;
+      if (assignmentFormData.id) {
+        // Update existing assignment
+        response = await axios.put(`/api/manufacturing/assignments/${assignmentFormData.id}`, assignmentFormData);
+      } else {
+        // Create new assignment
+        response = await axios.post('/api/manufacturing/assignments', assignmentFormData);
+      }
+      
+      // Refresh both assignments and contractors data
+      await Promise.all([
+        fetchAssignments(),
+        fetchContractors()
+      ]);
+      
       setOpenAssignmentDialog(false);
       // Reset form
       setAssignmentFormData({
+        id: null,
         contractor_id: '',
         quantity: '',
         duration: 1,
@@ -313,8 +367,8 @@ const Manufacturing = () => {
         notes: ''
       });
     } catch (error) {
-      console.error('Error creating assignment:', error);
-      alert(error.response?.data?.message || 'Error creating assignment');
+      console.error('Error saving assignment:', error);
+      alert(error.response?.data?.message || 'Error saving assignment');
     }
   };
 
@@ -354,25 +408,6 @@ const Manufacturing = () => {
     } catch (error) {
       console.error('Error fetching assignments:', error);
     }
-  };
-
-  const handleOpenAssignmentDialog = (contractor = null) => {
-    if (contractor) {
-      setAssignmentFormData(prev => ({
-        ...prev,
-        contractor_id: contractor.id
-      }));
-    } else {
-      setAssignmentFormData({
-        contractor_id: '',
-        quantity: '',
-        duration: 1,
-        duration_type: 'day',
-        start_date: new Date().toISOString().split('T')[0],
-        notes: ''
-      });
-    }
-    setOpenAssignmentDialog(true);
   };
 
   const handleOpenPaymentDialog = (contractor = null) => {
@@ -439,6 +474,24 @@ const Manufacturing = () => {
       </IconButton>
     </>
   );
+
+  const handleReassignAndDelete = async () => {
+    try {
+      if (!newContractorId) {
+        alert('Please select a new contractor');
+        return;
+      }
+      
+      await axios.delete(`/api/manufacturing/contractors/${contractorToDelete}?forceDelete=true&newContractorId=${newContractorId}`);
+      setOpenReassignDialog(false);
+      setContractorToDelete(null);
+      setNewContractorId('');
+      fetchContractors();
+    } catch (error) {
+      console.error('Error reassigning and deleting contractor:', error);
+      alert(error.response?.data?.message || 'Error reassigning and deleting contractor');
+    }
+  };
 
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
@@ -1055,6 +1108,38 @@ const Manufacturing = () => {
         }}
         selectedContractor={selectedContractor}
       />
+
+      {/* Reassign Dialog */}
+      <Dialog open={openReassignDialog} onClose={() => setOpenReassignDialog(false)}>
+        <DialogTitle>Reassign Assignments</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel>New Contractor</InputLabel>
+                <Select
+                  value={newContractorId}
+                  onChange={(e) => setNewContractorId(e.target.value)}
+                >
+                  {contractors
+                    .filter(c => c.id !== contractorToDelete)
+                    .map(contractor => (
+                      <MenuItem key={contractor.id} value={contractor.id}>
+                        {contractor.name} ({contractor.contractor_id})
+                      </MenuItem>
+                    ))}
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenReassignDialog(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleReassignAndDelete}>
+            Reassign and Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

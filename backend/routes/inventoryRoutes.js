@@ -9,7 +9,8 @@ const {
   updateInventoryItem,
   deleteInventoryItem,
   getInventoryTransactions,
-  createInventoryTransaction
+  createInventoryTransaction,
+  updateInventoryTransaction
 } = require('../controllers/inventoryController');
 
 // Inventory Items routes
@@ -20,6 +21,9 @@ router.route('/')
 router.route('/transactions')
   .get(protect, getInventoryTransactions)
   .post(protect, createInventoryTransaction);
+
+router.route('/transactions/:id')
+  .put(protect, updateInventoryTransaction);
 
 router.route('/:id')
   .get(protect, getInventoryItem)

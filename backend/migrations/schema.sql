@@ -442,6 +442,7 @@ CREATE TABLE inventory_transactions (
   reference VARCHAR(255),
   notes TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (item_id) REFERENCES inventory(id)
 );
 
@@ -615,6 +616,8 @@ CREATE TABLE asset_maintenance (
   description TEXT NOT NULL,
   performed_by VARCHAR(255) NOT NULL,
   next_maintenance_date DATE,
+  status ENUM('pending', 'completed', 'cancelled') DEFAULT 'pending',
+  notes TEXT,
   created_by INT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (asset_id) REFERENCES assets(id),

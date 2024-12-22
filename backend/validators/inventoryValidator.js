@@ -27,11 +27,24 @@ const manufacturingMaterialSchema = Joi.object({
 });
 
 const transactionSchema = Joi.object({
-  item_id: Joi.number().integer().required(),
+  item_id: Joi.number().integer(),
   type: Joi.string().valid('IN', 'OUT', 'ADJUSTMENT').required(),
-  quantity: Joi.number().positive().required(),
+  quantity: Joi.number().positive(),
+  amount: Joi.number().positive().required(),
   reference: Joi.string().allow(null, ''),
-  notes: Joi.string().allow(null, '')
+  notes: Joi.string().allow(null, ''),
+  description: Joi.string().allow(null, ''),
+  date: Joi.date().iso().required(),
+  category: Joi.string().valid('production', 'maintenance', 'royalty', 'lease').required(),
+  status: Joi.string().valid('draft', 'posted', 'void').required(),
+  well_id: Joi.number().allow(null, ''),
+  lease_id: Joi.number().allow(null, ''),
+  entries: Joi.array().items(Joi.object({
+    account_id: Joi.string().required(),
+    description: Joi.string().required(),
+    debit: Joi.number().min(0).required(),
+    credit: Joi.number().min(0).required()
+  }))
 });
 
 exports.validateTransaction = (data) => transactionSchema.validate(data); 

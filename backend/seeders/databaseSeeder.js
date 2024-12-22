@@ -250,16 +250,8 @@ const generateManufacturingMaterials = async (connection, orderId) => {
   return selectedMaterials.map(material => ({
     order_id: orderId,
     material_id: material.id,
-    quantity_used: faker.number.float({ 
-      min: 10, 
-      max: 100, 
-      multipleOf: 0.01 
-    }),
-    unit_cost: faker.number.float({ 
-      min: 100, 
-      max: 1000, 
-      multipleOf: 0.01 
-    })
+    quantity_used: faker.number.float({ min: 10, max: 100, multipleOf: 0.01 }),
+    unit_cost: faker.number.float({ min: 100, max: 1000, multipleOf: 0.01 })
   }));
 };
 
@@ -307,11 +299,7 @@ const generateInventoryTransactions = async (connection, count = 50) => {
   return Array.from({ length: count }, () => {
     const inventoryItem = faker.helpers.arrayElement(inventory);
     const type = faker.helpers.arrayElement(['IN', 'OUT', 'ADJUSTMENT']);
-    const quantity = faker.number.float({ 
-      min: 1, 
-      max: type === 'OUT' ? inventoryItem.quantity : 100,
-      multipleOf: 0.01 
-    });
+    const quantity = faker.number.float({ min: 1, max: type === 'OUT' ? inventoryItem.quantity : 100, multipleOf: 0.01 });
 
     return {
       item_id: inventoryItem.id,
@@ -487,37 +475,46 @@ const generateCustomers = async (connection, count = 20) => {
 
 // Helper function to generate transactions
 const generateTransactions = async (connection) => {
-  const transactions = [];
-  const types = ['revenue', 'expense'];
-  const categories = ['production', 'maintenance', 'royalty', 'lease'];
-  const statuses = ['draft', 'posted', 'void'];
-
-  // Get wells, leases and users for foreign keys
+  const [users] = await connection.query('SELECT id FROM users WHERE role = "admin" LIMIT 1');
   const [wells] = await connection.query('SELECT id FROM wells');
   const [leases] = await connection.query('SELECT id FROM leases');
-  const [users] = await connection.query('SELECT id FROM users');
+  const transactions = [];
+  
+  // Generate transactions for the last 6 months
+  for (let i = 0; i < 6; i++) {
+    const currentDate = new Date();
+    const targetMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+    
+    // Generate 10-20 transactions per month
+    const transactionsCount = faker.number.int({ min: 10, max: 20 });
+    
+    for (let j = 0; j < transactionsCount; j++) {
+      const transactionDate = faker.date.between({
+        from: targetMonth,
+        to: new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 0)
+      });
 
-  if (!wells.length || !leases.length || !users.length) {
-    console.log('Required reference data missing for transactions');
-    return transactions;
-  }
-
-  // Generate 20 sample transactions
-  for (let i = 0; i < 20; i++) {
-    const type = types[Math.floor(Math.random() * types.length)];
-    const transaction = {
-      reference: `TRX${String(i + 1).padStart(4, '0')}`,
-      date: new Date(2024, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28) + 1),
-      type: type,
-      amount: parseFloat((Math.random() * 10000 + 1000).toFixed(2)),
-      category: categories[Math.floor(Math.random() * categories.length)],
-      description: `Sample ${type} transaction`,
-      well_id: wells[Math.floor(Math.random() * wells.length)].id,
-      lease_id: leases[Math.floor(Math.random() * leases.length)].id,
-      created_by: users[Math.floor(Math.random() * users.length)].id,
-      status: statuses[Math.floor(Math.random() * statuses.length)]
-    };
-    transactions.push(transaction);
+      const amount = faker.number.float({ min: 1000, max: 5000, multipleOf: 0.01 });
+      
+      transactions.push({
+        date: transactionDate,
+        type: 'revenue',
+        amount: amount,
+        category: faker.helpers.arrayElement(['production', 'maintenance', 'royalty', 'lease']),
+        description: faker.helpers.arrayElement([
+          'Sales revenue',
+          'Service income',
+          'Consulting fees',
+          'Product sales'
+        ]),
+        reference: `REV${faker.string.alphanumeric(8).toUpperCase()}`,
+        status: 'posted',
+        well_id: faker.helpers.arrayElement(wells).id,
+        lease_id: faker.helpers.arrayElement(leases).id,
+        created_by: users[0].id,
+        created_at: transactionDate
+      });
+    }
   }
 
   return transactions;
@@ -1218,6 +1215,68 @@ const generatePurchaseItems = async (connection, invoiceId) => {
   });
 };
 
+// Add this helper function after generateTransactionsEntries
+const generateRevenueTransactions = async (connection, count = 50) => {
+  const [wells] = await connection.query('SELECT id FROM wells');
+  const [leases] = await connection.query('SELECT id FROM leases');
+  const [users] = await connection.query('SELECT id FROM users WHERE role = "admin"');
+  
+  // Get both required accounts
+  const [accounts] = await connection.query(
+    'SELECT id, code FROM accounts WHERE code IN ("1000", "4000")'
+  );
+  
+  const revenueAccount = accounts.find(acc => acc.code === "4000");
+  const cashAccount = accounts.find(acc => acc.code === "1000");
+
+  if (!wells.length || !leases.length || !users.length || !revenueAccount || !cashAccount) {
+    console.warn('Missing required data for revenue transactions. Skipping...');
+    return [];
+  }
+
+  // Generate transactions spread across the last 6 months
+  const transactions = [];
+  const today = new Date();
+  
+  for (let i = 0; i < count; i++) {
+    const randomDate = new Date(today);
+    randomDate.setMonth(today.getMonth() - faker.number.int({ min: 0, max: 5 }));
+    
+    const transaction = {
+      reference: `REV-${faker.string.alphanumeric(8).toUpperCase()}`,
+      date: randomDate.toISOString().split('T')[0],
+      type: 'revenue',
+      amount: faker.number.float({ min: 1000, max: 10000, multipleOf: 0.01 }),
+      category: faker.helpers.arrayElement(['production', 'maintenance', 'royalty', 'lease']),
+      description: faker.lorem.sentence(),
+      well_id: faker.helpers.arrayElement(wells).id,
+      lease_id: faker.helpers.arrayElement(leases).id,
+      created_by: users[0].id,
+      status: 'posted'
+    };
+    
+    transactions.push({
+      transaction,
+      entries: [
+        {
+          account_id: revenueAccount.id,
+          description: 'Revenue entry',
+          credit: transaction.amount,
+          debit: 0
+        },
+        {
+          account_id: cashAccount.id,  // Use the actual cash account ID
+          description: 'Cash/Bank entry',
+          credit: 0,
+          debit: transaction.amount
+        }
+      ]
+    });
+  }
+  
+  return transactions;
+};
+
 const seedData = async () => {
   const connection = await pool.getConnection();
   
@@ -1730,6 +1789,27 @@ const seedData = async () => {
         'INSERT IGNORE INTO accounts SET ?',
         account
       );
+    }
+
+    // Add this block after seeding the accounts
+    console.log('Seeding revenue transactions...');
+    const revenueTransactions = await generateRevenueTransactions(connection);
+    for (const { transaction, entries } of revenueTransactions) {
+      const [result] = await connection.query('INSERT INTO transactions SET ?', transaction);
+      
+      // Insert transaction entries
+      for (const entry of entries) {
+        await connection.query('INSERT INTO transactions_entries SET ?', {
+          ...entry,
+          transaction_id: result.insertId
+        });
+        
+        // Update account balances
+        await connection.query(
+          'UPDATE accounts SET balance = balance + ? WHERE id = ?',
+          [entry.credit - entry.debit, entry.account_id]
+        );
+      }
     }
 
     await connection.commit();

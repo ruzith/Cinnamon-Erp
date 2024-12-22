@@ -95,9 +95,10 @@ class User extends BaseModel {
     const user = await this.findById(id);
     if (!user) return null;
 
+    // Instead of deleting, update status to inactive
     await this.pool.execute(
-      'DELETE FROM users WHERE id = ?',
-      [id]
+      'UPDATE users SET status = ? WHERE id = ?',
+      ['inactive', id]
     );
     
     return user;

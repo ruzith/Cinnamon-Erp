@@ -66,20 +66,21 @@ exports.updateEmployee = async (req, res) => {
       return res.status(400).json({ message: error.details[0].message });
     }
 
-    const employee = await Employee.findById(req.params.id);
+    const employeeModel = new Employee();
+    const employee = await employeeModel.findById(req.params.id);
     if (!employee) {
       return res.status(404).json({ message: 'Employee not found' });
     }
 
     // Check for duplicate NIC if it's being changed
     if (req.body.nic && req.body.nic !== employee.nic) {
-      const existingEmployee = await Employee.findByNIC(req.body.nic);
+      const existingEmployee = await employeeModel.findByNIC(req.body.nic);
       if (existingEmployee) {
         return res.status(400).json({ message: 'Employee with this NIC already exists' });
       }
     }
 
-    const updatedEmployee = await Employee.update(req.params.id, req.body);
+    const updatedEmployee = await employeeModel.update(req.params.id, req.body);
     res.status(200).json(updatedEmployee);
   } catch (error) {
     res.status(400).json({ message: error.message });

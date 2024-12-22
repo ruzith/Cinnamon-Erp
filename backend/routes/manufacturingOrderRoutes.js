@@ -48,7 +48,8 @@ router.put('/:id', protect, authorize('admin', 'manager'), async (req, res) => {
 // Delete manufacturing order
 router.delete('/:id', protect, authorize('admin'), async (req, res) => {
   try {
-    await ManufacturingOrder.delete(req.params.id);
+    const { forceDelete } = req.query;
+    await ManufacturingOrder.delete(req.params.id, forceDelete === 'true');
     res.json({ message: 'Manufacturing order removed' });
   } catch (error) {
     if (error.message.includes('not found')) {

@@ -47,36 +47,77 @@ class AssetMaintenance extends BaseModel {
   }
 
   async createWithAttachments(maintenanceData, attachments = []) {
-    await this.pool.beginTransaction();
+    const connection = await this.pool.getConnection();
+    
     try {
-      // Create maintenance record
-      const [result] = await this.pool.execute(
-        'INSERT INTO asset_maintenance SET ?',
-        maintenanceData
-      );
+      await connection.beginTransaction();
+      
+      // Transform the data to match database fields
+      const dbMaintenanceData = {
+        asset_id: maintenanceData.assetId,
+        type: maintenanceData.type,
+        description: maintenanceData.description,
+        maintenance_date: maintenanceData.date,
+        cost: maintenanceData.cost,
+        performed_by: maintenanceData.performedBy,
+        next_maintenance_date: maintenanceData.nextMaintenanceDate,
+        status: maintenanceData.status || 'pending',
+        notes: maintenanceData.notes,
+        created_by: maintenanceData.created_by
+      };
+
+      // Create maintenance record with explicit column names
+      const [result] = await connection.execute(`
+        INSERT INTO asset_maintenance (
+          asset_id,
+          type,
+          description,
+          maintenance_date,
+          cost,
+          performed_by,
+          next_maintenance_date,
+          status,
+          notes,
+          created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        dbMaintenanceData.asset_id,
+        dbMaintenanceData.type,
+        dbMaintenanceData.description,
+        dbMaintenanceData.maintenance_date,
+        dbMaintenanceData.cost,
+        dbMaintenanceData.performed_by,
+        dbMaintenanceData.next_maintenance_date,
+        dbMaintenanceData.status,
+        dbMaintenanceData.notes,
+        dbMaintenanceData.created_by
+      ]);
+
       const maintenanceId = result.insertId;
 
       // Create attachments if any
       for (const attachment of attachments) {
-        await this.pool.execute(
-          'INSERT INTO asset_attachments SET ?',
-          { ...attachment, maintenance_id: maintenanceId }
+        await connection.execute(
+          'INSERT INTO asset_attachments (maintenance_id, file_path, file_name, file_type) VALUES (?, ?, ?, ?)',
+          [maintenanceId, attachment.file_path, attachment.file_name, attachment.file_type]
         );
       }
 
-      // Update asset status if maintenance
+      // Update asset status if maintenance type is repair
       if (maintenanceData.type === 'repair') {
-        await this.pool.execute(
+        await connection.execute(
           'UPDATE assets SET status = "maintenance" WHERE id = ?',
-          [maintenanceData.asset_id]
+          [maintenanceData.assetId]
         );
       }
 
-      await this.pool.commit();
+      await connection.commit();
       return this.getWithDetails(maintenanceId);
     } catch (error) {
-      await this.pool.rollback();
+      await connection.rollback();
       throw error;
+    } finally {
+      connection.release();
     }
   }
 

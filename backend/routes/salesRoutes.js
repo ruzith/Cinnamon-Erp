@@ -92,6 +92,12 @@ router.get('/:id/print', protect, async (req, res) => {
       return res.status(404).json({ message: 'Sale not found' });
     }
 
+    // Fetch settings
+    const [settings] = await SalesInvoice.pool.execute(
+      'SELECT company_name, company_address, company_phone FROM settings LIMIT 1'
+    );
+    const companySettings = settings[0] || {};
+
     // Create PDF document
     const doc = new PDFDocument({
       size: 'A4',
@@ -110,13 +116,13 @@ router.get('/:id/print', protect, async (req, res) => {
       doc.moveTo(50, y).lineTo(550, y).stroke();
     };
 
-    // Add company header
-    doc.fontSize(24).text('COMPANY NAME', { align: 'center' });
+    // Add company header using settings data
+    doc.fontSize(24).text(companySettings.company_name || 'COMPANY NAME', { align: 'center' });
     doc.moveDown(0.5);
-    doc.fontSize(12).text('123 Business Street', { align: 'center' });
-    doc.text('City, Country', { align: 'center' });
-    doc.text('Phone: (123) 456-7890', { align: 'center' });
-    doc.text('Email: info@company.com', { align: 'center' });
+    doc.fontSize(12).text(companySettings.company_address || '', { align: 'center' });
+    if (companySettings.company_phone) {
+      doc.text(`Phone: ${companySettings.company_phone}`, { align: 'center' });
+    }
     
     drawLine(doc.y + 10);
     doc.moveDown();

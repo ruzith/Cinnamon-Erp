@@ -269,8 +269,8 @@ const Sales = () => {
     setSaleFormData(prev => ({
       ...prev,
       items: items,
-      totalAmount: totalAmount,
-      subTotal: totalAmount
+      total: totalAmount,
+      sub_total: totalAmount
     }));
   };
 
@@ -551,7 +551,7 @@ const Sales = () => {
                   </TableCell>
                   <TableCell align="right">{sale.total_items}</TableCell>
                   <TableCell align="right">
-                    {formatCurrency(sale.totalAmount)}
+                    {formatCurrency(sale.total)}
                   </TableCell>
                   <TableCell>
                     <Chip

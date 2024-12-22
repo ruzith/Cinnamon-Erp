@@ -220,4 +220,89 @@ exports.deleteInventoryItem = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
-}; 
+};
+
+// @desc    Update inventory transaction
+// @route   PUT /api/inventory/transactions/:id
+// @access  Private/Admin
+exports.updateInventoryTransaction = async (req, res) => {
+  let connection;
+  try {
+    const { error } = validateTransaction(req.body);
+    if (error) {
+      return res.status(400).json({ message: error.details[0].message });
+    }
+
+    // Get a connection from the pool
+    connection = await Inventory.pool.getConnection();
+
+    // Start transaction
+    await connection.beginTransaction();
+
+    try {
+      // Get the original transaction
+      const [originalTransaction] = await connection.execute(
+        'SELECT * FROM inventory_transactions WHERE id = ?',
+        [req.params.id]
+      );
+
+      if (!originalTransaction[0]) {
+        await connection.rollback();
+        return res.status(404).json({ message: 'Transaction not found' });
+      }
+
+      // Prepare update data
+      const updateData = {
+        type: req.body.type,
+        quantity: req.body.quantity || req.body.amount, // Use quantity if provided, otherwise use amount
+        reference: req.body.reference || originalTransaction[0].reference, // Keep original reference if not provided
+        notes: req.body.notes || originalTransaction[0].notes // Keep original notes if not provided
+      };
+
+      // Update the transaction
+      await connection.execute(`
+        UPDATE inventory_transactions
+        SET type = ?, quantity = ?, reference = ?, notes = ?
+        WHERE id = ?`,
+        [
+          updateData.type,
+          updateData.quantity,
+          updateData.reference,
+          updateData.notes,
+          req.params.id
+        ]
+      );
+
+      // Get the updated transaction with related data
+      const [updatedTransaction] = await connection.execute(`
+        SELECT it.*, 
+               i.product_name,
+               i.unit
+        FROM inventory_transactions it
+        JOIN inventory i ON it.item_id = i.id
+        WHERE it.id = ?
+      `, [req.params.id]);
+
+      await connection.commit();
+      res.status(200).json(updatedTransaction[0]);
+    } catch (error) {
+      if (connection) await connection.rollback();
+      throw error;
+    }
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  } finally {
+    if (connection) {
+      connection.release();
+    }
+  }
+};
+
+exports.getInventoryItems = exports.getInventoryItems;
+exports.getInventoryItem = exports.getInventoryItem;
+exports.createInventoryItem = exports.createInventoryItem;
+exports.updateInventoryItem = exports.updateInventoryItem;
+exports.deleteInventoryItem = exports.deleteInventoryItem;
+exports.getInventoryTransactions = exports.getInventoryTransactions;
+exports.createInventoryTransaction = exports.createInventoryTransaction;
+exports.updateInventoryTransaction = exports.updateInventoryTransaction; 

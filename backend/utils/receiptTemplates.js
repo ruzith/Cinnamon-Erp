@@ -1,4 +1,4 @@
-exports.generateAdvancePaymentReceipt = (payment) => {
+exports.generateAdvancePaymentReceipt = (payment, settings) => {
   const formattedDate = new Date(payment.payment_date).toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
@@ -122,9 +122,19 @@ exports.generateAdvancePaymentReceipt = (payment) => {
     <body>
       <div class="container">
         <div class="header">
-          <div class="company-name">COMPANY NAME</div>
+          <div class="company-name">${settings?.company_name || 'COMPANY NAME'}</div>
           <div class="receipt-title">Advance Payment Receipt</div>
           <div class="receipt-number">${payment.receipt_number}</div>
+          ${settings?.company_address ? `
+          <div style="color: #7f8c8d; font-size: 14px; margin-top: 10px;">
+            ${settings.company_address}
+          </div>
+          ` : ''}
+          ${settings?.company_phone ? `
+          <div style="color: #7f8c8d; font-size: 14px;">
+            Tel: ${settings.company_phone}
+          </div>
+          ` : ''}
         </div>
         
         <div class="receipt-box">
@@ -169,7 +179,7 @@ exports.generateAdvancePaymentReceipt = (payment) => {
         
         <div class="footer">
           <p>This is a computer generated receipt.</p>
-          <p>For any queries, please contact: support@company.com</p>
+          <p>For any queries, please contact: ${settings?.company_phone || 'support@company.com'}</p>
         </div>
       </div>
     </body>

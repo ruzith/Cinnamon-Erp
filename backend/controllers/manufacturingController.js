@@ -88,27 +88,119 @@ exports.updateContractor = async (req, res) => {
 // @route   DELETE /api/manufacturing/contractors/:id
 // @access  Private/Admin
 exports.deleteContractor = async (req, res) => {
+  const connection = await pool.getConnection();
+  
   try {
-    const contractor = await ManufacturingContractor.findById(req.params.id);
-    if (!contractor) {
-      return res.status(404).json({ message: 'Contractor not found' });
-    }
+    const { forceDelete, newContractorId } = req.query;
+    await connection.beginTransaction();
 
-    // Check if contractor has active assignments
-    const [rows] = await contractor.pool.execute(
-      'SELECT COUNT(*) as count FROM cinnamon_assignments WHERE contractor_id = ? AND status = "active"',
+    // Check if contractor exists
+    const [contractor] = await connection.execute(
+      'SELECT * FROM manufacturing_contractors WHERE id = ?',
       [req.params.id]
     );
 
-    if (rows[0].count > 0) {
-      return res.status(400).json({
-        message: 'Cannot delete contractor with active assignments'
+    if (!contractor[0]) {
+      await connection.rollback();
+      connection.release();
+      return res.status(404).json({ message: 'Contractor not found' });
+    }
+
+    // Check for active assignments
+    const [assignments] = await connection.execute(
+      'SELECT * FROM cinnamon_assignments WHERE contractor_id = ? AND status = "active"',
+      [req.params.id]
+    );
+
+    // Check for pending payments
+    const [payments] = await connection.execute(
+      'SELECT COUNT(*) as count FROM advance_payments WHERE contractor_id = ?',
+      [req.params.id]
+    );
+
+    // If there are pending payments or active assignments and forceDelete is not true
+    if ((payments[0].count > 0 || assignments.length > 0) && forceDelete !== 'true') {
+      await connection.rollback();
+      connection.release();
+      return res.status(400).json({ 
+        message: 'Cannot delete contractor with pending payments or active assignments',
+        pendingPayments: payments[0].count,
+        assignmentCount: assignments.length
       });
     }
 
-    await ManufacturingContractor.delete(req.params.id);
-    res.status(200).json({ message: 'Contractor deleted successfully' });
+    if (assignments.length > 0) {
+      if (forceDelete === 'true' && newContractorId) {
+        // Verify new contractor exists and is active
+        const [newContractor] = await connection.execute(
+          'SELECT * FROM manufacturing_contractors WHERE id = ? AND status = "active"',
+          [newContractorId]
+        );
+
+        if (!newContractor[0]) {
+          await connection.rollback();
+          connection.release();
+          return res.status(400).json({ message: 'Invalid or inactive new contractor' });
+        }
+
+        // Update all assignments
+        await connection.execute(
+          'UPDATE cinnamon_assignments SET contractor_id = ? WHERE contractor_id = ?',
+          [newContractorId, req.params.id]
+        );
+
+        // Update all payments if forceDelete is true
+        await connection.execute(
+          'UPDATE advance_payments SET contractor_id = ? WHERE contractor_id = ?',
+          [newContractorId, req.params.id]
+        );
+
+        // Delete the contractor
+        await connection.execute(
+          'DELETE FROM manufacturing_contractors WHERE id = ?',
+          [req.params.id]
+        );
+
+        await connection.commit();
+        connection.release();
+        
+        return res.status(200).json({ 
+          message: 'Contractor deleted successfully',
+          reassignedAssignments: assignments
+        });
+      } else {
+        await connection.rollback();
+        connection.release();
+        return res.status(400).json({
+          message: 'Cannot delete contractor with active assignments',
+          activeAssignments: assignments,
+          assignmentCount: assignments.length
+        });
+      }
+    }
+
+    // If no assignments, but there are payments and forceDelete is true
+    if (payments[0].count > 0 && forceDelete === 'true' && newContractorId) {
+      // Update all payments to new contractor
+      await connection.execute(
+        'UPDATE advance_payments SET contractor_id = ? WHERE contractor_id = ?',
+        [newContractorId, req.params.id]
+      );
+    }
+
+    await connection.execute(
+      'DELETE FROM manufacturing_contractors WHERE id = ?',
+      [req.params.id]
+    );
+
+    await connection.commit();
+    connection.release();
+    
+    return res.status(200).json({ message: 'Contractor deleted successfully' });
   } catch (error) {
+    console.error('Error in deleteContractor:', error);
+    await connection.rollback();
+    connection.release();
     res.status(500).json({ message: error.message });
   }
 };
@@ -177,7 +269,8 @@ exports.createAssignment = async (req, res) => {
 // @access  Private/Admin
 exports.updateAssignment = async (req, res) => {
   try {
-    const { status } = req.body;
+    const { quantity, duration, duration_type, start_date, notes } = req.body;
+    
     const [assignment] = await pool.execute(
       'SELECT * FROM cinnamon_assignments WHERE id = ?',
       [req.params.id]
@@ -188,8 +281,11 @@ exports.updateAssignment = async (req, res) => {
     }
 
     await pool.execute(
-      'UPDATE cinnamon_assignments SET status = ? WHERE id = ?',
-      [status, req.params.id]
+      `UPDATE cinnamon_assignments 
+       SET quantity = ?, duration = ?, duration_type = ?, 
+           start_date = ?, notes = ?
+       WHERE id = ?`,
+      [quantity, duration, duration_type, start_date, notes, req.params.id]
     );
 
     const [updatedAssignment] = await pool.execute(

@@ -22,9 +22,66 @@ router.get('/accounts', protect, async (req, res) => {
 
 router.post('/accounts', protect, authorize('admin', 'accountant'), async (req, res) => {
   try {
+    // Validate account type
+    const validTypes = ['asset', 'liability', 'equity', 'revenue', 'expense'];
+    if (!validTypes.includes(req.body.type)) {
+      return res.status(400).json({ 
+        message: `Invalid account type. Must be one of: ${validTypes.join(', ')}` 
+      });
+    }
+
+    // Define valid categories for each type
+    const validCategories = {
+      asset: ['current', 'fixed'],
+      liability: ['current-liability', 'long-term-liability'],
+      equity: ['capital', 'operational'],
+      revenue: ['operational'],
+      expense: ['operational']
+    };
+
+    // Set default category based on type
+    let category;
+    switch (req.body.type) {
+      case 'asset':
+        category = req.body.category || 'current';
+        break;
+      case 'liability':
+        category = req.body.category || 'current-liability';
+        break;
+      case 'equity':
+        category = req.body.category || 'capital';
+        break;
+      default:
+        category = 'operational';
+    }
+
+    // Validate the category
+    if (!validCategories[req.body.type].includes(category)) {
+      return res.status(400).json({
+        message: `Invalid category for ${req.body.type}. Must be one of: ${validCategories[req.body.type].join(', ')}`
+      });
+    }
+
+    // Create account with explicit field names
     const [result] = await Account.pool.execute(
-      'INSERT INTO accounts SET ?',
-      [req.body]
+      `INSERT INTO accounts (
+        code,
+        name,
+        type,
+        category,
+        description,
+        balance,
+        status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        req.body.number,
+        req.body.name,
+        req.body.type,
+        category,
+        req.body.description || '',
+        req.body.balance || 0,
+        req.body.status || 'active'
+      ]
     );
     
     const [account] = await Account.pool.execute(

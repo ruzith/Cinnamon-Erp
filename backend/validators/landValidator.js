@@ -1,17 +1,37 @@
 const Joi = require('joi');
 
 const landSchema = Joi.object({
+  name: Joi.string().required().trim(),
   parcel_number: Joi.string().required().trim(),
+  size: Joi.number().required().positive(),
+  category: Joi.string().valid('agricultural', 'residential', 'commercial', 'forest', 'other').required(),
+  ownership_status: Joi.string().valid('owned', 'rent').required(),
   location: Joi.string().required().trim(),
-  area: Joi.number().required().positive(),
-  area_unit: Joi.string().valid('hectares', 'acres', 'square_meters').required(),
   acquisition_date: Joi.date().required(),
   status: Joi.string().valid('active', 'inactive', 'under_maintenance').default('active'),
-  forest_type: Joi.string().required().trim(),
-  soil_type: Joi.string().allow(null, ''),
-  last_harvest_date: Joi.date().allow(null),
-  next_harvest_date: Joi.date().allow(null),
-  notes: Joi.string().allow(null, '')
+  description: Joi.string().allow(null, ''),
+  rent_details: Joi.object({
+    monthly_rent: Joi.number().when('ownership_status', {
+      is: 'rent',
+      then: Joi.required()
+    }),
+    lease_start_date: Joi.date().when('ownership_status', {
+      is: 'rent',
+      then: Joi.required()
+    }),
+    lease_end_date: Joi.date().when('ownership_status', {
+      is: 'rent',
+      then: Joi.required()
+    }),
+    lessor_name: Joi.string().when('ownership_status', {
+      is: 'rent',
+      then: Joi.required()
+    }),
+    lessor_contact: Joi.string().when('ownership_status', {
+      is: 'rent',
+      then: Joi.required()
+    })
+  }).allow(null)
 });
 
 exports.validateLand = (data) => landSchema.validate(data); 

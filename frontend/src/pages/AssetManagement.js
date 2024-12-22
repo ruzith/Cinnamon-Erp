@@ -20,7 +20,7 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  FormControl,
+  FormControl as MuiFormControl,
   InputLabel,
   Select,
   MenuItem,
@@ -37,6 +37,7 @@ import {
   AttachMoney as ValueIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
+import { useCurrencyFormatter } from '../utils/currencyUtils';
 
 const TabPanel = (props) => {
   const { children, value, index, ...other } = props;
@@ -55,23 +56,17 @@ const AssetManagement = () => {
   const [openMaintenanceDialog, setOpenMaintenanceDialog] = useState(false);
   const [openHistoryDialog, setOpenHistoryDialog] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState(null);
+  const [categories, setCategories] = useState([]);
 
   const [assetFormData, setAssetFormData] = useState({
     assetNumber: '',
     name: '',
     category: '',
     type: '',
-    manufacturer: '',
-    model: '',
     purchaseDate: '',
     purchasePrice: '',
     currentValue: '',
-    location: '',
-    status: 'active',
-    assignedTo: '',
-    specifications: '',
-    warrantyInfo: '',
-    notes: ''
+    status: 'active'
   });
 
   const [maintenanceFormData, setMaintenanceFormData] = useState({
@@ -86,9 +81,12 @@ const AssetManagement = () => {
     notes: ''
   });
 
+  const { formatCurrency } = useCurrencyFormatter();
+
   useEffect(() => {
     fetchAssets();
     fetchMaintenanceRecords();
+    fetchCategories();
   }, []);
 
   const fetchAssets = async () => {
@@ -109,6 +107,15 @@ const AssetManagement = () => {
     }
   };
 
+  const fetchCategories = async () => {
+    try {
+      const response = await axios.get('/api/assets/categories');
+      setCategories(response.data);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
+  };
+
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
   };
@@ -116,16 +123,14 @@ const AssetManagement = () => {
   const handleEdit = (asset) => {
     setSelectedAsset(asset);
     setAssetFormData({
-      assetNumber: asset.asset_number,
-      name: asset.name,
-      category: asset.category_id,
-      type: asset.type,
-      purchaseDate: asset.purchase_date.split('T')[0],
-      purchasePrice: asset.purchase_price,
-      currentValue: asset.current_value,
-      status: asset.status,
-      assignedTo: asset.assigned_to,
-      // ... other fields ...
+      assetNumber: asset?.asset_number || '',
+      name: asset?.name || '',
+      category: asset?.category_id || '',
+      type: asset?.type || '',
+      purchaseDate: asset?.purchase_date ? asset.purchase_date.split('T')[0] : '',
+      purchasePrice: asset?.purchase_price || '',
+      currentValue: asset?.current_value || '',
+      status: asset?.status || 'active'
     });
     setOpenDialog(true);
   };
@@ -260,38 +265,13 @@ const AssetManagement = () => {
   // Calculate summary statistics
   const summaryStats = {
     totalAssets: assets.length,
-    maintenanceNeeded: assets.filter(asset => asset.status === 'needs_maintenance').length,
-    totalValue: assets.reduce((sum, asset) => sum + Number(asset.currentValue), 0).toFixed(2),
-    activeMaintenanceJobs: maintenanceRecords.filter(record => record.status === 'in_progress').length
-  };
-
-  const handleInputChange = (e) => {
-    setAssetFormData({
-      ...assetFormData,
-      [e.target.name]: e.target.value,
-    });
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      if (selectedAsset) {
-        await axios.put(`/api/assets/${selectedAsset.id}`, assetFormData);
-      } else {
-        await axios.post('/api/assets', assetFormData);
-      }
-      fetchAssets();
-      handleCloseDialog();
-    } catch (error) {
-      console.error('Error saving asset:', error);
-    }
-  };
-
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(value);
+    maintenanceNeeded: assets.filter(asset => asset.status === 'maintenance').length,
+    totalValue: assets.reduce((sum, asset) => sum + Number(asset.current_value), 0),
+    activeMaintenanceJobs: maintenanceRecords.filter(record => {
+      const nextDate = new Date(record.next_maintenance_date);
+      const today = new Date();
+      return nextDate >= today;
+    }).length
   };
 
   const formatDate = (dateString) => {
@@ -310,7 +290,7 @@ const AssetManagement = () => {
       <DialogContent>
         <Grid container spacing={2} sx={{ mt: 1 }}>
           <Grid item xs={12} sm={6}>
-            <FormControl fullWidth>
+            <MuiFormControl fullWidth>
               <InputLabel>Type</InputLabel>
               <Select
                 name="type"
@@ -322,7 +302,7 @@ const AssetManagement = () => {
                 <MenuItem value="repair">Repair</MenuItem>
                 <MenuItem value="upgrade">Upgrade</MenuItem>
               </Select>
-            </FormControl>
+            </MuiFormControl>
           </Grid>
           <Grid item xs={12} sm={6}>
             <TextField
@@ -533,7 +513,9 @@ const AssetManagement = () => {
               <ValueIcon sx={{ color: 'success.main', mr: 1 }} />
               <Typography color="textSecondary">Total Value</Typography>
             </Box>
-            <Typography variant="h4">${summaryStats.totalValue}</Typography>
+            <Typography variant="h4">
+              {formatCurrency(summaryStats.totalValue)}
+            </Typography>
           </Paper>
         </Grid>
 
@@ -581,7 +563,6 @@ const AssetManagement = () => {
                   <TableCell>Purchase Price</TableCell>
                   <TableCell>Current Value</TableCell>
                   <TableCell>Status</TableCell>
-                  <TableCell>Assigned To</TableCell>
                   <TableCell>Actions</TableCell>
                 </TableRow>
               </TableHead>
@@ -594,7 +575,7 @@ const AssetManagement = () => {
                     <TableCell style={{ textTransform: 'capitalize' }}>{asset.type}</TableCell>
                     <TableCell>{formatDate(asset.purchase_date)}</TableCell>
                     <TableCell>{formatCurrency(asset.purchase_price)}</TableCell>
-                    <TableCell>{formatCurrency(asset.current_value)}</TableCell>
+                    <TableCell>{formatCurrency(asset.currentValue)}</TableCell>
                     <TableCell>
                       <Chip
                         label={asset.status}
@@ -603,7 +584,6 @@ const AssetManagement = () => {
                         style={{ textTransform: 'capitalize' }}
                       />
                     </TableCell>
-                    <TableCell>{asset.well_name}</TableCell>
                     <TableCell>
                       <IconButton
                         size="small"
@@ -702,49 +682,54 @@ const AssetManagement = () => {
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
+                label="Asset Number"
+                name="assetNumber"
+                value={assetFormData.assetNumber}
+                onChange={handleAssetInputChange}
+                required
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
                 label="Asset Name"
                 name="name"
                 value={assetFormData.name}
-                onChange={handleInputChange}
+                onChange={handleAssetInputChange}
                 required
               />
             </Grid>
             <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Category"
-                name="category"
-                value={assetFormData.category}
-                onChange={handleInputChange}
-                required
-              />
+              <MuiFormControl fullWidth>
+                <InputLabel>Category</InputLabel>
+                <Select
+                  name="category"
+                  value={assetFormData.category}
+                  label="Category"
+                  onChange={handleAssetInputChange}
+                >
+                  {categories.map((category) => (
+                    <MenuItem key={category.id} value={category.id}>
+                      {category.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </MuiFormControl>
             </Grid>
             <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Type"
-                name="type"
-                value={assetFormData.type}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Manufacturer"
-                name="manufacturer"
-                value={assetFormData.manufacturer}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Model"
-                name="model"
-                value={assetFormData.model}
-                onChange={handleInputChange}
-              />
+              <MuiFormControl fullWidth>
+                <InputLabel>Type</InputLabel>
+                <Select
+                  name="type"
+                  value={assetFormData.type}
+                  label="Type"
+                  onChange={handleAssetInputChange}
+                >
+                  <MenuItem value="equipment">Equipment</MenuItem>
+                  <MenuItem value="vehicle">Vehicle</MenuItem>
+                  <MenuItem value="tool">Tool</MenuItem>
+                </Select>
+              </MuiFormControl>
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
@@ -753,7 +738,7 @@ const AssetManagement = () => {
                 name="purchaseDate"
                 type="date"
                 value={assetFormData.purchaseDate}
-                onChange={handleInputChange}
+                onChange={handleAssetInputChange}
                 InputLabelProps={{ shrink: true }}
               />
             </Grid>
@@ -764,7 +749,7 @@ const AssetManagement = () => {
                 name="purchasePrice"
                 type="number"
                 value={assetFormData.purchasePrice}
-                onChange={handleInputChange}
+                onChange={handleAssetInputChange}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -774,81 +759,30 @@ const AssetManagement = () => {
                 name="currentValue"
                 type="number"
                 value={assetFormData.currentValue}
-                onChange={handleInputChange}
+                onChange={handleAssetInputChange}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Location"
-                name="location"
-                value={assetFormData.location}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
+              <MuiFormControl fullWidth>
                 <InputLabel>Status</InputLabel>
                 <Select
                   name="status"
                   value={assetFormData.status}
                   label="Status"
-                  onChange={handleInputChange}
+                  onChange={handleAssetInputChange}
                 >
                   <MenuItem value="active">Active</MenuItem>
                   <MenuItem value="maintenance">In Maintenance</MenuItem>
                   <MenuItem value="retired">Retired</MenuItem>
                   <MenuItem value="disposed">Disposed</MenuItem>
                 </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Assigned To"
-                name="assignedTo"
-                value={assetFormData.assignedTo}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Specifications"
-                name="specifications"
-                multiline
-                rows={2}
-                value={assetFormData.specifications}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Warranty Information"
-                name="warrantyInfo"
-                multiline
-                rows={2}
-                value={assetFormData.warrantyInfo}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Notes"
-                name="notes"
-                multiline
-                rows={2}
-                value={assetFormData.notes}
-                onChange={handleInputChange}
-              />
+              </MuiFormControl>
             </Grid>
           </Grid>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog}>Cancel</Button>
-          <Button variant="contained" onClick={handleSubmit}>
+          <Button variant="contained" onClick={handleAssetSubmit}>
             {selectedAsset ? 'Update' : 'Create'}
           </Button>
         </DialogActions>

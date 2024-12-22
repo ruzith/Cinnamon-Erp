@@ -190,7 +190,7 @@ CREATE TABLE payroll_items (
   payment_date TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (payroll_id) REFERENCES payrolls(id),
-  FOREIGN KEY (employee_id) REFERENCES employees(id)
+  FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE RESTRICT
 );
 
 -- Payroll Components table
@@ -428,6 +428,7 @@ CREATE TABLE inventory (
   purchase_price DECIMAL(15,2) NOT NULL,
   selling_price DECIMAL(15,2),
   description TEXT,
+  status ENUM('active', 'inactive') DEFAULT 'active',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );

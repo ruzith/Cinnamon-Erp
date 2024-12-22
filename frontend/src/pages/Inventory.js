@@ -35,6 +35,7 @@ import {
   TrendingUp as TrendingIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
+import { useCurrencyFormatter } from '../utils/currencyUtils';
 
 const TabPanel = (props) => {
   const { children, value, index, ...other } = props;
@@ -71,16 +72,23 @@ const Inventory = () => {
     location: '',
     purchase_price: '',
     selling_price: '',
-    description: ''
+    description: '',
+    status: 'active'
   });
 
   const [transactionData, setTransactionData] = useState({
-    productId: '',
-    type: 'in',
-    quantity: '',
-    reason: '',
-    notes: ''
+    date: new Date().toISOString().split('T')[0],
+    type: 'revenue',
+    amount: '',
+    category: 'production',
+    description: '',
+    well_id: '',
+    lease_id: '',
+    status: 'draft',
+    entries: []
   });
+
+  const { formatCurrency } = useCurrencyFormatter();
 
   useEffect(() => {
     fetchInventory();
@@ -99,6 +107,7 @@ const Inventory = () => {
   const fetchTransactions = async () => {
     try {
       const response = await axios.get('/api/inventory/transactions');
+      console.log('Fetched transactions:', response.data);
       setTransactions(response.data);
     } catch (error) {
       console.error('Error fetching transactions:', error);
@@ -123,7 +132,8 @@ const Inventory = () => {
         location: item.location,
         purchase_price: item.purchase_price,
         selling_price: item.selling_price,
-        description: item.description
+        description: item.description,
+        status: item.status
       });
     } else {
       setSelectedItem(null);
@@ -138,21 +148,42 @@ const Inventory = () => {
         location: '',
         purchase_price: '',
         selling_price: '',
-        description: ''
+        description: '',
+        status: 'active'
       });
     }
     setOpenDialog(true);
   };
 
-  const handleOpenTransactionDialog = (item, type) => {
-    setSelectedItem(item);
-    setTransactionData({
-      productId: item.id,
-      type: type,
-      quantity: '',
-      reason: '',
-      notes: ''
-    });
+  const handleOpenTransactionDialog = (transaction = null) => {
+    console.log('Opening transaction dialog with:', transaction);
+    if (transaction && transaction.id) {
+      setSelectedItem(transaction);
+      setTransactionData({
+        date: transaction.date?.split('T')[0] || new Date().toISOString().split('T')[0],
+        type: transaction.type || 'revenue',
+        amount: transaction.amount || '',
+        category: transaction.category || 'production',
+        description: transaction.description || '',
+        well_id: transaction.well_id || '',
+        lease_id: transaction.lease_id || '',
+        status: transaction.status || 'draft',
+        entries: transaction.entries || []
+      });
+    } else {
+      setSelectedItem(null);
+      setTransactionData({
+        date: new Date().toISOString().split('T')[0],
+        type: 'revenue',
+        amount: '',
+        category: 'production',
+        description: '',
+        well_id: '',
+        lease_id: '',
+        status: 'draft',
+        entries: []
+      });
+    }
     setOpenTransactionDialog(true);
   };
 
@@ -194,7 +225,8 @@ const Inventory = () => {
         location: formData.location,
         purchase_price: Number(formData.purchase_price),
         selling_price: Number(formData.selling_price),
-        description: formData.description
+        description: formData.description,
+        status: formData.status
       };
 
       if (selectedItem) {
@@ -212,12 +244,45 @@ const Inventory = () => {
   const handleTransactionSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('/api/inventory/transactions', transactionData);
+      const payload = {
+        ...transactionData,
+        entries: [
+          {
+            account_id: '1000',
+            description: transactionData.description,
+            debit: transactionData.type === 'revenue' ? transactionData.amount : 0,
+            credit: transactionData.type === 'revenue' ? 0 : transactionData.amount
+          },
+          {
+            account_id: transactionData.type === 'revenue' ? '4000' : '5000',
+            description: transactionData.description,
+            debit: transactionData.type === 'revenue' ? 0 : transactionData.amount,
+            credit: transactionData.type === 'revenue' ? transactionData.amount : 0
+          }
+        ]
+      };
+
+      if (selectedItem) {
+        await axios.put(`/api/inventory/transactions/${selectedItem.id}`, payload);
+      } else {
+        await axios.post('/api/inventory/transactions', payload);
+      }
       fetchInventory();
       fetchTransactions();
       handleCloseTransactionDialog();
     } catch (error) {
       console.error('Error processing transaction:', error);
+    }
+  };
+
+  const handleDeactivate = async (itemId, showConfirmation = true) => {
+    if (!showConfirmation || window.confirm('Are you sure you want to deactivate this inventory item?')) {
+      try {
+        await axios.put(`/api/inventory/${itemId}`, { status: 'inactive' });
+        fetchInventory();
+      } catch (error) {
+        console.error('Error deactivating inventory item:', error);
+      }
     }
   };
 
@@ -228,6 +293,12 @@ const Inventory = () => {
         fetchInventory();
       } catch (error) {
         console.error('Error deleting inventory item:', error);
+        if (error.response?.status === 400 && 
+            error.response?.data?.message?.includes('Cannot delete item with existing transactions')) {
+          if (window.confirm(error.response.data.message)) {
+            await handleDeactivate(itemId, false);
+          }
+        }
       }
     }
   };
@@ -246,12 +317,23 @@ const Inventory = () => {
     return 'success';
   };
 
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'active':
+        return 'success';
+      case 'inactive':
+        return 'error';
+      default:
+        return 'default';
+    }
+  };
+
   // Calculate summary statistics
   const summaryStats = {
     totalItems: inventory.length,
     lowStock: inventory.filter(item => item.quantity <= item.min_stock_level).length,
-    totalValue: inventory.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0).toFixed(2),
-    activeTransactions: transactions.filter(t => t.status === 'pending').length
+    totalValue: inventory.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.purchase_price)), 0).toFixed(2),
+    activeTransactions: transactions.filter(t => t.type === 'IN' || t.type === 'OUT').length
   };
 
   return (
@@ -325,7 +407,9 @@ const Inventory = () => {
               <TrendingIcon sx={{ color: 'success.main', mr: 1 }} />
               <Typography color="textSecondary">Total Value</Typography>
             </Box>
-            <Typography variant="h4">${summaryStats.totalValue}</Typography>
+            <Typography variant="h4">
+              {formatCurrency(summaryStats.totalValue)}
+            </Typography>
           </Paper>
         </Grid>
 
@@ -367,11 +451,13 @@ const Inventory = () => {
                 <TableRow>
                   <TableCell>Product Name</TableCell>
                   <TableCell>Category</TableCell>
-                  <TableCell>Quantity</TableCell>
-                  <TableCell>Unit</TableCell>
-                  <TableCell>Location</TableCell>
-                  <TableCell>Unit Price</TableCell>
+                  <TableCell>Type</TableCell>
+                  <TableCell align="right">Quantity</TableCell>
                   <TableCell>Stock Level</TableCell>
+                  <TableCell align="right">Purchase Price</TableCell>
+                  <TableCell align="right">Selling Price</TableCell>
+                  <TableCell>Location</TableCell>
+                  <TableCell>Status</TableCell>
                   <TableCell align="right">Actions</TableCell>
                 </TableRow>
               </TableHead>
@@ -380,14 +466,28 @@ const Inventory = () => {
                   <TableRow key={item.id} hover>
                     <TableCell>{item.product_name}</TableCell>
                     <TableCell>{item.category}</TableCell>
-                    <TableCell>{item.quantity}</TableCell>
-                    <TableCell>{item.unit}</TableCell>
-                    <TableCell>{item.location}</TableCell>
-                    <TableCell>${item.unit_price}</TableCell>
+                    <TableCell>{item.product_type}</TableCell>
+                    <TableCell align="right">
+                      {item.quantity} {item.unit}
+                    </TableCell>
                     <TableCell>
                       <Chip
                         label={getStockLevelLabel(item)}
                         color={getStockLevelColor(item)}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell align="right">{formatCurrency(item.purchase_price)}</TableCell>
+                    <TableCell align="right">
+                      {item.product_type === 'finished_good' 
+                        ? formatCurrency(item.selling_price) 
+                        : 'N/A'}
+                    </TableCell>
+                    <TableCell>{item.location}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={item.status}
+                        color={getStatusColor(item.status)}
                         size="small"
                       />
                     </TableCell>
@@ -425,6 +525,7 @@ const Inventory = () => {
                   <TableCell>Quantity</TableCell>
                   <TableCell>Reference</TableCell>
                   <TableCell>Notes</TableCell>
+                  <TableCell align="right">Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -442,6 +543,15 @@ const Inventory = () => {
                     <TableCell>{transaction.quantity}</TableCell>
                     <TableCell>{transaction.reference}</TableCell>
                     <TableCell>{transaction.notes}</TableCell>
+                    <TableCell align="right">
+                      <IconButton 
+                        size="small" 
+                        onClick={() => handleOpenTransactionDialog(transaction)}
+                        sx={{ color: 'primary.main' }}
+                      >
+                        <EditIcon />
+                      </IconButton>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -584,6 +694,87 @@ const Inventory = () => {
         <DialogActions>
           <Button onClick={handleCloseDialog}>Cancel</Button>
           <Button variant="contained" onClick={handleSubmit}>
+            {selectedItem ? 'Update' : 'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog 
+        open={openTransactionDialog} 
+        onClose={handleCloseTransactionDialog}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          {selectedItem ? 'Edit Transaction' : 'New Transaction'}
+        </DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Date"
+                name="date"
+                type="date"
+                value={transactionData.date}
+                onChange={handleTransactionInputChange}
+                InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel>Type</InputLabel>
+                <Select
+                  name="type"
+                  value={transactionData.type}
+                  onChange={handleTransactionInputChange}
+                >
+                  <MenuItem value="revenue">Revenue</MenuItem>
+                  <MenuItem value="expense">Expense</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Amount"
+                name="amount"
+                type="number"
+                value={transactionData.amount}
+                onChange={handleTransactionInputChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel>Category</InputLabel>
+                <Select
+                  name="category"
+                  value={transactionData.category}
+                  onChange={handleTransactionInputChange}
+                >
+                  <MenuItem value="production">Production</MenuItem>
+                  <MenuItem value="maintenance">Maintenance</MenuItem>
+                  <MenuItem value="lease">Lease</MenuItem>
+                  <MenuItem value="royalty">Royalty</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Description"
+                name="description"
+                multiline
+                rows={3}
+                value={transactionData.description}
+                onChange={handleTransactionInputChange}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseTransactionDialog}>Cancel</Button>
+          <Button variant="contained" onClick={handleTransactionSubmit}>
             {selectedItem ? 'Update' : 'Create'}
           </Button>
         </DialogActions>

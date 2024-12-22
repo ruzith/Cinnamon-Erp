@@ -212,6 +212,18 @@ const LandForm = ({ land, onClose }) => {
             onChange={handleChange}
           />
         </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth
+            label="Acquisition Date"
+            name="acquisition_date"
+            type="date"
+            InputLabelProps={{ shrink: true }}
+            value={formData.acquisition_date}
+            onChange={handleChange}
+            required
+          />
+        </Grid>
         <Grid item xs={12}>
           <Button type="submit" variant="contained" color="primary">
             {land ? 'Update Land' : 'Add Land'}

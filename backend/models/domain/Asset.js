@@ -25,12 +25,10 @@ class Asset extends BaseModel {
     const [rows] = await this.pool.execute(`
       SELECT a.*,
              ac.name as category_name,
-             u.name as created_by_name,
-             w.name as well_name
+             u.name as created_by_name
       FROM assets a
       LEFT JOIN asset_categories ac ON a.category_id = ac.id
       LEFT JOIN users u ON a.created_by = u.id
-      LEFT JOIN wells w ON a.assigned_to = w.id
       ${id ? 'WHERE a.id = ?' : ''}
       ORDER BY a.name ASC
     `, id ? [id] : []);

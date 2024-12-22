@@ -27,9 +27,9 @@ const registerUser = asyncHandler(async (req, res) => {
     name,
     email,
     password,
-    role: 'staff', // Set default role for registration
-    status: 'active', // Set default status
-    department: null // No department by default for self-registration
+    role: 'staff', 
+    status: 'active', 
+    department: null 
   });
 
   if (user) {
@@ -177,5 +177,3 @@ module.exports = {
   deleteUser,
   createUser
 };
-
-// Other controller methods... 

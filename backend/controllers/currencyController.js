@@ -1,4 +1,5 @@
 const Currency = require('../models/domain/Currency');
+const Settings = require('../models/domain/Settings');
 
 exports.getAllCurrencies = async (req, res) => {
   try {
@@ -13,7 +14,6 @@ exports.createCurrency = async (req, res) => {
   try {
     const { code, name, symbol, rate } = req.body;
     
-    // Basic validation
     if (!code || !name || !symbol || !rate) {
       return res.status(400).json({ message: 'All fields are required' });
     }
@@ -30,9 +30,20 @@ exports.updateCurrency = async (req, res) => {
     const { id } = req.params;
     const { code, name, symbol, rate, status } = req.body;
     
-    // Basic validation
     if (!code || !name || !symbol || !rate || !status) {
       return res.status(400).json({ message: 'All fields are required' });
+    }
+
+    // Get old rate before update
+    const oldCurrency = await Currency.getById(id);
+    if (!oldCurrency) {
+      return res.status(404).json({ message: 'Currency not found' });
+    }
+
+    const settings = await Settings.getSettings();
+    if (settings.default_currency === parseInt(id) && oldCurrency.rate !== rate) {
+      const rateRatio = rate / oldCurrency.rate;
+      await Currency.updateAllRates(rateRatio, id);
     }
     
     const success = await Currency.update(id, { code, name, symbol, rate, status });

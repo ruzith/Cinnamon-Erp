@@ -63,7 +63,10 @@ exports.createInventoryItem = async (req, res) => {
 // @access  Private/Admin
 exports.updateInventoryItem = async (req, res) => {
   try {
-    const { error } = validateInventory(req.body);
+    // Check if this is a partial update (like status change only)
+    const isPartialUpdate = Object.keys(req.body).length === 1 && req.body.status;
+    
+    const { error } = validateInventory(req.body, isPartialUpdate);
     if (error) {
       return res.status(400).json({ message: error.details[0].message });
     }
@@ -80,7 +83,9 @@ exports.updateInventoryItem = async (req, res) => {
       }
     }
 
-    const updatedItem = await Inventory.update(req.params.id, req.body);
+    // For partial updates, merge with existing data
+    const updateData = isPartialUpdate ? { ...item, ...req.body } : req.body;
+    const updatedItem = await Inventory.update(req.params.id, updateData);
     res.status(200).json(updatedItem);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -97,42 +102,69 @@ exports.createInventoryTransaction = async (req, res) => {
       return res.status(400).json({ message: error.details[0].message });
     }
 
-    const { type, item_id, quantity } = req.body;
+    const { type, item_id, quantity, entries } = req.body;
     const item = await Inventory.findById(item_id);
     if (!item) {
       return res.status(404).json({ message: 'Inventory item not found' });
     }
 
-    let newQuantity = item.quantity;
-    if (type === 'IN') {
-      newQuantity += quantity;
-    } else if (type === 'OUT') {
-      if (quantity > item.quantity) {
-        return res.status(400).json({ message: 'Insufficient stock' });
-      }
-      newQuantity -= quantity;
-    } else if (type === 'ADJUSTMENT') {
-      newQuantity = quantity;
-    }
-
+    // Start transaction
     await Inventory.pool.beginTransaction();
     try {
+      // First, get the account IDs from their codes
+      const accountCodes = entries.map(entry => entry.account_id);
+      const [accounts] = await Inventory.pool.execute(
+        'SELECT id, code FROM accounts WHERE code IN (?)',
+        [accountCodes]
+      );
+
+      // Create a map of account codes to IDs
+      const accountMap = accounts.reduce((acc, account) => {
+        acc[account.code] = account.id;
+        return acc;
+      }, {});
+
+      // Create inventory transaction
       const [result] = await Inventory.pool.execute(
         'INSERT INTO inventory_transactions SET ?',
         [req.body]
       );
+
+      // Create transaction entries with mapped account IDs
+      for (const entry of entries) {
+        const accountId = accountMap[entry.account_id];
+        if (!accountId) {
+          throw new Error(`Account not found with code: ${entry.account_id}`);
+        }
+
+        await Inventory.pool.execute(
+          `INSERT INTO transactions_entries (
+            transaction_id, account_id, description, debit, credit
+          ) VALUES (?, ?, ?, ?, ?)`,
+          [
+            result.insertId,
+            accountId,
+            entry.description,
+            entry.debit,
+            entry.credit
+          ]
+        );
+      }
+
+      // Update inventory quantity
+      let newQuantity = item.quantity;
+      if (type === 'IN') {
+        newQuantity += quantity;
+      } else if (type === 'OUT') {
+        if (quantity > item.quantity) {
+          throw new Error('Insufficient stock');
+        }
+        newQuantity -= quantity;
+      }
       await Inventory.updateQuantity(item_id, newQuantity);
+
       await Inventory.pool.commit();
-
-      const [transaction] = await Inventory.pool.execute(
-        `SELECT it.*, i.product_name 
-         FROM inventory_transactions it
-         JOIN inventory i ON it.item_id = i.id
-         WHERE it.id = ?`,
-        [result.insertId]
-      );
-
-      res.status(201).json(transaction[0]);
+      res.status(201).json({ ...req.body, id: result.insertId });
     } catch (error) {
       await Inventory.pool.rollback();
       throw error;

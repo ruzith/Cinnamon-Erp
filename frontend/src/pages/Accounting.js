@@ -46,6 +46,9 @@ import isBetween from 'dayjs/plugin/isBetween';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import localizedFormat from 'dayjs/plugin/localizedFormat';
 import weekOfYear from 'dayjs/plugin/weekOfYear';
+import { formatCurrency } from '../utils/currencyUtils';
+import { formatDate } from '../utils/dateUtils';
+import { useCurrencyFormatter } from '../utils/currencyUtils';
 
 dayjs.extend(isBetween);
 dayjs.extend(customParseFormat);
@@ -100,16 +103,15 @@ const Accounting = () => {
   const [selectedAccount, setSelectedAccount] = useState(null);
 
   const [transactionFormData, setTransactionFormData] = useState({
-    date: '',
-    type: 'income',
-    category: '',
+    date: new Date().toISOString().split('T')[0],
+    type: 'expense',
+    category: 'production',
     amount: '',
     description: '',
     account: '',
     reference: '',
-    status: 'completed',
-    paymentMethod: '',
-    notes: ''
+    notes: '',
+    status: 'draft'
   });
 
   const [accountFormData, setAccountFormData] = useState({
@@ -136,6 +138,11 @@ const Accounting = () => {
 
   const [openReportDialog, setOpenReportDialog] = useState(false);
   const [currentReport, setCurrentReport] = useState(null);
+
+  const { formatCurrency } = useCurrencyFormatter();
+
+  const validCategories = ['production', 'maintenance', 'royalty', 'lease'];
+  const validTypes = ['revenue', 'expense'];
 
   useEffect(() => {
     fetchTransactions();
@@ -213,13 +220,13 @@ const Accounting = () => {
       setSelectedTransaction(null);
       setTransactionFormData({
         date: '',
-        type: 'income',
-        category: '',
+        type: 'expense',
+        category: 'production',
         amount: '',
         description: '',
         account: '',
         reference: '',
-        status: 'completed',
+        status: 'draft',
         paymentMethod: '',
         notes: ''
       });
@@ -279,16 +286,16 @@ const Accounting = () => {
   const handleTransactionSubmit = async (e) => {
     e.preventDefault();
     try {
-      if (selectedTransaction) {
-        await axios.put(`/api/accounting/transactions/${selectedTransaction.id}`, transactionFormData);
-      } else {
-        await axios.post('/api/accounting/transactions', transactionFormData);
-      }
+      const response = await axios.post('/api/accounting/transactions', {
+        ...transactionFormData,
+        status: transactionFormData.status || 'draft'
+      });
       fetchTransactions();
       fetchSummary();
       handleCloseTransactionDialog();
     } catch (error) {
-      console.error('Error saving transaction:', error);
+      console.error('Error creating transaction:', error);
+      alert(error.response?.data?.message || 'Error creating transaction');
     }
   };
 
@@ -391,7 +398,6 @@ const Accounting = () => {
       setOpenReportDialog(true);
     } catch (error) {
       console.error(`Error generating ${reportType} report:`, error);
-      // You might want to add error handling UI here
     }
   };
 
@@ -419,7 +425,6 @@ const Accounting = () => {
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error(`Error exporting ${type} report:`, error);
-      // You might want to add error handling UI here
     }
   };
 
@@ -500,7 +505,7 @@ const Accounting = () => {
 
               <Box sx={{ mt: 2, p: 2, bgcolor: 'background.paper' }}>
                 <Typography variant="h6">
-                  Net Profit: ${(data.netProfit || 0).toFixed(2)}
+                  Net Profit: {formatCurrency(data.netProfit || 0)}
                 </Typography>
               </Box>
             </Box>
@@ -520,12 +525,12 @@ const Accounting = () => {
                     {data.assets?.current?.map((item) => (
                       <TableRow key={item.code}>
                         <TableCell>{item.name}</TableCell>
-                        <TableCell align="right">${(item.total || 0).toFixed(2)}</TableCell>
+                        <TableCell align="right">{formatCurrency(item.total || 0)}</TableCell>
                       </TableRow>
                     ))}
                     <TableRow>
                       <TableCell><strong>Total Current Assets</strong></TableCell>
-                      <TableCell align="right"><strong>${(data.assets?.totalCurrent || 0).toFixed(2)}</strong></TableCell>
+                      <TableCell align="right"><strong>{formatCurrency(data.assets?.totalCurrent || 0)}</strong></TableCell>
                     </TableRow>
 
                     <TableRow>
@@ -534,17 +539,17 @@ const Accounting = () => {
                     {data.assets?.fixed?.map((item) => (
                       <TableRow key={item.code}>
                         <TableCell>{item.name}</TableCell>
-                        <TableCell align="right">${(item.total || 0).toFixed(2)}</TableCell>
+                        <TableCell align="right">{formatCurrency(item.total || 0)}</TableCell>
                       </TableRow>
                     ))}
                     <TableRow>
                       <TableCell><strong>Total Fixed Assets</strong></TableCell>
-                      <TableCell align="right"><strong>${(data.assets?.totalFixed || 0).toFixed(2)}</strong></TableCell>
+                      <TableCell align="right"><strong>{formatCurrency(data.assets?.totalFixed || 0)}</strong></TableCell>
                     </TableRow>
 
                     <TableRow>
                       <TableCell><strong>Total Assets</strong></TableCell>
-                      <TableCell align="right"><strong>${(data.assets?.total || 0).toFixed(2)}</strong></TableCell>
+                      <TableCell align="right"><strong>{formatCurrency(data.assets?.total || 0)}</strong></TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>
@@ -561,12 +566,12 @@ const Accounting = () => {
                     {data.liabilities?.current?.map((item) => (
                       <TableRow key={item.code}>
                         <TableCell>{item.name}</TableCell>
-                        <TableCell align="right">${(item.total || 0).toFixed(2)}</TableCell>
+                        <TableCell align="right">{formatCurrency(item.total || 0)}</TableCell>
                       </TableRow>
                     ))}
                     <TableRow>
                       <TableCell><strong>Total Current Liabilities</strong></TableCell>
-                      <TableCell align="right"><strong>${(data.liabilities?.totalCurrent || 0).toFixed(2)}</strong></TableCell>
+                      <TableCell align="right"><strong>{formatCurrency(data.liabilities?.totalCurrent || 0)}</strong></TableCell>
                     </TableRow>
 
                     <TableRow>
@@ -575,17 +580,17 @@ const Accounting = () => {
                     {data.liabilities?.longTerm?.map((item) => (
                       <TableRow key={item.code}>
                         <TableCell>{item.name}</TableCell>
-                        <TableCell align="right">${(item.total || 0).toFixed(2)}</TableCell>
+                        <TableCell align="right">{formatCurrency(item.total || 0)}</TableCell>
                       </TableRow>
                     ))}
                     <TableRow>
                       <TableCell><strong>Total Long-term Liabilities</strong></TableCell>
-                      <TableCell align="right"><strong>${(data.liabilities?.totalLongTerm || 0).toFixed(2)}</strong></TableCell>
+                      <TableCell align="right"><strong>{formatCurrency(data.liabilities?.totalLongTerm || 0)}</strong></TableCell>
                     </TableRow>
 
                     <TableRow>
                       <TableCell><strong>Total Liabilities</strong></TableCell>
-                      <TableCell align="right"><strong>${(data.liabilities?.total || 0).toFixed(2)}</strong></TableCell>
+                      <TableCell align="right"><strong>{formatCurrency(data.liabilities?.total || 0)}</strong></TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>
@@ -599,12 +604,12 @@ const Accounting = () => {
                     {data.equity?.items?.map((item) => (
                       <TableRow key={item.code}>
                         <TableCell>{item.name}</TableCell>
-                        <TableCell align="right">${(item.total || 0).toFixed(2)}</TableCell>
+                        <TableCell align="right">{formatCurrency(item.total || 0)}</TableCell>
                       </TableRow>
                     ))}
                     <TableRow>
                       <TableCell><strong>Total Equity</strong></TableCell>
-                      <TableCell align="right"><strong>${(data.equity?.total || 0).toFixed(2)}</strong></TableCell>
+                      <TableCell align="right"><strong>{formatCurrency(data.equity?.total || 0)}</strong></TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>
@@ -613,7 +618,7 @@ const Accounting = () => {
               {/* Total Liabilities and Equity */}
               <Box sx={{ mt: 2, p: 2, bgcolor: 'background.paper' }}>
                 <Typography variant="h6">
-                  Total Liabilities and Equity: ${((data.liabilities?.total || 0) + (data.equity?.total || 0)).toFixed(2)}
+                  Total Liabilities and Equity: {formatCurrency((data.liabilities?.total || 0) + (data.equity?.total || 0))}
                 </Typography>
               </Box>
             </Box>
@@ -642,7 +647,7 @@ const Accounting = () => {
                     {data.operating?.inflows?.map((item, index) => (
                       <TableRow key={`inflow-${index}`}>
                         <TableCell>{item.description || 'Operating Inflow'}</TableCell>
-                        <TableCell align="right">${Math.abs(item.credit - item.debit).toFixed(2)}</TableCell>
+                        <TableCell align="right">{formatCurrency(Math.abs(item.credit - item.debit))}</TableCell>
                       </TableRow>
                     ))}
                     
@@ -655,7 +660,7 @@ const Accounting = () => {
                     {data.operating?.outflows?.map((item, index) => (
                       <TableRow key={`outflow-${index}`}>
                         <TableCell>{item.description || 'Operating Outflow'}</TableCell>
-                        <TableCell align="right">-${Math.abs(item.debit - item.credit).toFixed(2)}</TableCell>
+                        <TableCell align="right">-${formatCurrency(Math.abs(item.debit - item.credit))}</TableCell>
                       </TableRow>
                     ))}
                     
@@ -663,7 +668,7 @@ const Accounting = () => {
                     <TableRow>
                       <TableCell><strong>Net Cash from Operations</strong></TableCell>
                       <TableCell align="right">
-                        <strong>${(data.operating?.total || 0).toFixed(2)}</strong>
+                        <strong>{formatCurrency(data.operating?.total || 0)}</strong>
                       </TableCell>
                     </TableRow>
                   </TableBody>
@@ -684,7 +689,7 @@ const Accounting = () => {
                     {data.investing?.inflows?.map((item, index) => (
                       <TableRow key={`invest-in-${index}`}>
                         <TableCell>{item.description || 'Investment Inflow'}</TableCell>
-                        <TableCell align="right">${Math.abs(item.credit - item.debit).toFixed(2)}</TableCell>
+                        <TableCell align="right">{formatCurrency(Math.abs(item.credit - item.debit))}</TableCell>
                       </TableRow>
                     ))}
                     
@@ -697,7 +702,7 @@ const Accounting = () => {
                     {data.investing?.outflows?.map((item, index) => (
                       <TableRow key={`invest-out-${index}`}>
                         <TableCell>{item.description || 'Investment Outflow'}</TableCell>
-                        <TableCell align="right">-${Math.abs(item.debit - item.credit).toFixed(2)}</TableCell>
+                        <TableCell align="right">-${formatCurrency(Math.abs(item.debit - item.credit))}</TableCell>
                       </TableRow>
                     ))}
                     
@@ -705,7 +710,7 @@ const Accounting = () => {
                     <TableRow>
                       <TableCell><strong>Net Cash from Investing</strong></TableCell>
                       <TableCell align="right">
-                        <strong>${(data.investing?.total || 0).toFixed(2)}</strong>
+                        <strong>{formatCurrency(data.investing?.total || 0)}</strong>
                       </TableCell>
                     </TableRow>
                   </TableBody>
@@ -726,7 +731,7 @@ const Accounting = () => {
                     {data.financing?.inflows?.map((item, index) => (
                       <TableRow key={`finance-in-${index}`}>
                         <TableCell>{item.description || 'Financing Inflow'}</TableCell>
-                        <TableCell align="right">${Math.abs(item.credit - item.debit).toFixed(2)}</TableCell>
+                        <TableCell align="right">{formatCurrency(Math.abs(item.credit - item.debit))}</TableCell>
                       </TableRow>
                     ))}
                     
@@ -739,7 +744,7 @@ const Accounting = () => {
                     {data.financing?.outflows?.map((item, index) => (
                       <TableRow key={`finance-out-${index}`}>
                         <TableCell>{item.description || 'Financing Outflow'}</TableCell>
-                        <TableCell align="right">-${Math.abs(item.debit - item.credit).toFixed(2)}</TableCell>
+                        <TableCell align="right">-${formatCurrency(Math.abs(item.debit - item.credit))}</TableCell>
                       </TableRow>
                     ))}
                     
@@ -747,7 +752,7 @@ const Accounting = () => {
                     <TableRow>
                       <TableCell><strong>Net Cash from Financing</strong></TableCell>
                       <TableCell align="right">
-                        <strong>${(data.financing?.total || 0).toFixed(2)}</strong>
+                        <strong>{formatCurrency(data.financing?.total || 0)}</strong>
                       </TableCell>
                     </TableRow>
                   </TableBody>
@@ -757,7 +762,7 @@ const Accounting = () => {
               {/* Net Cash Flow */}
               <Box sx={{ mt: 3, p: 2, bgcolor: 'background.paper' }}>
                 <Typography variant="h6">
-                  Net Change in Cash: ${(data.netCashFlow || 0).toFixed(2)}
+                  Net Change in Cash: {formatCurrency(data.netCashFlow || 0)}
                 </Typography>
               </Box>
             </Box>
@@ -803,12 +808,28 @@ const Accounting = () => {
       {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
         <Typography variant="h4" sx={{ fontWeight: 600 }}>
-          Accounting & Finance
+          Accounting Management
         </Typography>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="outlined"
+            startIcon={<AddIcon />}
+            onClick={() => handleOpenAccountDialog()}
+          >
+            New Account
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => handleOpenTransactionDialog()}
+          >
+            New Transaction
+          </Button>
+        </Box>
       </Box>
 
-      {/* Summary Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
+      {/* Summary Stats Grid */}
+      <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} md={4}>
           <Paper
             elevation={0}
@@ -825,7 +846,7 @@ const Accounting = () => {
               <Typography color="textSecondary">Total Income</Typography>
             </Box>
             <Typography variant="h4" sx={{ color: 'success.main' }}>
-              ${summary.profitLoss.revenue.toFixed(2)}
+              {formatCurrency(summary.profitLoss.revenue)}
             </Typography>
           </Paper>
         </Grid>
@@ -846,7 +867,7 @@ const Accounting = () => {
               <Typography color="textSecondary">Total Expenses</Typography>
             </Box>
             <Typography variant="h4" sx={{ color: 'error.main' }}>
-              ${summary.profitLoss.expenses.toFixed(2)}
+              {formatCurrency(summary.profitLoss.expenses)}
             </Typography>
           </Paper>
         </Grid>
@@ -872,7 +893,7 @@ const Accounting = () => {
                 color: summary.profitLoss.netProfit >= 0 ? 'success.main' : 'error.main'
               }}
             >
-              ${summary.profitLoss.netProfit.toFixed(2)}
+              {formatCurrency(summary.profitLoss.netProfit)}
             </Typography>
           </Paper>
         </Grid>
@@ -894,156 +915,128 @@ const Accounting = () => {
 
         {/* Transactions Tab */}
         <TabPanel value={tabValue} index={0}>
-          <Box sx={{ p: 3 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
-              <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                Financial Transactions
-              </Typography>
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => handleOpenTransactionDialog()}
-              >
-                New Transaction
-              </Button>
-            </Box>
-
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Date</TableCell>
-                    <TableCell>Type</TableCell>
-                    <TableCell>Description</TableCell>
-                    <TableCell>Account</TableCell>
-                    <TableCell>Amount</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell align="right">Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {transactions.map((transaction) => (
-                    <TableRow key={transaction.id} hover>
-                      <TableCell>{new Date(transaction.date).toLocaleDateString()}</TableCell>
-                      <TableCell>{transaction.type}</TableCell>
-                      <TableCell>{transaction.description}</TableCell>
-                      <TableCell>{transaction.entries?.[0]?.account_name || 'N/A'}</TableCell>
-                      <TableCell 
-                        sx={{ 
-                          color: transaction.type === 'revenue' ? 'success.main' : 'error.main'
-                        }}
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Date</TableCell>
+                  <TableCell>Type</TableCell>
+                  <TableCell>Description</TableCell>
+                  <TableCell>Account</TableCell>
+                  <TableCell>Amount</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {transactions.map((transaction) => (
+                  <TableRow key={transaction.id} hover>
+                    <TableCell>
+                      {formatDate(transaction.date, 'DD/MM/YYYY')}
+                    </TableCell>
+                    <TableCell>{transaction.type}</TableCell>
+                    <TableCell>{transaction.description}</TableCell>
+                    <TableCell>{transaction.entries?.[0]?.account_name || 'N/A'}</TableCell>
+                    <TableCell 
+                      sx={{ 
+                        color: transaction.type === 'revenue' ? 'success.main' : 'error.main'
+                      }}
+                    >
+                      {formatCurrency(transaction.amount)}
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={transaction.status}
+                        color={getStatusColor(transaction.status)}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <IconButton 
+                        size="small"
+                        onClick={() => handleOpenTransactionDialog(transaction)}
+                        sx={{ color: 'primary.main' }}
                       >
-                        ${Number(transaction.amount).toFixed(2)}
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={transaction.status}
-                          color={getStatusColor(transaction.status)}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell align="right">
-                        <IconButton 
-                          size="small"
-                          onClick={() => handleOpenTransactionDialog(transaction)}
-                          sx={{ color: 'primary.main' }}
-                        >
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton 
-                          size="small"
-                          onClick={() => handleDeleteTransaction(transaction.id)}
-                          sx={{ color: 'error.main', ml: 1 }}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Box>
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton 
+                        size="small"
+                        onClick={() => handleDeleteTransaction(transaction.id)}
+                        sx={{ color: 'error.main', ml: 1 }}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
         </TabPanel>
 
         {/* Accounts Tab */}
         <TabPanel value={tabValue} index={1}>
-          <Box sx={{ p: 3 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
-              <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                Chart of Accounts
-              </Typography>
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => handleOpenAccountDialog()}
-              >
-                New Account
-              </Button>
-            </Box>
-
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Account Code</TableCell>
-                    <TableCell>Name</TableCell>
-                    <TableCell>Type</TableCell>
-                    <TableCell>Category</TableCell>
-                    <TableCell>Balance</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell align="right">Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {accounts.map((account) => (
-                    <TableRow key={account.id} hover>
-                      <TableCell>{account.code}</TableCell>
-                      <TableCell>{account.name}</TableCell>
-                      <TableCell>
-                        <Chip
-                          label={account.type}
-                          color={getAccountTypeColor(account.type)}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>{account.category}</TableCell>
-                      <TableCell 
-                        sx={{ 
-                          color: account.balance >= 0 ? 'success.main' : 'error.main'
-                        }}
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Account Code</TableCell>
+                  <TableCell>Name</TableCell>
+                  <TableCell>Type</TableCell>
+                  <TableCell>Category</TableCell>
+                  <TableCell>Balance</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {accounts.map((account) => (
+                  <TableRow key={account.id} hover>
+                    <TableCell>{account.code}</TableCell>
+                    <TableCell>{account.name}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={account.type}
+                        color={getAccountTypeColor(account.type)}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>{account.category}</TableCell>
+                    <TableCell 
+                      sx={{ 
+                        color: account.balance >= 0 ? 'success.main' : 'error.main'
+                      }}
+                    >
+                      {formatCurrency(account.balance)}
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={account.status}
+                        color={getStatusColor(account.status)}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <IconButton 
+                        size="small"
+                        onClick={() => handleOpenAccountDialog(account)}
+                        sx={{ color: 'primary.main' }}
                       >
-                        ${Math.abs(account.balance).toFixed(2)}
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={account.status}
-                          color={getStatusColor(account.status)}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell align="right">
-                        <IconButton 
-                          size="small"
-                          onClick={() => handleOpenAccountDialog(account)}
-                          sx={{ color: 'primary.main' }}
-                        >
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton 
-                          size="small"
-                          onClick={() => handleDeleteAccount(account.id)}
-                          sx={{ color: 'error.main', ml: 1 }}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Box>
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton 
+                        size="small"
+                        onClick={() => handleDeleteAccount(account.id)}
+                        sx={{ color: 'error.main', ml: 1 }}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
         </TabPanel>
 
         {/* Ledger Tab */}
@@ -1111,9 +1104,15 @@ const Accounting = () => {
                       <TableCell>{new Date(entry.date).toLocaleDateString()}</TableCell>
                       <TableCell>{entry.reference}</TableCell>
                       <TableCell>{entry.description}</TableCell>
-                      <TableCell align="right">${entry.debit.toFixed(2)}</TableCell>
-                      <TableCell align="right">${entry.credit.toFixed(2)}</TableCell>
-                      <TableCell align="right">${entry.running_balance.toFixed(2)}</TableCell>
+                      <TableCell align="right">
+                        {formatCurrency(entry.debit)}
+                      </TableCell>
+                      <TableCell align="right">
+                        {formatCurrency(entry.credit)}
+                      </TableCell>
+                      <TableCell align="right">
+                        {formatCurrency(entry.running_balance)}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -1340,9 +1339,28 @@ const Accounting = () => {
                     label="Type"
                     onChange={handleTransactionInputChange}
                   >
-                    <MenuItem value="income">Income</MenuItem>
-                    <MenuItem value="expense">Expense</MenuItem>
-                    <MenuItem value="transfer">Transfer</MenuItem>
+                    {validTypes.map(type => (
+                      <MenuItem key={type} value={type}>
+                        {type.charAt(0).toUpperCase() + type.slice(1)}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Category</InputLabel>
+                  <Select
+                    name="category"
+                    value={transactionFormData.category}
+                    label="Category"
+                    onChange={handleTransactionInputChange}
+                  >
+                    {validCategories.map(category => (
+                      <MenuItem key={category} value={category}>
+                        {category.charAt(0).toUpperCase() + category.slice(1)}
+                      </MenuItem>
+                    ))}
                   </Select>
                 </FormControl>
               </Grid>
@@ -1370,30 +1388,6 @@ const Accounting = () => {
                         {account.name}
                       </MenuItem>
                     ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  name="category"
-                  label="Category"
-                  fullWidth
-                  value={transactionFormData.category}
-                  onChange={handleTransactionInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Status</InputLabel>
-                  <Select
-                    name="status"
-                    value={transactionFormData.status}
-                    label="Status"
-                    onChange={handleTransactionInputChange}
-                  >
-                    <MenuItem value="completed">Completed</MenuItem>
-                    <MenuItem value="pending">Pending</MenuItem>
-                    <MenuItem value="cancelled">Cancelled</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>
@@ -1442,7 +1436,7 @@ const Accounting = () => {
           <DialogActions>
             <Button onClick={handleCloseTransactionDialog}>Cancel</Button>
             <Button onClick={handleTransactionSubmit} color="primary">
-              {selectedTransaction ? 'Update Transaction' : 'Create Transaction'}
+              {selectedTransaction ? 'Update' : 'Create'}
             </Button>
           </DialogActions>
         </Dialog>

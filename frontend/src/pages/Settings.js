@@ -42,15 +42,25 @@ import {
 import { updateSettings, getSettings } from '../features/settings/settingsSlice';
 import axios from 'axios';
 
-const timeZones = [
-  { value: 'Asia/Colombo', label: '(GMT+05:30) Colombo' },
-  { value: 'Asia/Kolkata', label: '(GMT+05:30) Mumbai, New Delhi' },
-  { value: 'Asia/Dubai', label: '(GMT+04:00) Dubai, UAE' },
-  { value: 'Asia/Singapore', label: '(GMT+08:00) Singapore' },
-  { value: 'Europe/London', label: '(GMT+00:00) London' },
-  { value: 'America/New_York', label: '(GMT-05:00) New York' },
-  { value: 'Pacific/Auckland', label: '(GMT+12:00) Auckland' },
-];
+const timeZones = Intl.supportedValuesOf('timeZone').map(zone => {
+  try {
+    // Get the timezone offset for current date
+    const offset = new Intl.DateTimeFormat('en', {
+      timeZone: zone,
+      timeZoneName: 'shortOffset'
+    }).formatToParts().find(part => part.type === 'timeZoneName').value;
+
+    // Get the location part (e.g., "New York" from "America/New_York")
+    const location = zone.split('/').pop().replace(/_/g, ' ');
+
+    return {
+      value: zone,
+      label: `(${offset}) ${location}`
+    };
+  } catch (e) {
+    return null;
+  }
+}).filter(Boolean).sort((a, b) => a.label.localeCompare(b.label));
 
 const Settings = () => {
   const dispatch = useDispatch();
@@ -64,7 +74,6 @@ const Settings = () => {
     companyPhone: '',
     vatNumber: '',
     taxNumber: '',
-    defaultLanguage: 'en',
     timeZone: 'Asia/Colombo',
     defaultCurrency: '',
   });
@@ -81,7 +90,6 @@ const Settings = () => {
         companyPhone: settings.company_phone || '',
         vatNumber: settings.vat_number || '',
         taxNumber: settings.tax_number || '',
-        defaultLanguage: settings.language || 'en',
         timeZone: settings.time_zone || 'Asia/Colombo',
         defaultCurrency: settings.default_currency || '',
       });
@@ -128,7 +136,6 @@ const Settings = () => {
         companyPhone: settings.company_phone || '',
         vatNumber: settings.vat_number || '',
         taxNumber: settings.tax_number || '',
-        defaultLanguage: settings.language || 'en',
         timeZone: settings.time_zone || 'Asia/Colombo',
         defaultCurrency: settings.default_currency || '',
       });
@@ -224,6 +231,19 @@ const Settings = () => {
     } catch (error) {
       showMessage(error.response?.data?.message || 'Delete failed', 'error');
     }
+  };
+
+  const handleTimeZoneChange = async (e) => {
+    const name = e?.target?.name || e.name;
+    const value = e?.target?.value ?? e.value;
+    
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+
+    // Save time zone to localStorage for immediate use
+    localStorage.setItem('timeZone', value);
   };
 
   return (
@@ -497,22 +517,7 @@ const Settings = () => {
             </Box>
 
             <Grid container spacing={3}>
-              <Grid item xs={12} md={4}>
-                <FormControl fullWidth>
-                  <InputLabel>Language</InputLabel>
-                  <Select
-                    name="defaultLanguage"
-                    value={formData.defaultLanguage}
-                    onChange={handleChange}
-                    label="Language"
-                  >
-                    <MenuItem value="en">English</MenuItem>
-                    <MenuItem value="si">සිලහල</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              
-              <Grid item xs={12} md={4}>
+              <Grid item xs={12} md={6}>
                 <FormControl fullWidth>
                   <InputLabel>Default Currency</InputLabel>
                   <Select
@@ -530,14 +535,13 @@ const Settings = () => {
                 </FormControl>
               </Grid>
 
-              {/* Add Timezone Selection */}
-              <Grid item xs={12} md={4}>
+              <Grid item xs={12} md={6}>
                 <FormControl fullWidth>
                   <InputLabel>Time Zone</InputLabel>
                   <Select
                     name="timeZone"
                     value={formData.timeZone}
-                    onChange={handleChange}
+                    onChange={handleTimeZoneChange}
                     label="Time Zone"
                   >
                     {timeZones.map((tz) => (

@@ -3,6 +3,7 @@ const { validateContractor, validateAssignment, validateAdvancePayment } = requi
 const { pool } = require('../config/db');
 const ManufacturingOrder = require('../models/domain/ManufacturingOrder');
 const Inventory = require('../models/domain/Inventory');
+const { generateAdvancePaymentReceipt } = require('../utils/receiptTemplates');
 
 // @desc    Get all contractors
 // @route   GET /api/manufacturing/contractors
@@ -257,14 +258,20 @@ exports.createAdvancePayment = async (req, res) => {
     );
 
     const [payment] = await pool.execute(
-      `SELECT ap.*, mc.name as contractor_name
+      `SELECT ap.*, mc.name as contractor_name, mc.contractor_id as contractor_id
        FROM advance_payments ap
        JOIN manufacturing_contractors mc ON ap.contractor_id = mc.id
        WHERE ap.id = ?`,
       [result.insertId]
     );
 
-    res.status(201).json(payment[0]);
+    // Generate receipt HTML
+    const receiptHtml = generateAdvancePaymentReceipt(payment[0]);
+
+    res.status(201).json({
+      ...payment[0],
+      receiptHtml
+    });
   } catch (error) {
     res.status(400).json({ message: error.message });
   }

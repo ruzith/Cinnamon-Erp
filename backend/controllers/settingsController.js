@@ -20,7 +20,6 @@ exports.getSettings = async (req, res) => {
 // @access  Private/Admin
 exports.updateSettings = async (req, res) => {
   try {
-    // Create a clean settings object with only allowed fields
     const settingsData = {
       company_name: req.body.companyName,
       company_address: req.body.companyAddress,
@@ -64,24 +63,17 @@ exports.updateSettings = async (req, res) => {
       }
     });
 
-    // Remove undefined fields
     Object.keys(settingsData).forEach(key => 
       settingsData[key] === undefined && delete settingsData[key]
     );
 
-    // Validate timezone format
-    const validTimezones = [
-      'Asia/Colombo',
-      'Asia/Kolkata',
-      'Asia/Dubai',
-      'Asia/Singapore',
-      'Europe/London',
-      'America/New_York',
-      'Pacific/Auckland'
-    ];
-
-    if (settingsData.time_zone && !validTimezones.includes(settingsData.time_zone)) {
-      return res.status(400).json({ message: 'Invalid timezone' });
+    // If time zone is changing, validate it
+    if (settingsData.time_zone) {
+      try {
+        Intl.DateTimeFormat(undefined, { timeZone: settingsData.time_zone });
+      } catch (e) {
+        return res.status(400).json({ message: 'Invalid timezone' });
+      }
     }
 
     // Validate settings
@@ -95,7 +87,12 @@ exports.updateSettings = async (req, res) => {
     }
 
     const settings = await Settings.updateSettings(settingsData);
-    res.status(200).json(settings);
+
+    // Return updated settings with a flag indicating time zone change
+    res.status(200).json({
+      ...settings,
+      timeZoneChanged: settingsData.time_zone && settings.time_zone !== settingsData.time_zone
+    });
   } catch (error) {
     // If there was a file upload, delete it since an error occurred
     if (req.file) {

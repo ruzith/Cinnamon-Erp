@@ -15,7 +15,10 @@ const {
   getTask,
   updateTask,
   deleteTask,
-  deleteAssignment
+  deleteAssignment,
+  createPayment,
+  getPayments,
+  getPaymentsByContractor
 } = require('../controllers/cuttingController');
 
 // Contractor routes
@@ -37,5 +40,10 @@ router.post('/tasks', protect, createTask);
 router.get('/tasks/:id', protect, getTask);
 router.put('/tasks/:id', protect, updateTask);
 router.delete('/tasks/:id', protect, authorize('admin'), deleteTask);
+
+// Payment routes
+router.post('/payments', protect, authorize('admin', 'accountant'), createPayment);
+router.get('/payments', protect, getPayments);
+router.get('/payments/contractor/:id', protect, getPaymentsByContractor);
 
 module.exports = router; 

@@ -1,5 +1,6 @@
 const CuttingContractor = require('../models/domain/CuttingContractor');
 const { validateContractor, validateAssignment } = require('../validators/cuttingValidator');
+const CuttingPayment = require('../models/domain/CuttingPayment');
 
 // @desc    Get all contractors
 // @route   GET /api/cutting/contractors
@@ -85,21 +86,67 @@ exports.updateContractor = async (req, res) => {
 // @access  Private/Admin
 exports.deleteContractor = async (req, res) => {
   try {
+    const { forceDelete, newContractorId } = req.query;
     const contractor = await CuttingContractor.findById(req.params.id);
+    
     if (!contractor) {
       return res.status(404).json({ message: 'Contractor not found' });
     }
 
-    // Check if contractor has active assignments
-    const hasActiveAssignments = await CuttingContractor.hasActiveAssignments(req.params.id);
-    if (hasActiveAssignments) {
+    // Check for active assignments
+    const hasActive = await CuttingContractor.hasActiveAssignments(req.params.id);
+    if (hasActive) {
+      // If forceDelete is true and newContractorId is provided, reassign assignments first
+      if (forceDelete === 'true' && newContractorId) {
+        // Check if new contractor exists and is active
+        const newContractor = await CuttingContractor.findById(newContractorId);
+        if (!newContractor || newContractor.status !== 'active') {
+          return res.status(400).json({ message: 'Invalid or inactive new contractor' });
+        }
+
+        // Reassign all active assignments to new contractor
+        await CuttingContractor.pool.execute(
+          'UPDATE land_assignments SET contractor_id = ? WHERE contractor_id = ? AND status = "active"',
+          [newContractorId, req.params.id]
+        );
+      } else {
+        // Get active assignments for error message
+        const [assignments] = await CuttingContractor.pool.execute(`
+          SELECT la.*, l.parcel_number 
+          FROM land_assignments la
+          JOIN lands l ON la.land_id = l.id
+          WHERE la.contractor_id = ? AND la.status = "active"`,
+          [req.params.id]
+        );
+
+        return res.status(400).json({
+          message: 'Cannot delete contractor with active assignments',
+          activeAssignments: assignments,
+          assignmentCount: assignments.length
+        });
+      }
+    }
+
+    // Check for pending payments
+    const [payments] = await CuttingContractor.pool.execute(`
+      SELECT COUNT(*) as count 
+      FROM cutting_payments 
+      WHERE contractor_id = ? AND status IN ('pending', 'due')`,
+      [req.params.id]
+    );
+
+    if (payments[0].count > 0) {
       return res.status(400).json({ 
-        message: 'Cannot delete contractor with active assignments. Please complete or reassign all assignments first.' 
+        message: 'Cannot delete contractor with pending payments',
+        pendingPayments: payments[0].count
       });
     }
 
     await CuttingContractor.delete(req.params.id);
-    res.status(200).json({ message: 'Contractor deleted successfully' });
+    res.status(200).json({ 
+      message: 'Contractor deleted successfully',
+      reassignedAssignments: hasActive ? assignments : undefined
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -160,11 +207,21 @@ exports.createAssignment = async (req, res) => {
       return res.status(400).json({ message: 'Land is already assigned' });
     }
 
+    // Insert the assignment with explicit column names
     const [result] = await CuttingContractor.pool.execute(
-      'INSERT INTO land_assignments SET ?',
-      [req.body]
+      `INSERT INTO land_assignments 
+       (contractor_id, land_id, start_date, end_date, status) 
+       VALUES (?, ?, ?, ?, ?)`,
+      [
+        req.body.contractor_id,
+        req.body.land_id,
+        req.body.start_date,
+        req.body.end_date,
+        req.body.status
+      ]
     );
 
+    // Get the created assignment with details
     const [assignment] = await CuttingContractor.pool.execute(
       `SELECT la.*, cc.name as contractor_name, l.parcel_number, l.location
        FROM land_assignments la
@@ -444,6 +501,79 @@ exports.deleteTask = async (req, res) => {
     );
 
     res.status(200).json({ message: 'Task deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Create payment
+// @route   POST /api/cutting/payments
+// @access  Private/Admin/Accountant
+exports.createPayment = async (req, res) => {
+  try {
+    // Check if contractor exists and is active
+    const contractor = await CuttingContractor.findById(req.body.contractor_id);
+    if (!contractor || contractor.status !== 'active') {
+      return res.status(400).json({ message: 'Invalid or inactive contractor' });
+    }
+
+    // Check if assignment exists and belongs to the contractor
+    const [assignment] = await CuttingContractor.pool.execute(
+      'SELECT * FROM land_assignments WHERE id = ? AND contractor_id = ?',
+      [req.body.assignment_id, req.body.contractor_id]
+    );
+    if (!assignment[0]) {
+      return res.status(400).json({ message: 'Invalid assignment for this contractor' });
+    }
+
+    const paymentData = {
+      contractor_id: req.body.contractor_id,
+      assignment_id: req.body.assignment_id,
+      total_amount: req.body.amount,
+      company_contribution: req.body.companyContribution,
+      manufacturing_contribution: req.body.manufacturingContribution,
+      status: req.body.status,
+      payment_date: new Date(),
+      notes: req.body.notes,
+      created_by: req.user.id
+    };
+
+    const payment = await CuttingPayment.create(paymentData);
+    res.status(201).json(payment);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+// @desc    Get all payments
+// @route   GET /api/cutting/payments
+// @access  Private
+exports.getPayments = async (req, res) => {
+  try {
+    const [rows] = await CuttingPayment.pool.execute(`
+      SELECT cp.*, 
+             cc.name as contractor_name,
+             la.assignment_number,
+             u.name as created_by_name
+      FROM cutting_payments cp
+      LEFT JOIN cutting_contractors cc ON cp.contractor_id = cc.id
+      LEFT JOIN land_assignments la ON cp.assignment_id = la.id
+      LEFT JOIN users u ON cp.created_by = u.id
+      ORDER BY cp.payment_date DESC
+    `);
+    res.status(200).json(rows);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get payments by contractor
+// @route   GET /api/cutting/payments/contractor/:id
+// @access  Private
+exports.getPaymentsByContractor = async (req, res) => {
+  try {
+    const payments = await CuttingPayment.findByContractor(req.params.id);
+    res.status(200).json(payments);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

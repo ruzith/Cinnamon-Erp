@@ -59,12 +59,16 @@ const CuttingManagement = () => {
   const [openPaymentDialog, setOpenPaymentDialog] = useState(false);
   const [paymentFormData, setPaymentFormData] = useState({
     contractor_id: '',
+    assignment_id: null,
     amount: 250,
     companyContribution: 100,
     manufacturingContribution: 150,
     status: 'pending',
     notes: ''
   });
+  const [openReassignDialog, setOpenReassignDialog] = useState(false);
+  const [contractorToDelete, setContractorToDelete] = useState(null);
+  const [newContractorId, setNewContractorId] = useState('');
 
   useEffect(() => {
     fetchContractors();
@@ -84,7 +88,8 @@ const CuttingManagement = () => {
   const fetchAssignments = async () => {
     try {
       const response = await axios.get('/api/cutting/assignments');
-      setAssignments(response.data);
+      const activeAssignments = response.data.filter(a => a.status === 'active' || a.status === 'in_progress');
+      setAssignments(activeAssignments);
     } catch (error) {
       console.error('Error fetching assignments:', error);
     }
@@ -149,13 +154,43 @@ const CuttingManagement = () => {
   };
 
   const handleDelete = async (contractorId) => {
-    if (window.confirm('Are you sure you want to delete this cutting operation?')) {
-      try {
-        await axios.delete(`/api/cutting/contractors/${contractorId}`);
-        fetchContractors();
-      } catch (error) {
-        console.error('Error deleting cutting operation:', error);
+    try {
+      await axios.delete(`/api/cutting/contractors/${contractorId}`);
+      fetchContractors();
+    } catch (error) {
+      if (error.response?.data?.activeAssignments) {
+        const shouldReassign = window.confirm(
+          `This contractor has ${error.response.data.assignmentCount} active assignments. Would you like to reassign them to another contractor?`
+        );
+        
+        if (shouldReassign) {
+          setOpenReassignDialog(true);
+          setContractorToDelete(contractorId);
+        }
+      } else if (error.response?.data?.pendingPayments) {
+        alert(`Cannot delete contractor: ${error.response.data.message}`);
+      } else {
+        console.error('Error deleting contractor:', error);
+        alert(error.response?.data?.message || 'Error deleting contractor');
       }
+    }
+  };
+
+  const handleReassignAndDelete = async () => {
+    try {
+      if (!newContractorId) {
+        alert('Please select a new contractor');
+        return;
+      }
+      
+      await axios.delete(`/api/cutting/contractors/${contractorToDelete}?forceDelete=true&newContractorId=${newContractorId}`);
+      setOpenReassignDialog(false);
+      setContractorToDelete(null);
+      setNewContractorId('');
+      fetchContractors();
+    } catch (error) {
+      console.error('Error reassigning and deleting contractor:', error);
+      alert(error.response?.data?.message || 'Error reassigning and deleting contractor');
     }
   };
 
@@ -177,7 +212,13 @@ const CuttingManagement = () => {
       }
 
       await axios.post('/api/cutting/assignments', assignmentFormData);
-      fetchAssignments();
+      
+      // Refresh both assignments and contractors data
+      await Promise.all([
+        fetchAssignments(),
+        fetchContractors()
+      ]);
+      
       setOpenAssignmentDialog(false);
       setAssignmentFormData({
         contractor_id: '',
@@ -192,23 +233,46 @@ const CuttingManagement = () => {
     }
   };
 
-  const handleOpenPaymentDialog = (contractor) => {
-    setPaymentFormData(prev => ({
-      ...prev,
-      contractor_id: contractor.id,
-      notes: `Payment for ${contractor.name}`
-    }));
-    setOpenPaymentDialog(true);
+  const handleOpenPaymentDialog = async (contractor) => {
+    try {
+      await fetchAssignments();
+      
+      const contractorAssignments = assignments.filter(
+        a => a.contractor_id === contractor.id && 
+        (a.status === 'active' || a.status === 'in_progress')
+      );
+
+      if (contractorAssignments.length === 0) {
+        alert('No active assignments found for this contractor');
+        return;
+      }
+
+      setPaymentFormData(prev => ({
+        ...prev,
+        contractor_id: contractor.id,
+        assignment_id: contractorAssignments[0]?.id || null,
+        notes: `Payment for ${contractor.name}`
+      }));
+      setOpenPaymentDialog(true);
+    } catch (error) {
+      console.error('Error preparing payment dialog:', error);
+      alert('Error loading contractor assignments');
+    }
   };
 
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
     try {
+      if (!paymentFormData.assignment_id) {
+        throw new Error('Please select an assignment for this payment');
+      }
+      
       await axios.post('/api/cutting/payments', paymentFormData);
       fetchContractors();
       setOpenPaymentDialog(false);
       setPaymentFormData({
         contractor_id: '',
+        assignment_id: null,
         amount: 250,
         companyContribution: 100,
         manufacturingContribution: 150,
@@ -217,7 +281,7 @@ const CuttingManagement = () => {
       });
     } catch (error) {
       console.error('Error processing payment:', error);
-      alert(error.response?.data?.message || 'Error processing payment');
+      alert(error.response?.data?.message || error.message || 'Error processing payment');
     }
   };
 
@@ -567,6 +631,31 @@ const CuttingManagement = () => {
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={12}>
+              <FormControl fullWidth required>
+                <InputLabel>Assignment</InputLabel>
+                <Select
+                  value={paymentFormData.assignment_id || ''}
+                  label="Assignment*"
+                  onChange={(e) => setPaymentFormData(prev => ({
+                    ...prev,
+                    assignment_id: e.target.value
+                  }))}
+                >
+                  {assignments
+                    .filter(a => 
+                      a.contractor_id === paymentFormData.contractor_id && 
+                      (a.status === 'active' || a.status === 'in_progress')
+                    )
+                    .map(assignment => (
+                      <MenuItem key={assignment.id} value={assignment.id}>
+                        {`Assignment #${assignment.assignment_number} - ${assignment.land_location || 'No location'} (${assignment.status})`}
+                      </MenuItem>
+                    ))}
+                </Select>
+              </FormControl>
+            </Grid>
+
+            <Grid item xs={12}>
               <TextField
                 fullWidth
                 label="Total Amount"
@@ -627,8 +716,50 @@ const CuttingManagement = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpenPaymentDialog(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handlePaymentSubmit}>
+          <Button 
+            variant="contained" 
+            onClick={handlePaymentSubmit}
+            disabled={!paymentFormData.assignment_id}
+          >
             Process Payment
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={openReassignDialog} onClose={() => {
+        setOpenReassignDialog(false);
+        setContractorToDelete(null);
+        setNewContractorId('');
+      }}>
+        <DialogTitle>Reassign Assignments</DialogTitle>
+        <DialogContent>
+          <FormControl fullWidth sx={{ mt: 2 }}>
+            <InputLabel>Select New Contractor</InputLabel>
+            <Select
+              value={newContractorId}
+              onChange={(e) => setNewContractorId(e.target.value)}
+              label="Select New Contractor"
+            >
+              {contractors
+                .filter(c => c.id !== contractorToDelete && c.status === 'active')
+                .map(contractor => (
+                  <MenuItem key={contractor.id} value={contractor.id}>
+                    {contractor.name}
+                  </MenuItem>
+                ))}
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => {
+            setOpenReassignDialog(false);
+            setContractorToDelete(null);
+            setNewContractorId('');
+          }}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={handleReassignAndDelete}>
+            Reassign & Delete
           </Button>
         </DialogActions>
       </Dialog>

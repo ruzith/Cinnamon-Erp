@@ -20,9 +20,18 @@ const updateDesignation = async (id, designationData) => {
   return response.data;
 };
 
-// Delete designation
-const deleteDesignation = async (id) => {
-  const response = await axios.delete(API_URL + id);
+// Delete designation with optional force delete and reassignment
+const deleteDesignation = async (id, options = {}) => {
+  const queryParams = options.forceDelete && options.newDesignationId 
+    ? `?forceDelete=true&newDesignationId=${options.newDesignationId}`
+    : '';
+  const response = await axios.delete(API_URL + id + queryParams);
+  return response.data;
+};
+
+// Add new method for reassignment
+const reassignEmployees = async (id, newDesignationId) => {
+  const response = await axios.put(`${API_URL}${id}/reassign`, { newDesignationId });
   return response.data;
 };
 
@@ -30,7 +39,8 @@ const designationService = {
   getDesignations,
   createDesignation,
   updateDesignation,
-  deleteDesignation
+  deleteDesignation,
+  reassignEmployees
 };
 
 export default designationService; 

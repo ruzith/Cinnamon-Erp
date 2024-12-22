@@ -40,15 +40,55 @@ router.get('/', protect, async (req, res) => {
 
 router.post('/', protect, authorize('admin'), async (req, res) => {
   try {
+    // Validate type - make case-insensitive
+    const validTypes = ['equipment', 'vehicle', 'tool'];
+    if (!validTypes.includes(req.body.type.toLowerCase())) {
+      return res.status(400).json({ 
+        message: "Invalid asset type. Must be one of: 'equipment', 'vehicle', or 'tool'"
+      });
+    }
+
+    // Transform the incoming data to match database fields
     const assetData = {
-      ...req.body,
+      asset_number: req.body.assetNumber || await Asset.generateAssetNumber(req.body.type.toLowerCase()),
+      name: req.body.name,
+      category_id: req.body.category,
+      type: req.body.type.toLowerCase(), // Ensure lowercase to match enum
+      purchase_date: req.body.purchaseDate,
+      purchase_price: req.body.purchasePrice,
+      current_value: req.body.currentValue,
+      status: req.body.status || 'active',
       created_by: req.user.id
     };
+
+    // Generate code if not provided
+    assetData.code = req.body.code || await Asset.generateAssetNumber(req.body.type.toLowerCase());
     
-    const [result] = await Asset.pool.execute(
-      'INSERT INTO assets SET ?',
-      [assetData]
-    );
+    const [result] = await Asset.pool.execute(`
+      INSERT INTO assets (
+        code, 
+        asset_number, 
+        name, 
+        category_id, 
+        type, 
+        purchase_date, 
+        purchase_price, 
+        current_value, 
+        status, 
+        created_by
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      assetData.code,
+      assetData.asset_number,
+      assetData.name,
+      assetData.category_id,
+      assetData.type,
+      assetData.purchase_date,
+      assetData.purchase_price,
+      assetData.current_value,
+      assetData.status,
+      assetData.created_by
+    ]);
     
     const asset = await Asset.getWithDetails(result.insertId);
     res.status(201).json(asset);
@@ -185,12 +225,10 @@ router.get('/report/usage', protect, async (req, res) => {
         a.*,
         ac.name as category_name,
         COUNT(am.id) as maintenance_count,
-        MAX(am.maintenance_date) as last_maintenance,
-        w.name as current_location
+        MAX(am.maintenance_date) as last_maintenance
       FROM assets a
       LEFT JOIN asset_categories ac ON a.category_id = ac.id
       LEFT JOIN asset_maintenance am ON a.id = am.asset_id
-      LEFT JOIN wells w ON a.assigned_to = w.id
       GROUP BY a.id
       ORDER BY a.name
     `);

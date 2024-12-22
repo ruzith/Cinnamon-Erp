@@ -83,24 +83,48 @@ class SalesInvoice extends BaseModel {
       // Generate invoice number
       const invoiceNumber = await this.generateInvoiceNumber();
       
-      // Create invoice
-      const [result] = await connection.execute(
-        'INSERT INTO sales_invoices SET ?',
-        { 
-          ...invoiceData, 
-          invoice_number: invoiceNumber,
-          sub_total: subTotal,
-          total: total
-        }
-      );
+      // Create invoice with explicit field names
+      const [result] = await connection.execute(`
+        INSERT INTO sales_invoices (
+          invoice_number, date, customer_name, customer_address, 
+          customer_phone, customer_email, sub_total, discount,
+          tax, total, payment_method, payment_status, notes, status, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        invoiceNumber,
+        invoiceData.date,
+        invoiceData.customer_name,
+        invoiceData.customer_address,
+        invoiceData.customer_phone,
+        invoiceData.customer_email,
+        subTotal,
+        invoiceData.discount || 0,
+        invoiceData.tax || 0,
+        total,
+        invoiceData.payment_method,
+        invoiceData.payment_status,
+        invoiceData.notes || '',
+        invoiceData.status,
+        invoiceData.created_by
+      ]);
+
       const invoiceId = result.insertId;
 
       // Create items and update inventory
       for (const item of items) {
-        await connection.execute(
-          'INSERT INTO sales_items SET ?',
-          { ...item, invoice_id: invoiceId }
-        );
+        // Insert sales items with explicit fields
+        await connection.execute(`
+          INSERT INTO sales_items (
+            invoice_id, product_id, quantity, unit_price, discount, sub_total
+          ) VALUES (?, ?, ?, ?, ?, ?)
+        `, [
+          invoiceId,
+          item.product_id,
+          item.quantity,
+          item.unit_price,
+          item.discount || 0,
+          item.sub_total
+        ]);
 
         if (invoiceData.status === 'confirmed') {
           // Update inventory
@@ -110,16 +134,17 @@ class SalesInvoice extends BaseModel {
           );
 
           // Create inventory transaction record
-          await connection.execute(
-            'INSERT INTO inventory_transactions SET ?',
-            {
-              item_id: item.product_id,
-              type: 'OUT',
-              quantity: item.quantity,
-              reference: invoiceNumber,
-              notes: 'Sales Invoice'
-            }
-          );
+          await connection.execute(`
+            INSERT INTO inventory_transactions (
+              item_id, type, quantity, reference, notes
+            ) VALUES (?, ?, ?, ?, ?)
+          `, [
+            item.product_id,
+            'OUT',
+            item.quantity,
+            invoiceNumber,
+            'Sales Invoice'
+          ]);
         }
       }
 

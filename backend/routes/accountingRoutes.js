@@ -41,36 +41,71 @@ router.post('/accounts', protect, authorize('admin', 'accountant'), async (req, 
 // Transaction routes
 router.post('/transactions', protect, authorize('admin', 'accountant'), async (req, res) => {
   try {
-    const transaction = new Transaction({
-      ...req.body,
-      createdBy: req.user.id
-    });
-
-    // If transaction is posted, update account balances
-    if (req.body.status === 'posted') {
-      for (const entry of transaction.entries) {
-        const account = await Account.findById(entry.account);
-        if (!account) {
-          return res.status(404).json({ message: `Account not found: ${entry.account}` });
-        }
-
-        // Update account balance
-        const balanceChange = entry.debit - entry.credit;
-        if (['asset', 'expense'].includes(account.type)) {
-          account.balance += balanceChange;
-        } else {
-          account.balance -= balanceChange;
-        }
-        await account.save();
-      }
+    // Validate status
+    const validStatuses = ['draft', 'posted', 'void'];
+    const status = req.body.status || 'draft';
+    
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ 
+        message: `Invalid status. Must be one of: ${validStatuses.join(', ')}` 
+      });
     }
 
-    await transaction.save();
-    res.status(201).json(
-      await transaction
-        .populate('entries.account')
-        .populate('createdBy', 'name')
-    );
+    // Validate category
+    const validCategories = ['production', 'maintenance', 'royalty', 'lease'];
+    const category = req.body.category || 'production';
+
+    if (!validCategories.includes(category)) {
+      return res.status(400).json({
+        message: `Invalid category. Must be one of: ${validCategories.join(', ')}`
+      });
+    }
+
+    // Create transaction with entries
+    const transactionData = {
+      date: req.body.date,
+      reference: req.body.reference,
+      description: req.body.description,
+      status: status,
+      type: req.body.type,
+      amount: req.body.amount,
+      category: category,
+      well_id: req.body.well_id || 1,
+      lease_id: req.body.lease_id || 1,
+      created_by: req.user.id
+    };
+
+    // Validate required fields
+    if (!transactionData.date) {
+      return res.status(400).json({ message: 'Transaction date is required' });
+    }
+    if (!transactionData.amount) {
+      return res.status(400).json({ message: 'Transaction amount is required' });
+    }
+    if (!transactionData.type) {
+      return res.status(400).json({ message: 'Transaction type is required' });
+    }
+    if (!transactionData.description) {
+      return res.status(400).json({ message: 'Transaction description is required' });
+    }
+
+    const entries = [
+      {
+        account_id: req.body.account,
+        description: req.body.description,
+        debit: req.body.type === 'expense' ? req.body.amount : 0,
+        credit: req.body.type === 'revenue' ? req.body.amount : 0
+      },
+      {
+        account_id: 1000, // Cash/Bank account
+        description: req.body.description,
+        debit: req.body.type === 'revenue' ? req.body.amount : 0,
+        credit: req.body.type === 'expense' ? req.body.amount : 0
+      }
+    ];
+
+    const transaction = await Transaction.createWithEntries(transactionData, entries);
+    res.status(201).json(transaction);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }

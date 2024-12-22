@@ -81,30 +81,103 @@ exports.updateDesignation = async (req, res) => {
   }
 };
 
+// @desc    Reassign employees to new designation
+// @route   PUT /api/designations/:id/reassign
+// @access  Private/Admin
+exports.reassignEmployees = async (req, res) => {
+  try {
+    const { newDesignationId } = req.body;
+    const oldDesignationId = req.params.id;
+
+    // Validate input
+    if (!newDesignationId) {
+      return res.status(400).json({ message: 'New designation ID is required' });
+    }
+
+    // Check if old designation exists
+    const oldDesignation = await Designation.findById(oldDesignationId);
+    if (!oldDesignation) {
+      return res.status(404).json({ message: 'Current designation not found' });
+    }
+
+    // Check if new designation exists
+    const newDesignation = await Designation.findById(newDesignationId);
+    if (!newDesignation) {
+      return res.status(404).json({ message: 'New designation not found' });
+    }
+
+    // Get employees using the old designation
+    const [employees] = await Designation.pool.execute(
+      'SELECT id, name FROM employees WHERE designation_id = ?',
+      [oldDesignationId]
+    );
+
+    if (employees.length === 0) {
+      return res.status(400).json({ message: 'No employees found with this designation' });
+    }
+
+    // Update all employees to new designation
+    await Designation.pool.execute(
+      'UPDATE employees SET designation_id = ? WHERE designation_id = ?',
+      [newDesignationId, oldDesignationId]
+    );
+
+    res.status(200).json({
+      message: `Successfully reassigned ${employees.length} employees to ${newDesignation.title}`,
+      reassignedEmployees: employees,
+      newDesignation: newDesignation
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // @desc    Delete designation
 // @route   DELETE /api/designations/:id
 // @access  Private/Admin
 exports.deleteDesignation = async (req, res) => {
   try {
+    const { forceDelete, newDesignationId } = req.query;
     const designation = await Designation.findById(req.params.id);
+    
     if (!designation) {
       return res.status(404).json({ message: 'Designation not found' });
     }
 
-    // Check if any employees are using this designation
-    const [rows] = await designation.pool.execute(
-      'SELECT COUNT(*) as count FROM employees WHERE designation_id = ?',
+    // Get employees using this designation
+    const [employees] = await Designation.pool.execute(
+      'SELECT id, name FROM employees WHERE designation_id = ?',
       [req.params.id]
     );
 
-    if (rows[0].count > 0) {
-      return res.status(400).json({
-        message: 'Cannot delete designation that is assigned to employees'
-      });
+    if (employees.length > 0) {
+      // If forceDelete is true and newDesignationId is provided, reassign employees first
+      if (forceDelete === 'true' && newDesignationId) {
+        // Check if new designation exists
+        const newDesignation = await Designation.findById(newDesignationId);
+        if (!newDesignation) {
+          return res.status(404).json({ message: 'New designation not found' });
+        }
+
+        // Reassign employees
+        await Designation.pool.execute(
+          'UPDATE employees SET designation_id = ? WHERE designation_id = ?',
+          [newDesignationId, req.params.id]
+        );
+      } else {
+        return res.status(400).json({
+          message: 'Cannot delete designation that is assigned to employees',
+          employees: employees,
+          employeeCount: employees.length
+        });
+      }
     }
 
     await Designation.delete(req.params.id);
-    res.status(200).json({ message: 'Designation deleted successfully' });
+    res.status(200).json({ 
+      message: 'Designation deleted successfully',
+      reassignedEmployees: employees.length > 0 ? employees : undefined
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

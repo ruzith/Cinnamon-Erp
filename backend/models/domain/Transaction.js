@@ -3,6 +3,8 @@ const BaseModel = require('../base/BaseModel');
 class Transaction extends BaseModel {
   constructor() {
     super('transactions');
+    this.validStatuses = ['draft', 'posted', 'void'];
+    this.validCategories = ['production', 'maintenance', 'royalty', 'lease'];
   }
 
   async generateReference() {
@@ -51,30 +53,66 @@ class Transaction extends BaseModel {
   }
 
   async createWithEntries(transactionData, entries) {
-    await this.pool.beginTransaction();
+    const connection = await this.pool.getConnection();
     try {
+      await connection.beginTransaction();
+
+      // Validate status
+      if (!this.validStatuses.includes(transactionData.status)) {
+        throw new Error(`Invalid status. Must be one of: ${this.validStatuses.join(', ')}`);
+      }
+
+      // Validate category
+      if (!this.validCategories.includes(transactionData.category)) {
+        throw new Error(`Invalid category. Must be one of: ${this.validCategories.join(', ')}`);
+      }
+
       // Generate reference number if not provided
       if (!transactionData.reference) {
         transactionData.reference = await this.generateReference();
       }
 
       // Create transaction record
-      const [result] = await this.pool.execute(
-        'INSERT INTO transactions SET ?',
-        transactionData
+      const [result] = await connection.execute(
+        `INSERT INTO transactions (
+          date, reference, description, status, 
+          type, amount, category,
+          well_id, lease_id, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          transactionData.date,
+          transactionData.reference,
+          transactionData.description,
+          transactionData.status,
+          transactionData.type,
+          transactionData.amount,
+          transactionData.category,
+          transactionData.well_id,
+          transactionData.lease_id,
+          transactionData.created_by
+        ]
       );
       const transactionId = result.insertId;
 
       // Create transaction entries
       for (const entry of entries) {
-        await this.pool.execute(
-          'INSERT INTO transactions_entries SET ?',
-          { ...entry, transaction_id: transactionId }
+        await connection.execute(
+          `INSERT INTO transactions_entries (
+            transaction_id, account_id, description, 
+            debit, credit
+          ) VALUES (?, ?, ?, ?, ?)`,
+          [
+            transactionId,
+            entry.account_id,
+            entry.description,
+            entry.debit,
+            entry.credit
+          ]
         );
 
         // Update account balance if transaction is posted
         if (transactionData.status === 'posted') {
-          const [account] = await this.pool.execute(
+          const [account] = await connection.execute(
             'SELECT * FROM accounts WHERE id = ?',
             [entry.account_id]
           );
@@ -88,18 +126,20 @@ class Transaction extends BaseModel {
             ? balanceChange 
             : -balanceChange;
 
-          await this.pool.execute(
+          await connection.execute(
             'UPDATE accounts SET balance = balance + ? WHERE id = ?',
             [amount, entry.account_id]
           );
         }
       }
 
-      await this.pool.commit();
+      await connection.commit();
       return this.getWithDetails(transactionId);
     } catch (error) {
-      await this.pool.rollback();
+      await connection.rollback();
       throw error;
+    } finally {
+      connection.release();
     }
   }
 

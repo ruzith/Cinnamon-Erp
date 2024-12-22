@@ -8,6 +8,7 @@ import {
   Paper,
   Chip
 } from '@mui/material';
+import { formatCurrency } from '../utils/formatCurrency';
 
 const LoanSchedule = ({ schedule }) => {
   const getStatusColor = (status) => {
@@ -44,19 +45,19 @@ const LoanSchedule = ({ schedule }) => {
               <TableCell>{item.period_number}</TableCell>
               <TableCell>{new Date(item.due_date).toLocaleDateString()}</TableCell>
               <TableCell align="right">
-                ${Number(item.payment_amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                {formatCurrency(Number(item.payment_amount))}
               </TableCell>
               <TableCell align="right">
-                ${Number(item.principal_amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                {formatCurrency(Number(item.principal_amount))}
               </TableCell>
               <TableCell align="right">
-                ${Number(item.interest_amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                {formatCurrency(Number(item.interest_amount))}
               </TableCell>
               <TableCell align="right">
-                ${Number(item.paid_amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                {formatCurrency(Number(item.paid_amount))}
               </TableCell>
               <TableCell align="right">
-                ${Number(item.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                {formatCurrency(Number(item.balance))}
               </TableCell>
               <TableCell>
                 <Chip

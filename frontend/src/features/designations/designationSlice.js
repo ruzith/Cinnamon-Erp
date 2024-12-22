@@ -48,12 +48,16 @@ export const updateDesignation = createAsyncThunk(
 // Delete designation
 export const deleteDesignation = createAsyncThunk(
   'designations/delete',
-  async (id, thunkAPI) => {
+  async (payload, thunkAPI) => {
     try {
       const token = thunkAPI.getState().auth.user.token;
-      return await designationService.deleteDesignation(id, token);
+      // Handle both simple id and object with options
+      const id = typeof payload === 'object' ? payload.id : payload;
+      const options = typeof payload === 'object' ? payload.options : undefined;
+      
+      return await designationService.deleteDesignation(id, options);
     } catch (error) {
-      return thunkAPI.rejectWithValue(error.response.data.message);
+      return thunkAPI.rejectWithValue(error.response.data);
     }
   }
 );

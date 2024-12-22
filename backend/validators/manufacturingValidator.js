@@ -30,6 +30,14 @@ const orderSchema = Joi.object({
   order_number: Joi.string()
 });
 
+const advancePaymentSchema = Joi.object({
+  contractor_id: Joi.number().integer().required(),
+  amount: Joi.number().positive().required(),
+  payment_date: Joi.date().required(),
+  notes: Joi.string().allow(null, '')
+});
+
 exports.validateContractor = (data) => contractorSchema.validate(data);
 exports.validateAssignment = (data) => assignmentSchema.validate(data);
-exports.validateOrder = (data) => orderSchema.validate(data); 
+exports.validateOrder = (data) => orderSchema.validate(data);
+exports.validateAdvancePayment = (data) => advancePaymentSchema.validate(data); 

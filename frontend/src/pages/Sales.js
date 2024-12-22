@@ -38,6 +38,7 @@ import {
   Print as PrintIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
+import { useCurrencyFormatter } from '../utils/currencyUtils';
 
 const TabPanel = (props) => {
   const { children, value, index, ...other } = props;
@@ -63,7 +64,7 @@ const Sales = () => {
     orderNumber: '',
     customerId: '',
     items: [],
-    status: 'pending',
+    status: 'draft',
     paymentStatus: 'pending',
     paymentMethod: '',
     notes: '',
@@ -86,6 +87,13 @@ const Sales = () => {
 
   const [selectedItems, setSelectedItems] = useState([]);
 
+  const { formatCurrency } = useCurrencyFormatter();
+
+  const [stats, setStats] = useState({
+    totalRevenue: 0,
+    pendingOrders: 0
+  });
+
   useEffect(() => {
     fetchSales();
     fetchCustomers();
@@ -96,6 +104,13 @@ const Sales = () => {
     try {
       const response = await axios.get('/api/sales');
       setSales(response.data);
+      
+      // Calculate stats from the sales data
+      const stats = calculateStats(response.data);
+      setStats({
+        ...stats,
+        // Keep other stats if any
+      });
     } catch (error) {
       console.error('Error fetching sales:', error);
     }
@@ -113,7 +128,11 @@ const Sales = () => {
   const fetchInventory = async () => {
     try {
       const response = await axios.get('/api/inventory?type=finished_good');
-      setInventory(response.data);
+      setInventory(response.data.map(item => ({
+        ...item,
+        productName: item.product_name,
+        selling_price: parseFloat(item.selling_price) || 0
+      })));
     } catch (error) {
       console.error('Error fetching inventory:', error);
     }
@@ -138,7 +157,7 @@ const Sales = () => {
         orderNumber: sale.order_number || '',
         customerId: sale.customer_id || '',
         items: mappedItems,
-        status: sale.status || 'pending',
+        status: sale.status || 'draft',
         paymentStatus: sale.payment_status || 'pending',
         paymentMethod: sale.payment_method || '',
         notes: sale.notes || '',
@@ -154,7 +173,7 @@ const Sales = () => {
         orderNumber: '',
         customerId: '',
         items: [],
-        status: 'pending',
+        status: 'draft',
         paymentStatus: 'pending',
         paymentMethod: '',
         notes: '',
@@ -231,41 +250,73 @@ const Sales = () => {
 
   const handleItemSelect = (event, value) => {
     setSelectedItems(value);
-    const totalAmount = value.reduce((sum, item) => {
-      const quantity = parseFloat(item.quantity || 0);
-      const unitPrice = parseFloat(item.unitPrice || 0);
-      return sum + (quantity * unitPrice);
+    
+    // Map the selected items with their selling prices from inventory
+    const items = value.map(item => ({
+      id: item.id,
+      product_id: item.id,
+      product_name: item.product_name || item.productName,
+      quantity: 1, // Default quantity
+      unit_price: parseFloat(item.selling_price) || 0,
+      unit: item.unit
+    }));
+
+    // Calculate total amount
+    const totalAmount = items.reduce((sum, item) => {
+      return sum + (item.quantity * item.unit_price);
     }, 0);
 
     setSaleFormData(prev => ({
       ...prev,
-      items: value.map(item => ({
-        product_id: item.id,
-        product_name: item.productName,
-        quantity: item.quantity || 0,
-        unit_price: item.unitPrice || 0,
-        unit: item.unit
-      })),
-      totalAmount
+      items: items,
+      totalAmount: totalAmount,
+      subTotal: totalAmount
     }));
   };
 
   const handleSaleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Validate the form data
+    if (!saleFormData.items.length) {
+      alert('Please select at least one product');
+      return;
+    }
+
+    // Validate each item
+    for (const item of saleFormData.items) {
+      if (!item.quantity || parseFloat(item.quantity) <= 0) {
+        alert('Please enter a valid quantity for all products');
+        return;
+      }
+      if (!item.unit_price || parseFloat(item.unit_price) <= 0) {
+        alert('Please enter a valid price for all products');
+        return;
+      }
+    }
+
     try {
+      const transformedItems = saleFormData.items.map(item => ({
+        product_id: item.product_id || item.id,
+        quantity: parseFloat(item.quantity),
+        unit_price: parseFloat(item.unit_price),
+        discount: parseFloat(item.discount) || 0,
+        sub_total: parseFloat(item.quantity) * parseFloat(item.unit_price) - (parseFloat(item.discount) || 0)
+      }));
+
       const formattedData = {
-        invoice_number: saleFormData.orderNumber,
         customer_id: saleFormData.customerId,
-        items: saleFormData.items,
+        items: transformedItems,
         status: saleFormData.status,
         payment_status: saleFormData.paymentStatus,
         payment_method: saleFormData.paymentMethod,
         notes: saleFormData.notes,
         shipping_address: saleFormData.shippingAddress,
+        tax: parseFloat(saleFormData.tax) || 0,
+        discount: parseFloat(saleFormData.discount) || 0,
+        sub_total: saleFormData.subTotal,
         total: saleFormData.totalAmount,
-        tax: saleFormData.tax,
-        discount: saleFormData.discount,
-        sub_total: saleFormData.subTotal
+        date: new Date().toISOString().split('T')[0]
       };
 
       if (selectedSale) {
@@ -277,6 +328,7 @@ const Sales = () => {
       handleCloseDialog();
     } catch (error) {
       console.error('Error saving sale:', error);
+      alert(error.response?.data?.message || 'Error saving sale');
     }
   };
 
@@ -335,8 +387,8 @@ const Sales = () => {
   // Calculate summary statistics
   const summaryStats = {
     totalSales: sales.length,
-    totalRevenue: sales.reduce((sum, sale) => sum + (sale.totalAmount || 0), 0).toFixed(2),
-    pendingOrders: sales.filter(sale => sale.status === 'pending').length,
+    totalRevenue: sales.reduce((sum, sale) => sum + parseFloat(sale.total || 0), 0).toFixed(2),
+    pendingOrders: sales.filter(sale => sale.payment_status === 'pending').length,
     activeCustomers: new Set(sales.map(sale => sale.customerId?.id)).size
   };
 
@@ -363,6 +415,16 @@ const Sales = () => {
     } catch (error) {
       console.error('Error printing invoice:', error);
     }
+  };
+
+  const calculateStats = (sales) => {
+    const totalRevenue = sales.reduce((sum, sale) => sum + parseFloat(sale.total), 0);
+    const pendingOrders = sales.filter(sale => sale.payment_status === 'pending').length;
+
+    return {
+      totalRevenue: totalRevenue.toFixed(2),
+      pendingOrders
+    };
   };
 
   return (
@@ -417,7 +479,7 @@ const Sales = () => {
               <RevenueIcon sx={{ color: 'success.main', mr: 1 }} />
               <Typography color="textSecondary">Total Revenue</Typography>
             </Box>
-            <Typography variant="h4">${summaryStats.totalRevenue}</Typography>
+            <Typography variant="h4">{formatCurrency(summaryStats.totalRevenue)}</Typography>
           </Paper>
         </Grid>
 
@@ -489,10 +551,7 @@ const Sales = () => {
                   </TableCell>
                   <TableCell align="right">{sale.total_items}</TableCell>
                   <TableCell align="right">
-                    {new Intl.NumberFormat('en-US', {
-                      style: 'currency',
-                      currency: 'LKR'
-                    }).format(sale.total)}
+                    {formatCurrency(sale.totalAmount)}
                   </TableCell>
                   <TableCell>
                     <Chip
@@ -568,32 +627,105 @@ const Sales = () => {
               </FormControl>
             </Grid>
             <Grid item xs={12}>
-              <Autocomplete
-                multiple
-                options={inventory}
-                getOptionLabel={(option) => `${option.productName} (${option.unit})`}
-                value={selectedItems}
-                onChange={handleItemSelect}
-                isOptionEqualToValue={(option, value) => option.id === value.id}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Select Products"
-                    variant="outlined"
-                    required
-                  />
-                )}
-                renderOption={(props, option) => (
-                  <li {...props}>
-                    <div>
-                      <Typography variant="body1">{option.productName}</Typography>
-                      <Typography variant="caption" color="textSecondary">
-                        Stock: {option.quantity} {option.unit}
-                      </Typography>
-                    </div>
-                  </li>
-                )}
-              />
+              <FormControl fullWidth>
+                <InputLabel>Select Products</InputLabel>
+                <Select
+                  multiple
+                  name="items"
+                  value={selectedItems}
+                  label="Select Products"
+                  onChange={(e) => {
+                    const selectedProducts = e.target.value;
+                    handleItemSelect(null, selectedProducts);
+                  }}
+                  required
+                >
+                  {inventory.map((item) => (
+                    <MenuItem key={item.id} value={item}>
+                      <Box>
+                        <Typography variant="body1">{item.product_name || item.productName}</Typography>
+                        <Typography variant="caption" color="textSecondary">
+                          Stock: {item.quantity} {item.unit}
+                        </Typography>
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              {selectedItems.length > 0 && (
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Product</TableCell>
+                        <TableCell>Unit Price</TableCell>
+                        <TableCell>Quantity</TableCell>
+                        <TableCell>Subtotal</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {saleFormData.items.map((item, index) => (
+                        <TableRow key={item.product_id}>
+                          <TableCell>{item.product_name}</TableCell>
+                          <TableCell>
+                            <TextField
+                              type="number"
+                              size="small"
+                              value={item.quantity}
+                              onChange={(e) => {
+                                const newItems = [...saleFormData.items];
+                                newItems[index].quantity = parseFloat(e.target.value) || 0;
+                                newItems[index].sub_total = 
+                                  newItems[index].quantity * newItems[index].unit_price;
+                                
+                                const newTotal = newItems.reduce((sum, item) => 
+                                  sum + (item.quantity * item.unit_price), 0);
+                                
+                                setSaleFormData(prev => ({
+                                  ...prev,
+                                  items: newItems,
+                                  totalAmount: newTotal,
+                                  subTotal: newTotal
+                                }));
+                              }}
+                              InputProps={{ inputProps: { min: 0, step: "1" } }}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <TextField
+                              type="number"
+                              size="small"
+                              value={item.unit_price}
+                              onChange={(e) => {
+                                const newItems = [...saleFormData.items];
+                                newItems[index].unit_price = parseFloat(e.target.value) || 0;
+                                newItems[index].sub_total = 
+                                  newItems[index].quantity * newItems[index].unit_price;
+                                
+                                const newTotal = newItems.reduce((sum, item) => 
+                                  sum + (item.quantity * item.unit_price), 0);
+                                
+                                setSaleFormData(prev => ({
+                                  ...prev,
+                                  items: newItems,
+                                  totalAmount: newTotal,
+                                  subTotal: newTotal
+                                }));
+                              }}
+                              InputProps={{ inputProps: { min: 0, step: "0.01" } }}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            {(item.quantity * item.unit_price).toFixed(2)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
             </Grid>
             <Grid item xs={12} sm={6}>
               <FormControl fullWidth>
@@ -605,7 +737,6 @@ const Sales = () => {
                   onChange={handleSaleInputChange}
                 >
                   <MenuItem value="draft">Draft</MenuItem>
-                  <MenuItem value="pending">Pending</MenuItem>
                   <MenuItem value="confirmed">Confirmed</MenuItem>
                   <MenuItem value="cancelled">Cancelled</MenuItem>
                 </Select>
@@ -682,75 +813,122 @@ const Sales = () => {
         maxWidth="md"
         fullWidth
       >
-        <DialogTitle>Sale Details</DialogTitle>
+        <DialogTitle>
+          <Typography variant="h5" sx={{ fontWeight: 600 }}>Sale Details</Typography>
+        </DialogTitle>
         <DialogContent>
           {selectedSale && (
-            <Grid container spacing={2} sx={{ mt: 1 }}>
-              <Grid item xs={12} sm={6}>
-                <Typography variant="subtitle2" color="textSecondary">Invoice Number</Typography>
-                <Typography variant="body1">{selectedSale.invoice_number}</Typography>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <Typography variant="subtitle2" color="textSecondary">Date</Typography>
-                <Typography variant="body1">
-                  {new Date(selectedSale.date).toLocaleDateString()}
-                </Typography>
-              </Grid>
+            <Grid container spacing={3} sx={{ mt: 1 }}>
+              {/* Invoice To Section */}
               <Grid item xs={12}>
-                <Typography variant="subtitle2" color="textSecondary">Customer</Typography>
-                <Typography variant="body1">{selectedSale.customer_name}</Typography>
-                <Typography variant="body2" color="textSecondary">
-                  {selectedSale.customer_phone}
+                <Typography variant="h6" sx={{ 
+                  fontWeight: 600, 
+                  mb: 2,
+                  pb: 1,
+                  borderBottom: '1px solid',
+                  borderColor: 'divider'
+                }}>
+                  Invoice To:
                 </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  {selectedSale.customer_email}
-                </Typography>
+                <Box sx={{ pl: 2 }}>
+                  <Typography variant="body1" sx={{ fontWeight: 500, mb: 1 }}>
+                    {selectedSale.customer_name}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {selectedSale.customer_address}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {selectedSale.customer_phone}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {selectedSale.customer_email}
+                  </Typography>
+                </Box>
               </Grid>
+
+              {/* Invoice Details Section */}
               <Grid item xs={12}>
-                <Typography variant="subtitle2" color="textSecondary">Address</Typography>
-                <Typography variant="body1">{selectedSale.customer_address}</Typography>
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <Typography variant="subtitle2" color="textSecondary">Total Items</Typography>
-                <Typography variant="body1">{selectedSale.total_items}</Typography>
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <Typography variant="subtitle2" color="textSecondary">Sub Total</Typography>
-                <Typography variant="body1">
-                  {new Intl.NumberFormat('en-US', {
-                    style: 'currency',
-                    currency: 'LKR'
-                  }).format(selectedSale.sub_total)}
+                <Typography variant="h6" sx={{ 
+                  fontWeight: 600, 
+                  mb: 2,
+                  pb: 1,
+                  borderBottom: '1px solid',
+                  borderColor: 'divider'
+                }}>
+                  Invoice Details:
                 </Typography>
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <Typography variant="subtitle2" color="textSecondary">Total</Typography>
-                <Typography variant="body1">
-                  {new Intl.NumberFormat('en-US', {
-                    style: 'currency',
-                    currency: 'LKR'
-                  }).format(selectedSale.total)}
-                </Typography>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <Typography variant="subtitle2" color="textSecondary">Status</Typography>
-                <Chip
-                  size="small"
-                  label={selectedSale.status}
-                  color={getStatusColor(selectedSale.status)}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <Typography variant="subtitle2" color="textSecondary">Payment Status</Typography>
-                <Chip
-                  size="small"
-                  label={selectedSale.payment_status}
-                  color={getPaymentStatusColor(selectedSale.payment_status)}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <Typography variant="subtitle2" color="textSecondary">Notes</Typography>
-                <Typography variant="body1">{selectedSale.notes}</Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Invoice Number
+                    </Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                      {selectedSale.invoice_number}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Date
+                    </Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                      {new Date(selectedSale.date).toLocaleDateString()}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Total Items
+                    </Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                      {selectedSale.total_items}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Sub Total
+                    </Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                      {formatCurrency(selectedSale.sub_total)}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Total
+                    </Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                      {formatCurrency(selectedSale.total)}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Status
+                    </Typography>
+                    <Chip
+                      size="small"
+                      label={selectedSale.status}
+                      color={getStatusColor(selectedSale.status)}
+                      sx={{ mt: 0.5 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Payment Status
+                    </Typography>
+                    <Chip
+                      size="small"
+                      label={selectedSale.payment_status}
+                      color={getPaymentStatusColor(selectedSale.payment_status)}
+                      sx={{ mt: 0.5 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Notes
+                    </Typography>
+                    <Typography variant="body2" sx={{ mt: 0.5 }}>
+                      {selectedSale.notes}
+                    </Typography>
+                  </Grid>
+                </Grid>
               </Grid>
             </Grid>
           )}

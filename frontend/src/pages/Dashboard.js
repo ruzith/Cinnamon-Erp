@@ -21,6 +21,7 @@ import {
   Legend,
   ResponsiveContainer
 } from 'recharts';
+import { useCurrencyFormatter } from '../utils/currencyUtils';
 
 const StatCard = ({ title, value, icon, color, trend, trendValue }) => {
   const theme = useTheme();
@@ -81,11 +82,12 @@ const StatCard = ({ title, value, icon, color, trend, trendValue }) => {
   );
 };
 
-const ProgressCard = ({ title, value, target, color, period, isMonetary = false }) => {
+const ProgressCard = ({ title, value, target, color, period, isMonetary }) => {
   const theme = useTheme();
   const [isEditing, setIsEditing] = useState(false);
   const [newTarget, setNewTarget] = useState(target);
   const [loading, setLoading] = useState(false);
+  const { formatCurrency } = useCurrencyFormatter();
 
   useEffect(() => {
     setNewTarget(target);
@@ -109,10 +111,7 @@ const ProgressCard = ({ title, value, target, color, period, isMonetary = false 
 
   const formatValue = (val) => {
     if (isMonetary) {
-      return val.toLocaleString('en-US', { 
-        style: 'currency',
-        currency: 'LKR'
-      });
+      return formatCurrency(val);
     }
     return val;
   };
@@ -207,7 +206,6 @@ const Dashboard = () => {
       totalLands: 0,
       activeEmployees: 0,
       pendingTasks: 0,
-      monthlyRevenue: 0
     },
     revenueData: [],
     monthlyTarget: {
@@ -219,6 +217,7 @@ const Dashboard = () => {
       target: 100
     }
   });
+  const { formatCurrency } = useCurrencyFormatter();
 
   useEffect(() => {
     fetchDashboardData();
@@ -236,13 +235,6 @@ const Dashboard = () => {
     }
   };
 
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(value);
-  };
-
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
@@ -252,7 +244,7 @@ const Dashboard = () => {
       </Box>
       
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={4}>
           <StatCard
             title="Total Lands"
             value={dashboardData.summary.totalLands.toString()}
@@ -260,7 +252,7 @@ const Dashboard = () => {
             color="2, 136, 209"
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={4}>
           <StatCard
             title="Active Employees"
             value={dashboardData.summary.activeEmployees.toString()}
@@ -268,20 +260,12 @@ const Dashboard = () => {
             color="46, 125, 50"
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={4}>
           <StatCard
             title="Pending Tasks"
             value={dashboardData.summary.pendingTasks.toString()}
             icon={<Assignment />}
             color="251, 140, 0"
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
-            title="Monthly Revenue"
-            value={formatCurrency(dashboardData.summary.monthlyRevenue)}
-            icon={<AccountBalance />}
-            color="156, 39, 176"
           />
         </Grid>
 
@@ -301,7 +285,7 @@ const Dashboard = () => {
             <ResponsiveContainer width="100%" height={300}>
               <LineChart 
                 data={dashboardData.revenueData}
-                margin={{ left: 20 }}
+                margin={{ left: 20 , top: 20 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
                 <XAxis 
@@ -310,12 +294,12 @@ const Dashboard = () => {
                   tick={{ fill: theme.palette.text.secondary }}
                 />
                 <YAxis 
-                  tickFormatter={(value) => `$${value.toLocaleString()}`}
+                  tickFormatter={(value) => formatCurrency(value)}
                   stroke={theme.palette.text.secondary}
                   tick={{ fill: theme.palette.text.secondary }}
                 />
                 <Tooltip 
-                  formatter={(value) => [`$${value.toLocaleString()}`, 'Revenue']}
+                  formatter={(value) => [formatCurrency(value), 'Revenue']}
                   contentStyle={{
                     backgroundColor: theme.palette.background.paper,
                     border: `1px solid ${theme.palette.divider}`,

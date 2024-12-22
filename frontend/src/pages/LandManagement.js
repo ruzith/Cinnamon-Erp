@@ -115,7 +115,16 @@ const LandManagement = () => {
       {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
-          <Paper elevation={0} sx={{ p: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              background: (theme) => 
+                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(25, 118, 210, 0.05) 100%)`,
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
               <Terrain sx={{ color: 'primary.main', mr: 1 }} />
               <Typography color="textSecondary">Total Lands</Typography>
@@ -123,8 +132,18 @@ const LandManagement = () => {
             <Typography variant="h4">{summaryStats.totalLands}</Typography>
           </Paper>
         </Grid>
+
         <Grid item xs={12} sm={6} md={3}>
-          <Paper elevation={0} sx={{ p: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              background: (theme) => 
+                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(46, 125, 50, 0.05) 100%)`,
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
               <Home sx={{ color: 'success.main', mr: 1 }} />
               <Typography color="textSecondary">Owned Lands</Typography>
@@ -132,8 +151,18 @@ const LandManagement = () => {
             <Typography variant="h4">{summaryStats.ownedLands}</Typography>
           </Paper>
         </Grid>
+
         <Grid item xs={12} sm={6} md={3}>
-          <Paper elevation={0} sx={{ p: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              background: (theme) => 
+                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(251, 140, 0, 0.05) 100%)`,
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
               <Assignment sx={{ color: 'warning.main', mr: 1 }} />
               <Typography color="textSecondary">Rented Lands</Typography>
@@ -141,8 +170,18 @@ const LandManagement = () => {
             <Typography variant="h4">{summaryStats.rentedLands}</Typography>
           </Paper>
         </Grid>
+
         <Grid item xs={12} sm={6} md={3}>
-          <Paper elevation={0} sx={{ p: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              background: (theme) => 
+                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(25, 118, 210, 0.05) 100%)`,
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
               <LocationOn sx={{ color: 'info.main', mr: 1 }} />
               <Typography color="textSecondary">Total Area</Typography>

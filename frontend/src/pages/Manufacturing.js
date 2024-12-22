@@ -39,6 +39,7 @@ import {
 } from '@mui/icons-material';
 import axios from 'axios';
 import PurchaseInvoiceForm from '../components/PurchaseInvoiceForm';
+import { useCurrencyFormatter } from '../utils/currencyUtils';
 
 const STATUS_OPTIONS = ['planned', 'in_progress', 'completed', 'cancelled'];
 
@@ -48,17 +49,11 @@ const Manufacturing = () => {
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [formData, setFormData] = useState({
-    orderNumber: '',
-    productType: '',
-    quantity: '',
-    assignedWorkers: [],
-    startDate: '',
-    endDate: '',
-    status: 'planned',
-    rawMaterials: '',
-    machineUsed: '',
-    qualityGrade: '',
-    notes: ''
+    name: '',
+    contractor_id: '',
+    phone: '',
+    address: '',
+    status: 'active'
   });
   const [openOrderDialog, setOpenOrderDialog] = useState(false);
   const [orderFormData, setOrderFormData] = useState({
@@ -93,6 +88,7 @@ const Manufacturing = () => {
   const [selectedContractor, setSelectedContractor] = useState(null);
   const [currentTab, setCurrentTab] = useState(0);
   const [openPurchaseDialog, setOpenPurchaseDialog] = useState(false);
+  const { formatCurrency } = useCurrencyFormatter();
 
   useEffect(() => {
     fetchManufacturingOrders();
@@ -146,6 +142,7 @@ const Manufacturing = () => {
         name: contractor.name,
         contractor_id: contractor.contractor_id,
         phone: contractor.phone,
+        address: contractor.address,
         status: contractor.status || 'active'
       });
     } else {
@@ -154,6 +151,7 @@ const Manufacturing = () => {
         name: '',
         contractor_id: '',
         phone: '',
+        address: '',
         status: 'active'
       });
     }
@@ -175,18 +173,51 @@ const Manufacturing = () => {
     }));
   };
 
-  const handleSubmit = async (e) => {
+  const handleContractorSubmit = async (e) => {
     e.preventDefault();
     try {
-      if (selectedOrder) {
-        await axios.put(`/api/manufacturing-orders/${selectedOrder.id}`, formData);
+      if (selectedContractor) {
+        await axios.put(`/api/manufacturing/contractors/${selectedContractor.id}`, formData);
       } else {
-        await axios.post('/api/manufacturing-orders', formData);
+        await axios.post('/api/manufacturing/contractors', formData);
       }
-      fetchManufacturingOrders();
+      fetchContractors();
       handleCloseDialog();
     } catch (error) {
+      console.error('Error saving contractor:', error);
+      alert(error.response?.data?.message || 'Error saving contractor');
+    }
+  };
+
+  const handleOrderSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const orderData = {
+        product_id: parseInt(orderFormData.product_id) || null,
+        quantity: parseInt(orderFormData.quantity) || null,
+        assigned_to: parseInt(orderFormData.assigned_to) || null,
+        status: orderFormData.status,
+        priority: orderFormData.priority,
+        start_date: orderFormData.start_date,
+        end_date: orderFormData.end_date || null,
+        notes: orderFormData.notes || ''
+      };
+
+      if (!orderData.product_id || !orderData.quantity || !orderData.assigned_to) {
+        alert('Please fill in all required fields');
+        return;
+      }
+
+      if (selectedOrder) {
+        await axios.put(`/api/manufacturing-orders/${selectedOrder.id}`, orderData);
+      } else {
+        await axios.post('/api/manufacturing-orders', orderData);
+      }
+      fetchManufacturingOrders();
+      handleCloseOrderDialog();
+    } catch (error) {
       console.error('Error saving manufacturing order:', error);
+      alert(error.response?.data?.message || 'Error saving order');
     }
   };
 
@@ -266,29 +297,6 @@ const Manufacturing = () => {
     setSelectedOrder(null);
   };
 
-  const handleOrderSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!orderFormData.start_date) {
-      alert('Please select a start date');
-      return;
-    }
-
-    try {
-      const { order_number, ...submitData } = orderFormData;
-      
-      if (selectedOrder) {
-        await axios.put(`/api/manufacturing-orders/${selectedOrder.id}`, submitData);
-      } else {
-        await axios.post('/api/manufacturing-orders', submitData);
-      }
-      fetchManufacturingOrders();
-      handleCloseOrderDialog();
-    } catch (error) {
-      console.error('Error saving manufacturing order:', error);
-    }
-  };
-
   const handleAssignmentSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -314,17 +322,16 @@ const Manufacturing = () => {
     e.preventDefault();
     try {
       const response = await axios.post('/api/manufacturing/advance-payments', advancePaymentData);
-      // Open receipt in new window
+      
+      // Create a new window and write the receipt HTML
       const receiptWindow = window.open('', '_blank');
-      receiptWindow.document.write(`
-        <h2>Advance Payment Receipt</h2>
-        <p>Receipt #: ${response.data.receipt_number}</p>
-        <p>Date: ${new Date(response.data.payment_date).toLocaleDateString()}</p>
-        <p>Contractor: ${response.data.contractor_name}</p>
-        <p>Amount: ${response.data.amount}</p>
-        <p>Notes: ${response.data.notes || ''}</p>
-      `);
+      receiptWindow.document.write(response.data.receiptHtml);
       receiptWindow.document.close();
+      
+      // Add print automatically option
+      receiptWindow.onload = function() {
+        receiptWindow.print();
+      };
       
       fetchContractors();
       setOpenPaymentDialog(false);
@@ -435,7 +442,7 @@ const Manufacturing = () => {
 
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
-      {/* Header - Updated to match CuttingManagement style */}
+      {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
         <Typography variant="h4" sx={{ fontWeight: 600 }}>
           Manufacturing Management
@@ -444,16 +451,16 @@ const Manufacturing = () => {
           <Button
             variant="outlined"
             startIcon={<AddIcon />}
-            onClick={() => handleOpenOrderDialog()}
+            onClick={() => handleOpenDialog()}
           >
-            New Order
+            Add Contractor
           </Button>
           <Button
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={() => handleOpenDialog()}
+            onClick={() => handleOpenOrderDialog()}
           >
-            Add Contractor
+            New Order
           </Button>
         </Box>
       </Box>
@@ -739,7 +746,7 @@ const Manufacturing = () => {
               >
                 {employees.map((employee) => (
                   <MenuItem key={employee.id} value={employee.id}>
-                    {[employee.first_name, employee.last_name].filter(Boolean).join(' ') || 'Unknown Employee'}
+                    {employee.name || 'Unknown Employee'}
                   </MenuItem>
                 ))}
               </TextField>
@@ -1018,11 +1025,23 @@ const Manufacturing = () => {
                 required
               />
             </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Address"
+                name="address"
+                value={formData.address}
+                onChange={handleInputChange}
+                required
+                multiline
+                rows={2}
+              />
+            </Grid>
           </Grid>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog}>Cancel</Button>
-          <Button variant="contained" onClick={handleSubmit}>
+          <Button variant="contained" onClick={handleContractorSubmit}>
             {selectedContractor ? 'Update' : 'Create'}
           </Button>
         </DialogActions>

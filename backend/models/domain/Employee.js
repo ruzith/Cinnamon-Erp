@@ -15,9 +15,23 @@ class Employee extends BaseModel {
 
   async getWithDetails() {
     const [rows] = await this.pool.execute(`
-      SELECT e.*, 
+      SELECT e.id,
+             e.name,
+             e.nic,
+             e.phone,
+             e.address,
+             e.birthday,
+             e.designation_id,
+             e.employment_type,
+             e.status,
+             e.salary_structure_id,
+             e.bank_name,
+             e.account_number,
+             e.account_name,
+             e.created_at,
+             e.updated_at,
              d.title as designation_title,
-             d.department as designation_department,
+             d.department,
              s.name as salary_structure_name,
              s.basic_salary
       FROM employees e
@@ -30,9 +44,23 @@ class Employee extends BaseModel {
 
   async getActiveEmployees() {
     const [rows] = await this.pool.execute(`
-      SELECT e.*, 
+      SELECT e.id,
+             e.name,
+             e.nic,
+             e.phone,
+             e.address,
+             e.birthday,
+             e.designation_id,
+             e.employment_type,
+             e.status,
+             e.salary_structure_id,
+             e.bank_name,
+             e.account_number,
+             e.account_name,
+             e.created_at,
+             e.updated_at,
              d.title as designation_title,
-             d.department as designation_department,
+             d.department,
              s.name as salary_structure_name,
              s.basic_salary
       FROM employees e
@@ -45,4 +73,4 @@ class Employee extends BaseModel {
   }
 }
 
-module.exports = new Employee(); 
+module.exports = Employee; 

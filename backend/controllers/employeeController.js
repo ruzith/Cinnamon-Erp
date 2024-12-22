@@ -1,15 +1,18 @@
 const Employee = require('../models/domain/Employee');
 const { validateEmployee } = require('../validators/employeeValidator');
+const { pool, connectDB } = require('../config/db');
 
 // @desc    Get all employees
 // @route   GET /api/employees
 // @access  Private
 exports.getEmployees = async (req, res) => {
   try {
-    const employees = await Employee.getWithDetails();
+    const employeeModel = new Employee();
+    const employees = await employeeModel.getWithDetails();
     res.status(200).json(employees);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Error fetching employees:', error);
+    res.status(500).json({ message: 'Error fetching employees', error: error.message });
   }
 };
 
@@ -18,7 +21,8 @@ exports.getEmployees = async (req, res) => {
 // @access  Private
 exports.getEmployee = async (req, res) => {
   try {
-    const employee = await Employee.findById(req.params.id);
+    const employeeModel = new Employee();
+    const employee = await employeeModel.findById(req.params.id);
     if (!employee) {
       return res.status(404).json({ message: 'Employee not found' });
     }
@@ -38,13 +42,14 @@ exports.createEmployee = async (req, res) => {
       return res.status(400).json({ message: error.details[0].message });
     }
 
+    const employeeModel = new Employee();
     // Check for duplicate NIC
-    const existingEmployee = await Employee.findByNIC(req.body.nic);
+    const existingEmployee = await employeeModel.findByNIC(req.body.nic);
     if (existingEmployee) {
       return res.status(400).json({ message: 'Employee with this NIC already exists' });
     }
 
-    const employee = await Employee.create(req.body);
+    const employee = await employeeModel.create(req.body);
     res.status(201).json(employee);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -85,17 +90,22 @@ exports.updateEmployee = async (req, res) => {
 // @route   DELETE /api/employees/:id
 // @access  Private/Admin
 exports.deleteEmployee = async (req, res) => {
+  const { id } = req.params;
+  
   try {
-    const employee = await Employee.findById(req.params.id);
-    if (!employee) {
+    // Instead of DELETE, update the status to inactive
+    const [result] = await pool.execute(
+      'UPDATE employees SET status = ? WHERE id = ?',
+      ['inactive', id]
+    );
+
+    if (result.affectedRows === 0) {
       return res.status(404).json({ message: 'Employee not found' });
     }
 
-    await Employee.delete(req.params.id);
-    res.status(200).json({ message: 'Employee deleted successfully' });
+    res.status(200).json({ message: 'Employee deactivated successfully' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Error deactivating employee:', error);
+    res.status(500).json({ message: 'Error deactivating employee', error: error.message });
   }
 };
-
-// Similar CRUD operations as landController... 

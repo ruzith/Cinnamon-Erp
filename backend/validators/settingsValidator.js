@@ -7,16 +7,7 @@ const settingsSchema = Joi.object({
   vat_number: Joi.string().allow(null, ''),
   tax_number: Joi.string().allow(null, ''),
   logo_url: Joi.string().allow(null, ''),
-  language: Joi.string().valid('en', 'si').default('en'),
-  time_zone: Joi.string().valid(
-    'Asia/Colombo',
-    'Asia/Kolkata',
-    'Asia/Dubai',
-    'Asia/Singapore',
-    'Europe/London',
-    'America/New_York',
-    'Pacific/Auckland'
-  ).default('Asia/Colombo'),
+  time_zone: Joi.string().required(),
   default_currency: Joi.number().integer().positive(),
   email_notifications: Joi.boolean().default(true),
   low_stock_alerts: Joi.boolean().default(true),

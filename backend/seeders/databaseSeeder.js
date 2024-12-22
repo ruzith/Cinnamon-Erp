@@ -38,7 +38,6 @@ const generateAssetCategories = () => [
 // Helper function to generate assets
 const generateAssets = async (connection, count = 15) => {
   const [categories] = await connection.query('SELECT id FROM asset_categories');
-  const [wells] = await connection.query('SELECT id FROM wells');
   const [users] = await connection.query('SELECT id FROM users WHERE role = "admin"');
   
   return Array.from({ length: count }, () => ({
@@ -51,7 +50,6 @@ const generateAssets = async (connection, count = 15) => {
     purchase_price: faker.number.float({ min: 1000, max: 100000, multipleOf: 0.01 }),
     current_value: faker.number.float({ min: 500, max: 90000, multipleOf: 0.01 }),
     status: faker.helpers.arrayElement(['active', 'maintenance', 'retired']),
-    assigned_to: faker.helpers.arrayElement(wells).id,
     created_by: users[0].id
   }));
 };
@@ -164,29 +162,13 @@ const generateUsers = async (connection, count = 10) => {
 
 // Helper function to generate manufacturing contractors
 const generateManufacturingContractors = async (count = 10) => {
-  const contractors = [];
-  const usedIds = new Set();
-
-  for (let i = 0; i < count; i++) {
-    let contractorId;
-    // Keep generating until we get a unique ID
-    do {
-      contractorId = `MF${faker.string.numeric(4)}`;
-    } while (usedIds.has(contractorId));
-    
-    usedIds.add(contractorId);
-
-    contractors.push({
-      name: faker.person.fullName(),
-      contractor_id: contractorId,
-      phone: `077${faker.string.numeric(7)}`,
-      address: faker.location.streetAddress(),
-      status: faker.helpers.arrayElement(['active', 'inactive']),
-      created_at: faker.date.past()
-    });
-  }
-
-  return contractors;
+  return Array.from({ length: count }, () => ({
+    name: faker.person.fullName(),
+    contractor_id: `MC${faker.string.numeric(4)}`,
+    phone: `077${faker.string.numeric(7)}`,
+    address: faker.location.streetAddress(),
+    status: faker.helpers.arrayElement(['active', 'inactive'])
+  }));
 };
 
 // Add this helper function after generateManufacturingContractors
@@ -311,7 +293,8 @@ const generateInventoryItems = async (connection, count = 30) => {
       location: faker.helpers.arrayElement(locations),
       purchase_price: purchasePrice,
       selling_price: isRawMaterial ? null : purchasePrice * 1.3,
-      description: faker.commerce.productDescription()
+      description: faker.commerce.productDescription(),
+      status: faker.helpers.arrayElement(['active', 'active', 'active', 'inactive'])
     };
   });
 };
@@ -503,43 +486,40 @@ const generateCustomers = async (connection, count = 20) => {
 };
 
 // Helper function to generate transactions
-const generateTransactions = async (connection, count = 50) => {
+const generateTransactions = async (connection) => {
+  const transactions = [];
+  const types = ['revenue', 'expense'];
+  const categories = ['production', 'maintenance', 'royalty', 'lease'];
+  const statuses = ['draft', 'posted', 'void'];
+
+  // Get wells, leases and users for foreign keys
   const [wells] = await connection.query('SELECT id FROM wells');
   const [leases] = await connection.query('SELECT id FROM leases');
-  const [users] = await connection.query('SELECT id FROM users WHERE role = "admin"');
-  
-  const transactions = [];
-  
-  // Generate some transactions for each month in the last 6 months
-  const today = new Date();
-  for (let i = 0; i < 6; i++) {
-    const month = new Date(today.getFullYear(), today.getMonth() - i, 1);
-    
-    // Generate 8-12 transactions per month
-    const monthlyTransactions = Array.from(
-      { length: faker.number.int({ min: 8, max: 12 }) },
-      () => {
-        const date = new Date(month.getFullYear(), month.getMonth(), 
-          faker.number.int({ min: 1, max: 28 }));
-        
-        return {
-          reference: `TRX-${faker.string.alphanumeric(8).toUpperCase()}`,
-          date: date.toISOString().split('T')[0],
-          type: 'revenue',  // Set all to revenue for dashboard demo
-          amount: faker.number.float({ min: 1000, max: 50000, multipleOf: 0.01 }),
-          category: faker.helpers.arrayElement(['production', 'maintenance', 'royalty', 'lease']),
-          description: faker.lorem.sentence(),
-          well_id: faker.helpers.arrayElement(wells).id,
-          lease_id: faker.helpers.arrayElement(leases).id,
-          created_by: users[0].id,
-          status: 'posted'  // Set all to posted for dashboard demo
-        };
-      }
-    );
-    
-    transactions.push(...monthlyTransactions);
+  const [users] = await connection.query('SELECT id FROM users');
+
+  if (!wells.length || !leases.length || !users.length) {
+    console.log('Required reference data missing for transactions');
+    return transactions;
   }
-  
+
+  // Generate 20 sample transactions
+  for (let i = 0; i < 20; i++) {
+    const type = types[Math.floor(Math.random() * types.length)];
+    const transaction = {
+      reference: `TRX${String(i + 1).padStart(4, '0')}`,
+      date: new Date(2024, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28) + 1),
+      type: type,
+      amount: parseFloat((Math.random() * 10000 + 1000).toFixed(2)),
+      category: categories[Math.floor(Math.random() * categories.length)],
+      description: `Sample ${type} transaction`,
+      well_id: wells[Math.floor(Math.random() * wells.length)].id,
+      lease_id: leases[Math.floor(Math.random() * leases.length)].id,
+      created_by: users[Math.floor(Math.random() * users.length)].id,
+      status: statuses[Math.floor(Math.random() * statuses.length)]
+    };
+    transactions.push(transaction);
+  }
+
   return transactions;
 };
 
@@ -840,86 +820,77 @@ const generateCuttingPayments = async (connection) => {
 };
 
 // Helper function to generate cinnamon assignments
-const generateCinnamonAssignments = async (connection) => {
+const generateCinnamonAssignments = async (connection, count = 15) => {
   const [contractors] = await connection.query(
     'SELECT id FROM manufacturing_contractors WHERE status = "active"'
   );
   
-  const assignments = [];
-  
-  for (const contractor of contractors) {
-    const numAssignments = faker.number.int({ min: 1, max: 3 });
-    
-    for (let i = 0; i < numAssignments; i++) {
-      const startDate = faker.date.recent({ days: 30 });
-      const durationType = faker.helpers.arrayElement(['day', 'week', 'month']);
-      const duration = faker.number.int({ 
-        min: 1, 
-        max: durationType === 'day' ? 30 : durationType === 'week' ? 8 : 3 
-      });
-      
-      const endDate = new Date(startDate);
-      switch (durationType) {
-        case 'day':
-          endDate.setDate(endDate.getDate() + duration);
-          break;
-        case 'week':
-          endDate.setDate(endDate.getDate() + (duration * 7));
-          break;
-        case 'month':
-          endDate.setMonth(endDate.getMonth() + duration);
-          break;
-      }
-
-      assignments.push({
-        contractor_id: contractor.id,
-        quantity: faker.number.float({ min: 50, max: 500, multipleOf: 0.1 }),
-        duration: duration,
-        duration_type: durationType,
-        start_date: startDate.toISOString().split('T')[0],
-        end_date: endDate.toISOString().split('T')[0],
-        status: faker.helpers.arrayElement(['active', 'completed', 'cancelled']),
-        notes: faker.helpers.arrayElement([null, faker.lorem.sentence()]),
-        created_at: startDate
-      });
-    }
+  if (!contractors.length) {
+    console.warn('No active manufacturing contractors found. Skipping cinnamon assignments...');
+    return [];
   }
-  
-  return assignments;
+
+  return Array.from({ length: count }, () => {
+    const startDate = faker.date.recent({ days: 30 });
+    const durationType = faker.helpers.arrayElement(['day', 'week', 'month']);
+    const duration = faker.number.int({ 
+      min: 1, 
+      max: durationType === 'day' ? 30 : durationType === 'week' ? 8 : 3 
+    });
+    
+    const endDate = new Date(startDate);
+    switch (durationType) {
+      case 'day':
+        endDate.setDate(endDate.getDate() + duration);
+        break;
+      case 'week':
+        endDate.setDate(endDate.getDate() + (duration * 7));
+        break;
+      case 'month':
+        endDate.setMonth(endDate.getMonth() + duration);
+        break;
+    }
+
+    return {
+      contractor_id: faker.helpers.arrayElement(contractors).id,
+      quantity: faker.number.float({ min: 50, max: 500, multipleOf: 0.1 }),
+      duration: duration,
+      duration_type: durationType,
+      start_date: startDate.toISOString().split('T')[0],
+      end_date: endDate.toISOString().split('T')[0],
+      status: faker.helpers.arrayElement(['active', 'completed', 'cancelled']),
+      notes: faker.lorem.sentence()
+    };
+  });
 };
 
 // Helper function to generate advance payments
-const generateAdvancePayments = async (connection) => {
+const generateAdvancePayments = async (connection, count = 20) => {
   const [contractors] = await connection.query(
     'SELECT id FROM manufacturing_contractors WHERE status = "active"'
   );
   
-  const payments = [];
-  let paymentCounter = 1; // Global counter for unique receipt numbers
-  
-  for (const contractor of contractors) {
-    const numPayments = faker.number.int({ min: 0, max: 3 });
-    
-    for (let i = 0; i < numPayments; i++) {
-      const paymentDate = faker.date.recent({ days: 60 });
-      const year = paymentDate.getFullYear().toString().substr(-2);
-      const month = (paymentDate.getMonth() + 1).toString().padStart(2, '0');
-      // Use global counter instead of i to ensure uniqueness
-      const receiptNumber = `ADV${year}${month}${paymentCounter.toString().padStart(4, '0')}`;
-      paymentCounter++;
-      
-      payments.push({
-        contractor_id: contractor.id,
-        amount: faker.number.float({ min: 5000, max: 50000, multipleOf: 0.01 }),
-        payment_date: paymentDate.toISOString().split('T')[0],
-        receipt_number: receiptNumber,
-        notes: faker.helpers.arrayElement([null, faker.lorem.sentence()]),
-        created_at: paymentDate
-      });
-    }
+  if (!contractors.length) {
+    console.warn('No active manufacturing contractors found. Skipping advance payments...');
+    return [];
   }
-  
-  return payments;
+
+  let paymentCounter = 1;
+  return Array.from({ length: count }, () => {
+    const paymentDate = faker.date.recent({ days: 60 });
+    const year = paymentDate.getFullYear().toString().substr(-2);
+    const month = (paymentDate.getMonth() + 1).toString().padStart(2, '0');
+    const receiptNumber = `ADV${year}${month}${paymentCounter.toString().padStart(4, '0')}`;
+    paymentCounter++;
+    
+    return {
+      contractor_id: faker.helpers.arrayElement(contractors).id,
+      amount: faker.number.float({ min: 5000, max: 50000, multipleOf: 0.01 }),
+      payment_date: paymentDate.toISOString().split('T')[0],
+      receipt_number: receiptNumber,
+      notes: faker.lorem.sentence()
+    };
+  });
 };
 
 // Add this helper function with the other generator functions
@@ -1201,6 +1172,52 @@ const generateMonthlyTargets = async (connection) => {
   return targets;
 };
 
+// Add this helper function to generate purchase invoices
+const generatePurchaseInvoices = async (connection, count = 15) => {
+  const [suppliers] = await connection.query('SELECT id FROM customers');
+  const [users] = await connection.query('SELECT id FROM users WHERE role = "admin"');
+  
+  return Array.from({ length: count }, () => {
+    const invoiceDate = faker.date.recent({ days: 90 });
+    const dueDate = new Date(invoiceDate);
+    dueDate.setDate(dueDate.getDate() + faker.number.int({ min: 15, max: 45 }));
+    
+    return {
+      invoice_number: `PUR${faker.string.numeric(8)}`,
+      supplier_id: faker.helpers.arrayElement(suppliers).id,
+      invoice_date: invoiceDate.toISOString().split('T')[0],
+      due_date: dueDate.toISOString().split('T')[0],
+      subtotal: 0, // Will be calculated after adding items
+      tax_amount: faker.number.float({ min: 0, max: 15, multipleOf: 0.01 }),
+      total_amount: 0, // Will be calculated after adding items
+      paid_amount: 0,
+      status: faker.helpers.arrayElement(['draft', 'confirmed', 'paid', 'cancelled']),
+      notes: faker.lorem.sentence(),
+      created_by: users[0].id
+    };
+  });
+};
+
+// Add this helper function to generate purchase items
+const generatePurchaseItems = async (connection, invoiceId) => {
+  const [products] = await connection.query('SELECT id FROM products');
+  
+  const numberOfItems = faker.number.int({ min: 1, max: 5 });
+  
+  return Array.from({ length: numberOfItems }, () => {
+    const quantity = faker.number.int({ min: 1, max: 100 });
+    const unitPrice = faker.number.float({ min: 100, max: 5000, multipleOf: 0.01 });
+    
+    return {
+      invoice_id: invoiceId,
+      product_id: faker.helpers.arrayElement(products).id,
+      quantity: quantity,
+      unit_price: unitPrice,
+      total_amount: quantity * unitPrice
+    };
+  });
+};
+
 const seedData = async () => {
   const connection = await pool.getConnection();
   
@@ -1382,13 +1399,6 @@ const seedData = async () => {
     const assets = await generateAssets(connection);
     for (const asset of assets) {
       await connection.query('INSERT INTO assets SET ?', asset);
-    }
-
-    // Add manufacturing contractors
-    console.log('Seeding manufacturing contractors...');
-    const manufacturingContractors = await generateManufacturingContractors(connection);
-    for (const contractor of manufacturingContractors) {
-      await connection.query('INSERT INTO manufacturing_contractors SET ?', contractor);
     }
 
     // Add cutting contractors
@@ -1598,20 +1608,6 @@ const seedData = async () => {
       await connection.query('INSERT INTO cutting_payments SET ?', payment);
     }
 
-    // Add cinnamon assignments
-    console.log('Seeding cinnamon assignments...');
-    const cinnamonAssignments = await generateCinnamonAssignments(connection);
-    for (const assignment of cinnamonAssignments) {
-      await connection.query('INSERT INTO cinnamon_assignments SET ?', assignment);
-    }
-
-    // Add advance payments
-    console.log('Seeding advance payments...');
-    const advancePayments = await generateAdvancePayments(connection);
-    for (const payment of advancePayments) {
-      await connection.query('INSERT INTO advance_payments SET ?', payment);
-    }
-
     // After seeding manufacturing orders
     console.log('Seeding manufacturing materials...');
     const [orders] = await connection.query(
@@ -1680,6 +1676,59 @@ const seedData = async () => {
           totals.gross - totals.net,
           result.insertId
         ]
+      );
+    }
+
+    // Seed manufacturing contractors
+    console.log('Seeding manufacturing contractors...');
+    const manufacturingContractors = await generateManufacturingContractors();
+    for (const contractor of manufacturingContractors) {
+      await connection.query('INSERT INTO manufacturing_contractors SET ?', contractor);
+    }
+
+    // Seed cinnamon assignments
+    console.log('Seeding cinnamon assignments...');
+    const cinnamonAssignments = await generateCinnamonAssignments(connection);
+    for (const assignment of cinnamonAssignments) {
+      await connection.query('INSERT INTO cinnamon_assignments SET ?', assignment);
+    }
+
+    // Seed advance payments
+    console.log('Seeding advance payments...');
+    const advancePayments = await generateAdvancePayments(connection);
+    for (const payment of advancePayments) {
+      await connection.query('INSERT INTO advance_payments SET ?', payment);
+    }
+
+    // Add required accounts if they don't exist
+    const requiredAccounts = [
+      {
+        code: '1000',
+        name: 'Cash/Bank',
+        type: 'asset',
+        category: 'current',
+        is_system_account: true
+      },
+      {
+        code: '4000',
+        name: 'Revenue',
+        type: 'revenue',
+        category: 'operational',
+        is_system_account: true
+      },
+      {
+        code: '5000',
+        name: 'Expense',
+        type: 'expense',
+        category: 'operational',
+        is_system_account: true
+      }
+    ];
+
+    for (const account of requiredAccounts) {
+      await connection.query(
+        'INSERT IGNORE INTO accounts SET ?',
+        account
       );
     }
 

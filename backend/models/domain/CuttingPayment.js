@@ -5,48 +5,40 @@ class CuttingPayment extends BaseModel {
     super('cutting_payments');
   }
 
-  async generateReceiptNumber() {
-    const date = new Date();
-    const year = date.getFullYear().toString().substr(-2);
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    
-    const [result] = await this.pool.execute(
-      'SELECT COUNT(*) as count FROM cutting_payments WHERE YEAR(created_at) = YEAR(CURRENT_DATE)'
-    );
-    const count = result[0].count + 1;
-    
-    return `CUT${year}${month}${count.toString().padStart(4, '0')}`;
-  }
-
   async create(paymentData) {
-    const connection = await this.pool.getConnection();
     try {
-      await connection.beginTransaction();
+      // Generate receipt number
+      const date = new Date(paymentData.payment_date);
+      const year = date.getFullYear().toString().substr(-2);
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const [countResult] = await this.pool.execute('SELECT COUNT(*) as count FROM cutting_payments');
+      const count = countResult[0].count + 1;
+      const receipt_number = `CUT${year}${month}${count.toString().padStart(4, '0')}`;
 
-      // Generate receipt number if not provided
-      if (!paymentData.receipt_number) {
-        paymentData.receipt_number = await this.generateReceiptNumber();
-      }
-
-      // Create payment record
-      const [result] = await connection.execute(
-        'INSERT INTO cutting_payments SET ?',
-        {
-          ...paymentData,
-          created_at: new Date(),
-          total_amount: paymentData.total_amount || 250, // Default cutting fee
-          company_contribution: paymentData.company_contribution || 100,
-          manufacturing_contribution: paymentData.manufacturing_contribution || 150
-        }
+      // Insert payment record
+      const [result] = await this.pool.execute(
+        `INSERT INTO cutting_payments 
+         (contractor_id, assignment_id, total_amount, company_contribution, manufacturing_contribution, 
+          status, payment_date, receipt_number, notes, created_by) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          paymentData.contractor_id,
+          paymentData.assignment_id,
+          paymentData.total_amount,
+          paymentData.company_contribution,
+          paymentData.manufacturing_contribution,
+          paymentData.status,
+          paymentData.payment_date,
+          receipt_number,
+          paymentData.notes,
+          paymentData.created_by
+        ]
       );
 
-      await connection.commit();
+      // Return the created payment with details
       return this.getWithDetails(result.insertId);
     } catch (error) {
-      await connection.rollback();
       throw error;
-    } finally {
-      connection.release();
     }
   }
 

@@ -61,6 +61,10 @@ export const settingsSlice = createSlice({
         state.isLoading = false;
         state.isSuccess = true;
         state.settings = action.payload;
+        
+        if (action.payload.timeZoneChanged) {
+          localStorage.setItem('timeZone', action.payload.time_zone);
+        }
       })
       .addCase(updateSettings.rejected, (state, action) => {
         state.isLoading = false;

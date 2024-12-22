@@ -8,11 +8,11 @@ class Task extends BaseModel {
   async getWithDetails(id) {
     const [rows] = await this.pool.execute(`
       SELECT t.*,
-             u1.name as assigned_to_name,
-             u2.name as created_by_name
+             e.name as assigned_to_name,
+             u.name as created_by_name
       FROM tasks t
-      LEFT JOIN users u1 ON t.assigned_to = u1.id
-      LEFT JOIN users u2 ON t.created_by = u2.id
+      LEFT JOIN employees e ON t.assigned_to = e.id
+      LEFT JOIN users u ON t.created_by = u.id
       WHERE t.id = ?
     `, [id]);
     return rows[0];
@@ -21,11 +21,11 @@ class Task extends BaseModel {
   async getAllTasks() {
     const [rows] = await this.pool.execute(`
       SELECT t.*,
-             u1.name as assigned_to_name,
-             u2.name as created_by_name
+             e.name as assigned_to_name,
+             u.name as created_by_name
       FROM tasks t
-      LEFT JOIN users u1 ON t.assigned_to = u1.id
-      LEFT JOIN users u2 ON t.created_by = u2.id
+      LEFT JOIN employees e ON t.assigned_to = e.id
+      LEFT JOIN users u ON t.created_by = u.id
       ORDER BY t.created_at DESC
     `);
     return rows;

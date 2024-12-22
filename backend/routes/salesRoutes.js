@@ -5,6 +5,7 @@ const SalesInvoice = require('../models/domain/SalesInvoice');
 const Inventory = require('../models/domain/Inventory');
 const { validateSalesInvoice } = require('../validators/salesValidator');
 const PDFDocument = require('pdfkit');
+const Customer = require('../models/domain/Customer');
 
 // Get all sales invoices
 router.get('/', protect, async (req, res) => {
@@ -28,10 +29,31 @@ router.get('/', protect, async (req, res) => {
 // Create sales invoice
 router.post('/', protect, authorize('admin', 'manager', 'sales'), async (req, res) => {
   try {
+    // Validate the request body first
     const { error } = validateSalesInvoice(req.body);
     if (error) {
       return res.status(400).json({ message: error.details[0].message });
     }
+
+    // Get customer details
+    const [customer] = await Customer.pool.execute(
+      'SELECT * FROM customers WHERE id = ?',
+      [req.body.customer_id]
+    );
+
+    if (!customer[0]) {
+      return res.status(404).json({ message: 'Customer not found' });
+    }
+
+    // Add customer details to invoice data after validation
+    const invoiceData = {
+      ...req.body,
+      customer_name: customer[0].name,
+      customer_address: customer[0].address,
+      customer_phone: customer[0].phone,
+      customer_email: customer[0].email,
+      created_by: req.user.id
+    };
 
     // Check stock availability
     for (const item of req.body.items) {
@@ -52,7 +74,7 @@ router.post('/', protect, authorize('admin', 'manager', 'sales'), async (req, re
     }
 
     const invoice = await SalesInvoice.createWithItems(
-      { ...req.body, created_by: req.user.id },
+      invoiceData,
       req.body.items
     );
     

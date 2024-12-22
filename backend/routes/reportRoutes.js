@@ -348,7 +348,7 @@ router.post('/generate/:code', protect, async (req, res) => {
           key: col.field,
           width: 15,
           style: {
-            numFmt: getExcelFormat(col.format)
+            numFmt: getExcelFormat(col.format, currency)
           }
         }));
 
@@ -356,7 +356,7 @@ router.post('/generate/:code', protect, async (req, res) => {
         results.forEach(row => {
           const formattedRow = {};
           template.columns.forEach(col => {
-            formattedRow[col.field] = formatValue(row[col.field], col.format);
+            formattedRow[col.field] = formatValue(row[col.field], col.format, currency);
           });
           worksheet.addRow(formattedRow);
         });
@@ -433,7 +433,7 @@ router.post('/generate/:code', protect, async (req, res) => {
         // Add data rows
         results.forEach(row => {
           template.columns.forEach((col, i) => {
-            const value = formatValue(row[col.field], col.format);
+            const value = formatValue(row[col.field], col.format, currency);
             doc.fontSize(10)
                .text(value.toString(),
                     50 + (i * columnWidth),
@@ -464,12 +464,12 @@ router.post('/generate/:code', protect, async (req, res) => {
 });
 
 // Helper functions
-function getExcelFormat(format) {
+function getExcelFormat(format, currency) {
   switch (format) {
     case 'currency':
-      return '"Rs. "#,##0.00';
+      return `"${currency.symbol} "#,##0.00_);("${currency.symbol} "#,##0.00)`;
     case 'number':
-      return '#,##0';
+      return '#,##0_);(#,##0)';
     case 'percentage':
       return '0.00%';
     case 'date':
@@ -479,17 +479,32 @@ function getExcelFormat(format) {
   }
 }
 
-function formatValue(value, format) {
+function formatValue(value, format, currency) {
   if (value === null || value === undefined) return '';
   
   switch (format) {
-    case 'currency':
-      return typeof value === 'number' ? 
-        `Rs. ${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` :
-        value;
+    case 'currency': {
+      if (typeof value !== 'number') return value;
+      
+      const absValue = Math.abs(value);
+      let formattedValue;
+      
+      if (absValue >= 1000000) {
+        formattedValue = (value / 1000000).toFixed(2) + 'M';
+      } else if (absValue >= 1000) {
+        formattedValue = (value / 1000).toFixed(1) + 'K';
+      } else {
+        formattedValue = new Intl.NumberFormat('en-US', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }).format(value);
+      }
+      
+      return `${currency.symbol}${formattedValue}`;
+    }
     case 'number':
       return typeof value === 'number' ? 
-        value.toLocaleString('en-US') :
+        new Intl.NumberFormat('en-US').format(value) :
         value;
     case 'percentage':
       return typeof value === 'number' ? 

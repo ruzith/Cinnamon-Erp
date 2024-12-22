@@ -26,6 +26,10 @@ import {
   MenuItem,
   Tabs,
   Tab,
+  List,
+  ListItem,
+  ListItemText,
+  Alert,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -43,6 +47,7 @@ import {
   updateDesignation,
   deleteDesignation
 } from '../features/designations/designationSlice';
+import { useCurrencyFormatter } from '../utils/currencyUtils';
 
 const EmployeeManagement = () => {
   const dispatch = useDispatch();
@@ -73,6 +78,13 @@ const EmployeeManagement = () => {
     department: ''
   });
   const [activeTab, setActiveTab] = useState(0);
+  const { formatCurrency } = useCurrencyFormatter();
+  const [reassignDialog, setReassignDialog] = useState(false);
+  const [reassignmentData, setReassignmentData] = useState({
+    oldDesignationId: null,
+    newDesignationId: '',
+    affectedEmployees: [],
+  });
 
   useEffect(() => {
     fetchEmployees();
@@ -175,7 +187,9 @@ const EmployeeManagement = () => {
       } else {
         await axios.post('/api/employees', submitData);
       }
-      fetchEmployees();
+      await fetchEmployees();
+      const designationsResponse = await axios.get('/api/designations');
+      setDesignations(designationsResponse.data);
       handleCloseDialog();
     } catch (error) {
       console.error('Error saving employee:', error);
@@ -186,7 +200,9 @@ const EmployeeManagement = () => {
     if (window.confirm('Are you sure you want to delete this employee?')) {
       try {
         await axios.delete(`/api/employees/${employeeId}`);
-        fetchEmployees();
+        await fetchEmployees();
+        const designationsResponse = await axios.get('/api/designations');
+        setDesignations(designationsResponse.data);
       } catch (error) {
         console.error('Error deleting employee:', error);
       }
@@ -199,7 +215,7 @@ const EmployeeManagement = () => {
     activeEmployees: employees.filter(emp => emp.status === 'active').length,
     departments: [...new Set(employees.map(emp => emp.department))].length,
     averageSalary: employees.length 
-      ? employees.reduce((sum, emp) => sum + Number(emp.salary || 0), 0) / employees.length 
+      ? employees.reduce((sum, emp) => sum + Number(emp.basic_salary || 0), 0) / employees.length 
       : 0
   };
 
@@ -209,8 +225,6 @@ const EmployeeManagement = () => {
         return 'success';
       case 'inactive':
         return 'error';
-      case 'on_leave':
-        return 'warning';
       default:
         return 'default';
     }
@@ -247,27 +261,144 @@ const EmployeeManagement = () => {
     }));
   };
 
-  const handleDesignationSubmit = () => {
-    if (selectedDesignation) {
-      dispatch(updateDesignation({
-        id: selectedDesignation.id,
-        designationData: designationFormData
-      }));
-    } else {
-      dispatch(createDesignation(designationFormData));
+  const handleDesignationSubmit = async () => {
+    try {
+      if (selectedDesignation) {
+        await dispatch(updateDesignation({
+          id: selectedDesignation.id,
+          designationData: designationFormData
+        }));
+      } else {
+        await dispatch(createDesignation(designationFormData));
+      }
+      // Fetch updated designations after successful submission
+      const response = await axios.get('/api/designations');
+      setDesignations(response.data);
+      handleCloseDesignationDialog();
+    } catch (error) {
+      console.error('Error handling designation submission:', error);
     }
-    handleCloseDesignationDialog();
   };
 
-  const handleDeleteDesignation = (id) => {
-    if (window.confirm('Are you sure you want to delete this designation?')) {
-      dispatch(deleteDesignation(id));
+  const handleDeleteDesignation = async (id) => {
+    try {
+      if (window.confirm('Are you sure you want to delete this designation?')) {
+        await dispatch(deleteDesignation(id)).unwrap();
+        // Refresh the designations list
+        const response = await axios.get('/api/designations');
+        setDesignations(response.data);
+      }
+    } catch (error) {
+      // If there are assigned employees, show reassignment dialog
+      if (error?.employees) {
+        setReassignmentData({
+          oldDesignationId: id,
+          newDesignationId: '',
+          affectedEmployees: error.employees,
+        });
+        setReassignDialog(true);
+      } else {
+        console.error('Error deleting designation:', error);
+        alert(error?.message || 'Error deleting designation');
+      }
+    }
+  };
+
+  const handleReassignmentClose = () => {
+    setReassignDialog(false);
+    setReassignmentData({
+      oldDesignationId: null,
+      newDesignationId: '',
+      affectedEmployees: [],
+    });
+  };
+
+  const handleReassignmentSubmit = async () => {
+    if (!reassignmentData.newDesignationId) {
+      return;
+    }
+
+    try {
+      await dispatch(deleteDesignation({
+        id: reassignmentData.oldDesignationId,
+        options: {
+          forceDelete: true,
+          newDesignationId: reassignmentData.newDesignationId,
+        },
+      }));
+
+      // Refresh designations list
+      const response = await axios.get('/api/designations');
+      setDesignations(response.data);
+      
+      handleReassignmentClose();
+    } catch (error) {
+      console.error('Error in reassignment:', error);
     }
   };
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
   };
+
+  const ReassignmentDialog = () => (
+    <Dialog
+      open={reassignDialog}
+      onClose={handleReassignmentClose}
+      maxWidth="sm"
+      fullWidth
+    >
+      <DialogTitle>Reassign Employees</DialogTitle>
+      <DialogContent>
+        <Box sx={{ mt: 2 }}>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            This designation has employees assigned to it. Please select a new designation for these employees before deleting.
+          </Alert>
+          
+          <FormControl fullWidth sx={{ mb: 2 }}>
+            <InputLabel>New Designation</InputLabel>
+            <Select
+              value={reassignmentData.newDesignationId}
+              onChange={(e) => setReassignmentData(prev => ({
+                ...prev,
+                newDesignationId: e.target.value
+              }))}
+              label="New Designation"
+            >
+              {designations
+                .filter(d => d.id !== reassignmentData.oldDesignationId)
+                .map((designation) => (
+                  <MenuItem key={designation.id} value={designation.id}>
+                    {designation.title}
+                  </MenuItem>
+                ))}
+            </Select>
+          </FormControl>
+
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>
+            Affected Employees ({reassignmentData.affectedEmployees.length}):
+          </Typography>
+          <List dense>
+            {reassignmentData.affectedEmployees.map((employee) => (
+              <ListItem key={employee.id}>
+                <ListItemText primary={employee.name} />
+              </ListItem>
+            ))}
+          </List>
+        </Box>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={handleReassignmentClose}>Cancel</Button>
+        <Button
+          onClick={handleReassignmentSubmit}
+          color="primary"
+          disabled={!reassignmentData.newDesignationId}
+        >
+          Reassign and Delete
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
 
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
@@ -369,7 +500,7 @@ const EmployeeManagement = () => {
               <Typography color="textSecondary">Avg. Salary</Typography>
             </Box>
             <Typography variant="h4">
-              ${Math.round(summaryStats.averageSalary).toLocaleString()}
+              {formatCurrency(summaryStats.averageSalary)}
             </Typography>
           </Paper>
         </Grid>
@@ -699,7 +830,6 @@ const EmployeeManagement = () => {
                 >
                   <MenuItem value="active">Active</MenuItem>
                   <MenuItem value="inactive">Inactive</MenuItem>
-                  <MenuItem value="on_leave">On Leave</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
@@ -712,6 +842,8 @@ const EmployeeManagement = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <ReassignmentDialog />
     </Box>
   );
 };

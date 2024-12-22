@@ -27,6 +27,17 @@ class CuttingContractor extends BaseModel {
     `);
     return rows;
   }
+
+  async hasActiveAssignments(contractorId) {
+    const [rows] = await this.pool.execute(`
+      SELECT COUNT(*) as count 
+      FROM land_assignments 
+      WHERE contractor_id = ? 
+      AND status IN ('active', 'in_progress')
+    `, [contractorId]);
+    
+    return rows[0].count > 0;
+  }
 }
 
 module.exports = new CuttingContractor(); 

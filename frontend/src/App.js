@@ -23,6 +23,8 @@ import CssBaseline from '@mui/material/CssBaseline';
 import getTheme from './theme';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { useCurrencies } from './hooks/useCurrencies';
+import { useSettings } from './hooks/useSettings';
 
 function App() {
   const [darkMode, setDarkMode] = useState(() => {
@@ -37,6 +39,9 @@ function App() {
       return newMode;
     });
   };
+
+  useCurrencies();
+  useSettings();
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>

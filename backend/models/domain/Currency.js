@@ -48,6 +48,14 @@ class Currency {
     );
     return result.affectedRows > 0;
   }
+
+  static async updateAllRates(ratio, excludeId) {
+    const [result] = await pool.query(
+      'UPDATE currencies SET rate = rate * ? WHERE id != ?',
+      [ratio, excludeId]
+    );
+    return result.affectedRows > 0;
+  }
 }
 
 module.exports = Currency; 

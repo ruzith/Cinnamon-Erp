@@ -24,6 +24,7 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  InputAdornment,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -37,6 +38,7 @@ import {
   Groups as BorrowersIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
+import { useCurrencyFormatter } from '../utils/currencyUtils';
 
 const TabPanel = (props) => {
   const { children, value, index, ...other } = props;
@@ -92,6 +94,8 @@ const LoanBook = () => {
   const [borrowers, setBorrowers] = useState([]);
   const [openPayrollDialog, setOpenPayrollDialog] = useState(false);
   const [payrollDetails, setPayrollDetails] = useState(null);
+
+  const { formatCurrency } = useCurrencyFormatter();
 
   useEffect(() => {
     fetchLoans();
@@ -356,7 +360,7 @@ const LoanBook = () => {
               <Typography color="textSecondary">Total Loaned</Typography>
             </Box>
             <Typography variant="h4">
-              ${summary.totalLoaned.toFixed(2)}
+              {formatCurrency(summary.totalLoaned)}
             </Typography>
           </Paper>
         </Grid>
@@ -377,7 +381,7 @@ const LoanBook = () => {
               <Typography color="textSecondary">Total Repaid</Typography>
             </Box>
             <Typography variant="h4" sx={{ color: 'success.main' }}>
-              ${summary.totalRepaid.toFixed(2)}
+              {formatCurrency(summary.totalRepaid)}
             </Typography>
           </Paper>
         </Grid>
@@ -398,7 +402,7 @@ const LoanBook = () => {
               <Typography color="textSecondary">Outstanding Amount</Typography>
             </Box>
             <Typography variant="h4" sx={{ color: 'error.main' }}>
-              ${summary.outstandingAmount.toFixed(2)}
+              {formatCurrency(summary.outstandingAmount)}
             </Typography>
           </Paper>
         </Grid>
@@ -467,8 +471,8 @@ const LoanBook = () => {
                   <TableRow key={loan.id}>
                     <TableCell>{loan.loan_number}</TableCell>
                     <TableCell>{loan.borrower_name}</TableCell>
-                    <TableCell>${Number(loan.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</TableCell>
-                    <TableCell>${Number(loan.remaining_balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}</TableCell>
+                    <TableCell>{formatCurrency(loan.amount)}</TableCell>
+                    <TableCell>{formatCurrency(loan.remaining_balance)}</TableCell>
                     <TableCell>{loan.interest_rate}%</TableCell>
                     <TableCell>{loan.term_months}</TableCell>
                     <TableCell>
@@ -538,7 +542,7 @@ const LoanBook = () => {
                     </TableCell>
                     <TableCell>{payment.loan_number}</TableCell>
                     <TableCell>
-                      ${Number(payment.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      {formatCurrency(payment.amount)}
                     </TableCell>
                     <TableCell>{payment.reference}</TableCell>
                     <TableCell>
@@ -866,7 +870,7 @@ const LoanBook = () => {
                               {new Date(payment.payment_date).toLocaleDateString()}
                             </TableCell>
                             <TableCell>
-                              ${Number(payment.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                              {formatCurrency(payment.amount)}
                             </TableCell>
                             <TableCell>{payment.reference}</TableCell>
                             <TableCell>

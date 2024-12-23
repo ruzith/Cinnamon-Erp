@@ -571,6 +571,7 @@ const Sales = () => {
                     <IconButton
                       size="small"
                       onClick={() => handleViewDetails(sale)}
+                      sx={{ color: 'info.main' }}
                     >
                       <VisibilityIcon fontSize="small" />
                     </IconButton>
@@ -578,6 +579,7 @@ const Sales = () => {
                       <IconButton
                         size="small"
                         onClick={() => handleEdit(sale)}
+                        sx={{ color: 'primary.main', ml: 1 }}
                       >
                         <EditIcon fontSize="small" />
                       </IconButton>
@@ -585,6 +587,7 @@ const Sales = () => {
                     <IconButton
                       size="small"
                       onClick={() => handlePrintInvoice(sale)}
+                      sx={{ color: 'success.main', ml: 1 }}
                     >
                       <PrintIcon fontSize="small" />
                     </IconButton>

@@ -40,6 +40,7 @@ import {
 import axios from 'axios';
 import PurchaseInvoiceForm from '../components/PurchaseInvoiceForm';
 import { useCurrencyFormatter } from '../utils/currencyUtils';
+import { formatDate, getCurrentDateTime } from '../utils/dateUtils';
 
 const STATUS_OPTIONS = ['planned', 'in_progress', 'completed', 'cancelled'];
 
@@ -312,7 +313,7 @@ const Manufacturing = () => {
     setSelectedOrder(null);
   };
 
-  const handleOpenAssignmentDialog = (assignment = null) => {
+  const handleOpenAssignmentDialog = (assignment = null, contractor = null) => {
     if (assignment) {
       setAssignmentFormData({
         id: assignment.id,
@@ -320,17 +321,17 @@ const Manufacturing = () => {
         quantity: assignment.quantity,
         duration: assignment.duration,
         duration_type: assignment.duration_type,
-        start_date: new Date(assignment.start_date).toISOString().split('T')[0],
+        start_date: assignment.start_date ? formatDate(assignment.start_date, 'YYYY-MM-DD') : formatDate(getCurrentDateTime(), 'YYYY-MM-DD'),
         notes: assignment.notes || ''
       });
     } else {
       setAssignmentFormData({
         id: null,
-        contractor_id: '',
+        contractor_id: contractor ? contractor.id : '',
         quantity: '',
         duration: 1,
         duration_type: 'day',
-        start_date: new Date().toISOString().split('T')[0],
+        start_date: formatDate(getCurrentDateTime(), 'YYYY-MM-DD'),
         notes: ''
       });
     }
@@ -443,7 +444,7 @@ const Manufacturing = () => {
       </IconButton>
       <IconButton 
         size="small" 
-        onClick={() => handleOpenAssignmentDialog(contractor)}
+        onClick={() => handleOpenAssignmentDialog(null, contractor)}
         sx={{ color: 'success.main', ml: 1 }}
       >
         <AddIcon />

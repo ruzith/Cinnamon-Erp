@@ -294,25 +294,23 @@ const Settings = () => {
                       <TableCell>{currency.rate}</TableCell>
                       <TableCell>{currency.status}</TableCell>
                       <TableCell>
-                        <Button
+                        <IconButton
                           size="small"
-                          startIcon={<EditIcon />}
                           onClick={() => {
                             setEditingId(currency.id);
                             setModalVisible(true);
                           }}
-                          sx={{ mr: 1 }}
+                          sx={{ color: 'primary.main' }}
                         >
-                          Edit
-                        </Button>
-                        <Button
+                          <EditIcon />
+                        </IconButton>
+                        <IconButton
                           size="small"
-                          color="error"
-                          startIcon={<DeleteIcon />}
                           onClick={() => handleDelete(currency.id)}
+                          sx={{ color: 'error.main', ml: 1 }}
                         >
-                          Delete
-                        </Button>
+                          <DeleteIcon />
+                        </IconButton>
                       </TableCell>
                     </TableRow>
                   ))}

@@ -66,10 +66,13 @@ class Dashboard extends BaseModel {
       SELECT 
         COALESCE(SUM(CASE WHEN type = 'revenue' THEN amount ELSE 0 END), 0) as achieved,
         COALESCE(
-          (SELECT target_amount 
-           FROM monthly_targets 
-           WHERE MONTH(period) = MONTH(CURRENT_DATE()) 
-           AND YEAR(period) = YEAR(CURRENT_DATE())
+          (SELECT mt.target_amount * (c.rate / dc.rate)
+           FROM monthly_targets mt
+           CROSS JOIN settings s
+           JOIN currencies c ON s.default_currency = c.id
+           JOIN currencies dc ON dc.id = 1  -- Base currency (LKR)
+           WHERE MONTH(mt.period) = MONTH(CURRENT_DATE()) 
+           AND YEAR(mt.period) = YEAR(CURRENT_DATE())
           ), 30000
         ) as target
       FROM transactions
@@ -78,11 +81,20 @@ class Dashboard extends BaseModel {
         AND YEAR(date) = YEAR(CURRENT_DATE())
     `);
 
-    // If no data exists, return default values
+    // If no data exists, return default values adjusted by current currency rate
     if (!rows || !rows[0]) {
+      const [currencyRate] = await this.pool.execute(`
+        SELECT c.rate / dc.rate as conversion_rate
+        FROM settings s
+        JOIN currencies c ON s.default_currency = c.id
+        JOIN currencies dc ON dc.id = 1  -- Base currency (LKR)
+        LIMIT 1
+      `);
+      
+      const rate = currencyRate[0]?.conversion_rate || 1;
       return {
         achieved: 0,
-        target: 30000
+        target: 30000 * rate
       };
     }
 
@@ -103,6 +115,18 @@ class Dashboard extends BaseModel {
   }
 
   async updateMonthlyTarget(period, targetAmount, userId) {
+    // Convert target amount to base currency (LKR) before storing
+    const [currencyRate] = await this.pool.execute(`
+      SELECT dc.rate / c.rate as conversion_rate
+      FROM settings s
+      JOIN currencies c ON s.default_currency = c.id
+      JOIN currencies dc ON dc.id = 1  -- Base currency (LKR)
+      LIMIT 1
+    `);
+    
+    const rate = currencyRate[0]?.conversion_rate || 1;
+    const baseAmount = targetAmount * rate;
+
     const [existing] = await this.pool.execute(
       'SELECT id FROM monthly_targets WHERE period = ?',
       [period]
@@ -115,13 +139,13 @@ class Dashboard extends BaseModel {
              updated_at = CURRENT_TIMESTAMP,
              created_by = ?
          WHERE period = ?`,
-        [targetAmount, userId, period]
+        [baseAmount, userId, period]
       );
     } else {
       await this.pool.execute(
         `INSERT INTO monthly_targets (period, target_amount, created_by)
          VALUES (?, ?, ?)`,
-        [period, targetAmount, userId]
+        [period, baseAmount, userId]
       );
     }
   }

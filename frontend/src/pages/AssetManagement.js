@@ -603,6 +603,7 @@ const AssetManagement = () => {
                         size="small"
                         onClick={() => handleEdit(asset)}
                         title="Edit Asset"
+                        sx={{ color: 'primary.main' }}
                       >
                         <EditIcon fontSize="small" />
                       </IconButton>
@@ -610,6 +611,7 @@ const AssetManagement = () => {
                         size="small"
                         onClick={() => handleMaintenance(asset)}
                         title="Maintenance"
+                        sx={{ color: 'info.main', ml: 1 }}
                       >
                         <BuildIcon fontSize="small" />
                       </IconButton>
@@ -617,6 +619,7 @@ const AssetManagement = () => {
                         size="small"
                         onClick={() => handleViewHistory(asset)}
                         title="View History"
+                        sx={{ color: 'success.main', ml: 1 }}
                       >
                         <TimelineIcon fontSize="small" />
                       </IconButton>

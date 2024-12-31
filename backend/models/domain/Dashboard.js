@@ -7,8 +7,8 @@ class Dashboard extends BaseModel {
 
   async getLandsCount() {
     const [rows] = await this.pool.execute(`
-      SELECT COUNT(*) as count 
-      FROM lands 
+      SELECT COUNT(*) as count
+      FROM lands
       WHERE status = 'active'
     `);
     return rows[0].count;
@@ -16,8 +16,8 @@ class Dashboard extends BaseModel {
 
   async getActiveEmployeesCount() {
     const [rows] = await this.pool.execute(`
-      SELECT COUNT(*) as count 
-      FROM employees 
+      SELECT COUNT(*) as count
+      FROM employees
       WHERE status = 'active'
     `);
     return rows[0].count;
@@ -25,8 +25,8 @@ class Dashboard extends BaseModel {
 
   async getPendingTasksCount() {
     const [rows] = await this.pool.execute(`
-      SELECT COUNT(*) as count 
-      FROM tasks 
+      SELECT COUNT(*) as count
+      FROM tasks
       WHERE status = 'pending'
     `);
     return rows[0].count;
@@ -46,7 +46,7 @@ class Dashboard extends BaseModel {
 
   async getRevenueData() {
     const [rows] = await this.pool.execute(`
-      SELECT 
+      SELECT
         DATE_FORMAT(MIN(date), '%b') as month,
         COALESCE(SUM(amount), 0) as revenue,
         MIN(date) as full_date
@@ -63,7 +63,7 @@ class Dashboard extends BaseModel {
 
   async getMonthlyTarget() {
     const [rows] = await this.pool.execute(`
-      SELECT 
+      SELECT
         COALESCE(SUM(CASE WHEN type = 'revenue' THEN amount ELSE 0 END), 0) as achieved,
         COALESCE(
           (SELECT mt.target_amount * (c.rate / dc.rate)
@@ -71,7 +71,7 @@ class Dashboard extends BaseModel {
            CROSS JOIN settings s
            JOIN currencies c ON s.default_currency = c.id
            JOIN currencies dc ON dc.id = 1  -- Base currency (LKR)
-           WHERE MONTH(mt.period) = MONTH(CURRENT_DATE()) 
+           WHERE MONTH(mt.period) = MONTH(CURRENT_DATE())
            AND YEAR(mt.period) = YEAR(CURRENT_DATE())
           ), 30000
         ) as target
@@ -90,7 +90,7 @@ class Dashboard extends BaseModel {
         JOIN currencies dc ON dc.id = 1  -- Base currency (LKR)
         LIMIT 1
       `);
-      
+
       const rate = currencyRate[0]?.conversion_rate || 1;
       return {
         achieved: 0,
@@ -106,7 +106,7 @@ class Dashboard extends BaseModel {
 
   async getTaskCompletionRate() {
     const [rows] = await this.pool.execute(`
-      SELECT 
+      SELECT
         COUNT(CASE WHEN status = 'completed' THEN 1 END) * 100.0 / COUNT(*) as completion_rate
       FROM tasks
       WHERE created_at >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
@@ -123,7 +123,7 @@ class Dashboard extends BaseModel {
       JOIN currencies dc ON dc.id = 1  -- Base currency (LKR)
       LIMIT 1
     `);
-    
+
     const rate = currencyRate[0]?.conversion_rate || 1;
     const baseAmount = targetAmount * rate;
 
@@ -134,8 +134,8 @@ class Dashboard extends BaseModel {
 
     if (existing.length > 0) {
       await this.pool.execute(
-        `UPDATE monthly_targets 
-         SET target_amount = ?, 
+        `UPDATE monthly_targets
+         SET target_amount = ?,
              updated_at = CURRENT_TIMESTAMP,
              created_by = ?
          WHERE period = ?`,

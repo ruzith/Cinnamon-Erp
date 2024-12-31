@@ -31,9 +31,10 @@ import {
   Assignment as TaskIcon,
   CheckCircle as CompletedIcon,
   Pending as PendingIcon,
-  Schedule as ScheduleIcon,
+  Schedule as InProgressIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
+import SummaryCard from '../components/common/SummaryCard';
 
 const TaskManagement = () => {
   const [tasks, setTasks] = useState([]);
@@ -179,7 +180,7 @@ const TaskManagement = () => {
 
   const getPriorityColor = (priority) => {
     if (!priority) return 'default';
-    
+
     switch (priority.toLowerCase()) {
       case 'high':
         return 'error';
@@ -211,79 +212,43 @@ const TaskManagement = () => {
       {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(25, 118, 210, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <TaskIcon sx={{ color: 'primary.main', mr: 1 }} />
-              <Typography color="textSecondary">Total Tasks</Typography>
-            </Box>
-            <Typography variant="h4">{summaryStats.totalTasks}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={TaskIcon}
+            title="Total Tasks"
+            value={summaryStats.totalTasks}
+            iconColor="#9C27B0"
+            gradientColor="secondary"
+          />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(46, 125, 50, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <CompletedIcon sx={{ color: 'success.main', mr: 1 }} />
-              <Typography color="textSecondary">Completed</Typography>
-            </Box>
-            <Typography variant="h4">{summaryStats.completedTasks}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={CompletedIcon}
+            title="Completed"
+            value={summaryStats.completedTasks}
+            iconColor="#D32F2F"
+            gradientColor="error"
+          />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(251, 140, 0, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <PendingIcon sx={{ color: 'warning.main', mr: 1 }} />
-              <Typography color="textSecondary">Pending</Typography>
-            </Box>
-            <Typography variant="h4">{summaryStats.pendingTasks}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={PendingIcon}
+            title="Pending"
+            value={summaryStats.pendingTasks}
+            iconColor="#ED6C02"
+            gradientColor="warning"
+          />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(25, 118, 210, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <PendingIcon sx={{ color: 'info.main', mr: 1 }} />
-              <Typography color="textSecondary">In Progress</Typography>
-            </Box>
-            <Typography variant="h4">{summaryStats.inProgressTasks}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={InProgressIcon}
+            title="In Progress"
+            value={summaryStats.inProgressTasks}
+            iconColor="#0288D1"
+            gradientColor="info"
+          />
         </Grid>
       </Grid>
 
@@ -333,15 +298,15 @@ const TaskManagement = () => {
                     />
                   </TableCell>
                   <TableCell align="right">
-                    <IconButton 
-                      size="small" 
+                    <IconButton
+                      size="small"
                       onClick={() => handleOpenDialog(task)}
                       sx={{ color: 'primary.main' }}
                     >
                       <EditIcon />
                     </IconButton>
-                    <IconButton 
-                      size="small" 
+                    <IconButton
+                      size="small"
                       onClick={() => handleDeleteTask(task.id)}
                       sx={{ color: 'error.main', ml: 1 }}
                     >
@@ -356,8 +321,8 @@ const TaskManagement = () => {
       </Paper>
 
       {/* Task Dialog */}
-      <Dialog 
-        open={openDialog} 
+      <Dialog
+        open={openDialog}
         onClose={handleCloseDialog}
         maxWidth="md"
         fullWidth
@@ -489,9 +454,9 @@ const TaskManagement = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog}>Cancel</Button>
-          <Button 
-            variant="contained" 
-            onClick={handleSubmit} 
+          <Button
+            variant="contained"
+            onClick={handleSubmit}
             color="primary"
           >
             {selectedTask ? 'Update Task' : 'Create Task'}
@@ -502,4 +467,4 @@ const TaskManagement = () => {
   );
 };
 
-export default TaskManagement; 
+export default TaskManagement;

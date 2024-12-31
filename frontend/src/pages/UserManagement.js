@@ -29,12 +29,13 @@ import {
     Add as AddIcon,
     Edit as EditIcon,
     Delete as DeleteIcon,
-    Person as PersonIcon,
-    SupervisorAccount as AdminIcon,
-    Security as SecurityIcon,
-    Group as GroupIcon,
+    Group as UsersIcon,
+    AdminPanelSettings as AdminIcon,
+    Person as ActiveUserIcon,
+    Business as DepartmentIcon,
 } from '@mui/icons-material';
 import { getUsers, deleteUser, updateUser, createUser } from '../features/users/userSlice';
+import SummaryCard from '../components/common/SummaryCard';
 
 const UserManagement = () => {
     const dispatch = useDispatch();
@@ -89,7 +90,7 @@ const UserManagement = () => {
         try {
             const form = document.querySelector('form');
             const formData = new FormData(form);
-            
+
             const userData = {
                 name: formData.get('name'),
                 email: formData.get('email'),
@@ -106,7 +107,7 @@ const UserManagement = () => {
             } else {
                 await dispatch(createUser(userData));
             }
-            
+
             setOpenDialog(false);
             setSelectedUser(null);
             dispatch(getUsers());
@@ -138,76 +139,40 @@ const UserManagement = () => {
             {/* Summary Cards */}
             <Grid container spacing={3} sx={{ mb: 4 }}>
                 <Grid item xs={12} sm={6} md={3}>
-                    <Paper
-                        elevation={0}
-                        sx={{
-                            p: 3,
-                            background: (theme) =>
-                                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(25, 118, 210, 0.05) 100%)`,
-                            border: '1px solid',
-                            borderColor: 'divider',
-                        }}
-                    >
-                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                            <GroupIcon sx={{ color: 'primary.main', mr: 1 }} />
-                            <Typography color="textSecondary">Total Users</Typography>
-                        </Box>
-                        <Typography variant="h4">{summaryStats.totalUsers}</Typography>
-                    </Paper>
+                    <SummaryCard
+                        icon={UsersIcon}
+                        title="Total Users"
+                        value={summaryStats.totalUsers}
+                        iconColor="#1976D2"
+                        gradientColor="primary"
+                    />
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
-                    <Paper
-                        elevation={0}
-                        sx={{
-                            p: 3,
-                            background: (theme) =>
-                                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(211, 47, 47, 0.05) 100%)`,
-                            border: '1px solid',
-                            borderColor: 'divider',
-                        }}
-                    >
-                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                            <AdminIcon sx={{ color: 'error.main', mr: 1 }} />
-                            <Typography color="textSecondary">Administrators</Typography>
-                        </Box>
-                        <Typography variant="h4">{summaryStats.adminUsers}</Typography>
-                    </Paper>
+                    <SummaryCard
+                        icon={AdminIcon}
+                        title="Administrators"
+                        value={summaryStats.adminUsers}
+                        iconColor="#D32F2F"
+                        gradientColor="error"
+                    />
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
-                    <Paper
-                        elevation={0}
-                        sx={{
-                            p: 3,
-                            background: (theme) =>
-                                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(46, 125, 50, 0.05) 100%)`,
-                            border: '1px solid',
-                            borderColor: 'divider',
-                        }}
-                    >
-                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                            <PersonIcon sx={{ color: 'success.main', mr: 1 }} />
-                            <Typography color="textSecondary">Active Users</Typography>
-                        </Box>
-                        <Typography variant="h4">{summaryStats.activeUsers}</Typography>
-                    </Paper>
+                    <SummaryCard
+                        icon={ActiveUserIcon}
+                        title="Active Users"
+                        value={summaryStats.activeUsers}
+                        iconColor="#2E7D32"
+                        gradientColor="success"
+                    />
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
-                    <Paper
-                        elevation={0}
-                        sx={{
-                            p: 3,
-                            background: (theme) =>
-                                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(251, 140, 0, 0.05) 100%)`,
-                            border: '1px solid',
-                            borderColor: 'divider',
-                        }}
-                    >
-                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                            <SecurityIcon sx={{ color: 'warning.main', mr: 1 }} />
-                            <Typography color="textSecondary">Departments</Typography>
-                        </Box>
-                        <Typography variant="h4">{summaryStats.departments}</Typography>
-                    </Paper>
+                    <SummaryCard
+                        icon={DepartmentIcon}
+                        title="Departments"
+                        value={summaryStats.departments}
+                        iconColor="#ED6C02"
+                        gradientColor="warning"
+                    />
                 </Grid>
             </Grid>
 
@@ -356,8 +321,8 @@ const UserManagement = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
-                    <Button 
-                        variant="contained" 
+                    <Button
+                        variant="contained"
                         color="primary"
                         onClick={handleSubmit}
                     >
@@ -369,4 +334,4 @@ const UserManagement = () => {
     );
 };
 
-export default UserManagement; 
+export default UserManagement;

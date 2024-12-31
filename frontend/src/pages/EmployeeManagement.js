@@ -39,6 +39,11 @@ import {
   Business as BusinessIcon,
   WorkOutline as WorkIcon,
   TrendingUp as TrendingUpIcon,
+  Person as PersonIcon,
+  AttachMoney as SalaryIcon,
+  Group as GroupIcon,
+  PersonOff as PersonOffIcon,
+  Pending as PendingIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 import {
@@ -48,6 +53,7 @@ import {
   deleteDesignation
 } from '../features/designations/designationSlice';
 import { useCurrencyFormatter } from '../utils/currencyUtils';
+import SummaryCard from '../components/common/SummaryCard';
 
 const EmployeeManagement = () => {
   const dispatch = useDispatch();
@@ -99,7 +105,7 @@ const EmployeeManagement = () => {
         console.error('Error fetching salary structures:', error);
       }
     };
-    
+
     fetchSalaryStructures();
   }, []);
 
@@ -112,7 +118,7 @@ const EmployeeManagement = () => {
         console.error('Error fetching designations:', error);
       }
     };
-    
+
     fetchDesignations();
   }, []);
 
@@ -214,8 +220,8 @@ const EmployeeManagement = () => {
     totalEmployees: employees.length,
     activeEmployees: employees.filter(emp => emp.status === 'active').length,
     departments: [...new Set(employees.map(emp => emp.department))].length,
-    averageSalary: employees.length 
-      ? employees.reduce((sum, emp) => sum + Number(emp.basic_salary || 0), 0) / employees.length 
+    averageSalary: employees.length
+      ? employees.reduce((sum, emp) => sum + Number(emp.basic_salary || 0), 0) / employees.length
       : 0
   };
 
@@ -330,7 +336,7 @@ const EmployeeManagement = () => {
       // Refresh designations list
       const response = await axios.get('/api/designations');
       setDesignations(response.data);
-      
+
       handleReassignmentClose();
     } catch (error) {
       console.error('Error in reassignment:', error);
@@ -354,7 +360,7 @@ const EmployeeManagement = () => {
           <Alert severity="info" sx={{ mb: 2 }}>
             This designation has employees assigned to it. Please select a new designation for these employees before deleting.
           </Alert>
-          
+
           <FormControl fullWidth sx={{ mb: 2 }}>
             <InputLabel>New Designation</InputLabel>
             <Select
@@ -425,91 +431,53 @@ const EmployeeManagement = () => {
         </Box>
       </Box>
 
-      {/* Summary Stats Cards */}
+      {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(25, 118, 210, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <PeopleIcon sx={{ color: 'primary.main', mr: 1 }} />
-              <Typography color="textSecondary">Total Employees</Typography>
-            </Box>
-            <Typography variant="h4">{summaryStats.totalEmployees}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={GroupIcon}
+            title="Total Employees"
+            value={summaryStats.totalEmployees}
+            iconColor="#9C27B0"
+            gradientColor="secondary"
+          />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(46, 125, 50, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <WorkIcon sx={{ color: 'success.main', mr: 1 }} />
-              <Typography color="textSecondary">Active Employees</Typography>
-            </Box>
-            <Typography variant="h4">{summaryStats.activeEmployees}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={PersonIcon}
+            title="Active Employees"
+            value={summaryStats.activeEmployees}
+            iconColor="#D32F2F"
+            gradientColor="error"
+          />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(251, 140, 0, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <BusinessIcon sx={{ color: 'warning.main', mr: 1 }} />
-              <Typography color="textSecondary">Departments</Typography>
-            </Box>
-            <Typography variant="h4">{summaryStats.departments}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={PersonOffIcon}
+            title="Inactive Employees"
+            value={summaryStats.inactiveEmployees}
+            iconColor="#ED6C02"
+            gradientColor="warning"
+          />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(2, 136, 209, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <TrendingUpIcon sx={{ color: 'info.main', mr: 1 }} />
-              <Typography color="textSecondary">Avg. Salary</Typography>
-            </Box>
-            <Typography variant="h4">
-              {formatCurrency(summaryStats.averageSalary)}
-            </Typography>
-          </Paper>
+          <SummaryCard
+            icon={PendingIcon}
+            title="Pending Approvals"
+            value={summaryStats.pendingApprovals}
+            iconColor="#0288D1"
+            gradientColor="info"
+          />
         </Grid>
       </Grid>
 
       {/* Content Card with Tabs */}
       <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
-        <Tabs 
-          value={activeTab} 
+        <Tabs
+          value={activeTab}
           onChange={handleTabChange}
           sx={{ borderBottom: 1, borderColor: 'divider', px: 2, pt: 2 }}
         >
@@ -560,15 +528,15 @@ const EmployeeManagement = () => {
                       />
                     </TableCell>
                     <TableCell align="right">
-                      <IconButton 
-                        size="small" 
+                      <IconButton
+                        size="small"
                         onClick={() => handleOpenDialog(employee)}
                         sx={{ color: 'primary.main' }}
                       >
                         <EditIcon />
                       </IconButton>
-                      <IconButton 
-                        size="small" 
+                      <IconButton
+                        size="small"
                         onClick={() => handleDeleteEmployee(employee.id)}
                         sx={{ color: 'error.main', ml: 1 }}
                       >
@@ -680,8 +648,8 @@ const EmployeeManagement = () => {
       </Dialog>
 
       {/* Employee Dialog - Keep your existing dialog code */}
-      <Dialog 
-        open={openDialog} 
+      <Dialog
+        open={openDialog}
         onClose={handleCloseDialog}
         maxWidth="md"
         fullWidth
@@ -848,4 +816,4 @@ const EmployeeManagement = () => {
   );
 };
 
-export default EmployeeManagement; 
+export default EmployeeManagement;

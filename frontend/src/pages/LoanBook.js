@@ -36,9 +36,13 @@ import {
   Payments as RepaymentIcon,
   Warning as AlertIcon,
   Groups as BorrowersIcon,
+  AccountBalance as AccountBalanceIcon,
+  Payments as PaymentsIcon,
+  Warning as WarningIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 import { useCurrencyFormatter } from '../utils/currencyUtils';
+import SummaryCard from '../components/common/SummaryCard';
 
 const TabPanel = (props) => {
   const { children, value, index, ...other } = props;
@@ -356,102 +360,58 @@ const LoanBook = () => {
       {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(25, 118, 210, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <LoanIcon sx={{ color: 'primary.main', mr: 1 }} />
-              <Typography color="textSecondary">Total Loaned</Typography>
-            </Box>
-            <Typography variant="h4">
-              {formatCurrency(summary.totalLoaned)}
-            </Typography>
-          </Paper>
+          <SummaryCard
+            icon={BorrowersIcon}
+            title="Total Active Loans"
+            value={summary.activeLoans}
+            iconColor="#D32F2F"
+            gradientColor="error"
+          />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(76, 175, 80, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <RepaymentIcon sx={{ color: 'success.main', mr: 1 }} />
-              <Typography color="textSecondary">Total Repaid</Typography>
-            </Box>
-            <Typography variant="h4" sx={{ color: 'success.main' }}>
-              {formatCurrency(summary.totalRepaid)}
-            </Typography>
-          </Paper>
+          <SummaryCard
+            icon={AccountBalanceIcon}
+            title="Total Loan Amount"
+            value={formatCurrency(summary.totalLoaned)}
+            iconColor="#9C27B0"
+            gradientColor="secondary"
+          />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(244, 67, 54, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <AlertIcon sx={{ color: 'error.main', mr: 1 }} />
-              <Typography color="textSecondary">Outstanding Amount</Typography>
-            </Box>
-            <Typography variant="h4" sx={{ color: 'error.main' }}>
-              {formatCurrency(summary.outstandingAmount)}
-            </Typography>
-          </Paper>
+          <SummaryCard
+            icon={PaymentsIcon}
+            title="Total Repaid"
+            value={formatCurrency(summary.totalRepaid)}
+            iconColor="#ED6C02"
+            gradientColor="warning"
+          />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(156, 39, 176, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <BorrowersIcon sx={{ color: 'secondary.main', mr: 1 }} />
-              <Typography color="textSecondary">Active Loans</Typography>
-            </Box>
-            <Typography variant="h4">
-              {summary.activeLoans}
-            </Typography>
-          </Paper>
+          <SummaryCard
+            icon={WarningIcon}
+            title="Outstanding Balance"
+            value={formatCurrency(summary.outstandingAmount)}
+            iconColor="#0288D1"
+            gradientColor="info"
+          />
         </Grid>
       </Grid>
 
-      <Paper 
-        elevation={0} 
-        sx={{ 
+      <Paper
+        elevation={0}
+        sx={{
           border: '1px solid',
           borderColor: 'divider'
         }}
       >
-        <Tabs 
-          value={tabValue} 
+        <Tabs
+          value={tabValue}
           onChange={handleTabChange}
-          sx={{ 
-            borderBottom: 1, 
+          sx={{
+            borderBottom: 1,
             borderColor: 'divider',
             px: 2,
             pt: 2
@@ -487,35 +447,35 @@ const LoanBook = () => {
                     <TableCell>{loan.interest_rate}%</TableCell>
                     <TableCell>{loan.term_months}</TableCell>
                     <TableCell>
-                      <Chip 
+                      <Chip
                         label={loan.status}
                         color={getStatusColor(loan.status)}
                         size="small"
                       />
                     </TableCell>
                     <TableCell>
-                      <IconButton 
+                      <IconButton
                         size="small"
                         onClick={() => handleOpenPaymentDialog(loan)}
                         sx={{ color: 'success.main' }}
                       >
                         <PaymentIcon />
                       </IconButton>
-                      <IconButton 
+                      <IconButton
                         size="small"
                         onClick={() => handleOpenHistoryDialog(loan)}
                         sx={{ color: 'info.main' }}
                       >
                         <HistoryIcon />
                       </IconButton>
-                      <IconButton 
+                      <IconButton
                         size="small"
                         onClick={() => handleOpenLoanDialog(loan)}
                         sx={{ color: 'primary.main' }}
                       >
                         <EditIcon />
                       </IconButton>
-                      <IconButton 
+                      <IconButton
                         size="small"
                         onClick={() => handleDeleteLoan(loan.id)}
                         sx={{ color: 'error.main' }}
@@ -557,7 +517,7 @@ const LoanBook = () => {
                     </TableCell>
                     <TableCell>{payment.reference}</TableCell>
                     <TableCell>
-                      <Chip 
+                      <Chip
                         label={payment.status}
                         color={getStatusColor(payment.status)}
                         size="small"
@@ -574,8 +534,8 @@ const LoanBook = () => {
       </Paper>
 
       {/* Loan Dialog */}
-      <Dialog 
-        open={openLoanDialog} 
+      <Dialog
+        open={openLoanDialog}
         onClose={handleCloseLoanDialog}
         maxWidth="md"
         fullWidth
@@ -758,8 +718,8 @@ const LoanBook = () => {
       </Dialog>
 
       {/* Payment Dialog */}
-      <Dialog 
-        open={openPaymentDialog} 
+      <Dialog
+        open={openPaymentDialog}
         onClose={handleClosePaymentDialog}
         maxWidth="sm"
         fullWidth
@@ -879,7 +839,7 @@ const LoanBook = () => {
                             </TableCell>
                             <TableCell>{payment.reference}</TableCell>
                             <TableCell>
-                              <Chip 
+                              <Chip
                                 label={payment.status}
                                 color={getStatusColor(payment.status)}
                                 size="small"
@@ -962,4 +922,4 @@ const LoanBook = () => {
   );
 };
 
-export default LoanBook; 
+export default LoanBook;

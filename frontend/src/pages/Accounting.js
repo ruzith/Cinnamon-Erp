@@ -29,13 +29,17 @@ import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  VisibilityIcon,
+  Visibility as VisibilityIcon,
   Receipt as ReceiptIcon,
-  AccountBalance as AccountIcon,
+  AccountBalance as AccountBalanceIcon,
   TrendingUp as IncomeIcon,
   TrendingDown as ExpenseIcon,
   Balance as BalanceIcon,
   FileDownload as FileDownloadIcon,
+  AttachMoney,
+  Payments as PaymentsIcon,
+  TrendingUp,
+  AccountBalanceWallet,
 } from '@mui/icons-material';
 import axios from 'axios';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
@@ -49,6 +53,7 @@ import weekOfYear from 'dayjs/plugin/weekOfYear';
 import { formatCurrency } from '../utils/currencyUtils';
 import { formatDate } from '../utils/dateUtils';
 import { useCurrencyFormatter } from '../utils/currencyUtils';
+import SummaryCard from '../components/common/SummaryCard';
 
 dayjs.extend(isBetween);
 dayjs.extend(customParseFormat);
@@ -96,7 +101,7 @@ const Accounting = () => {
     totalExpenses: 0,
     netIncome: 0
   });
-  
+
   const [openTransactionDialog, setOpenTransactionDialog] = useState(false);
   const [openAccountDialog, setOpenAccountDialog] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
@@ -388,12 +393,12 @@ const Accounting = () => {
           endDate: dateRange[1].format('YYYY-MM-DD')
         }
       });
-      
+
       setReportData(prev => ({
         ...prev,
         [reportType]: response.data
       }));
-      
+
       setCurrentReport(reportType);
       setOpenReportDialog(true);
     } catch (error) {
@@ -650,7 +655,7 @@ const Accounting = () => {
                         <TableCell align="right">{formatCurrency(Math.abs(item.credit - item.debit))}</TableCell>
                       </TableRow>
                     ))}
-                    
+
                     {/* Outflows */}
                     <TableRow>
                       <TableCell colSpan={2}>
@@ -663,7 +668,7 @@ const Accounting = () => {
                         <TableCell align="right">-${formatCurrency(Math.abs(item.debit - item.credit))}</TableCell>
                       </TableRow>
                     ))}
-                    
+
                     {/* Operating Total */}
                     <TableRow>
                       <TableCell><strong>Net Cash from Operations</strong></TableCell>
@@ -692,7 +697,7 @@ const Accounting = () => {
                         <TableCell align="right">{formatCurrency(Math.abs(item.credit - item.debit))}</TableCell>
                       </TableRow>
                     ))}
-                    
+
                     {/* Outflows */}
                     <TableRow>
                       <TableCell colSpan={2}>
@@ -705,7 +710,7 @@ const Accounting = () => {
                         <TableCell align="right">-${formatCurrency(Math.abs(item.debit - item.credit))}</TableCell>
                       </TableRow>
                     ))}
-                    
+
                     {/* Investing Total */}
                     <TableRow>
                       <TableCell><strong>Net Cash from Investing</strong></TableCell>
@@ -734,7 +739,7 @@ const Accounting = () => {
                         <TableCell align="right">{formatCurrency(Math.abs(item.credit - item.debit))}</TableCell>
                       </TableRow>
                     ))}
-                    
+
                     {/* Outflows */}
                     <TableRow>
                       <TableCell colSpan={2}>
@@ -747,7 +752,7 @@ const Accounting = () => {
                         <TableCell align="right">-${formatCurrency(Math.abs(item.debit - item.credit))}</TableCell>
                       </TableRow>
                     ))}
-                    
+
                     {/* Financing Total */}
                     <TableRow>
                       <TableCell><strong>Net Cash from Financing</strong></TableCell>
@@ -790,7 +795,7 @@ const Accounting = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={onClose}>Close</Button>
-          <Button 
+          <Button
             onClick={() => handleExportReport(type, data)}
             startIcon={<FileDownloadIcon />}
             variant="contained"
@@ -801,6 +806,13 @@ const Accounting = () => {
         </DialogActions>
       </Dialog>
     );
+  };
+
+  const summaryStats = {
+    totalAccounts: accounts.length,
+    activeAccounts: accounts.filter(acc => acc.status === 'active').length,
+    totalTransactions: transactions.length,
+    totalBalance: accounts.reduce((sum, acc) => sum + Number(acc.balance), 0)
   };
 
   return (
@@ -828,81 +840,53 @@ const Accounting = () => {
         </Box>
       </Box>
 
-      {/* Summary Stats Grid */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={4}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(76, 175, 80, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <IncomeIcon sx={{ color: 'success.main', mr: 1 }} />
-              <Typography color="textSecondary">Total Income</Typography>
-            </Box>
-            <Typography variant="h4" sx={{ color: 'success.main' }}>
-              {formatCurrency(summary.profitLoss.revenue)}
-            </Typography>
-          </Paper>
+      {/* Summary Cards */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} sm={6} md={3}>
+          <SummaryCard
+            icon={AccountBalanceIcon}
+            title="Total Revenue"
+            value={formatCurrency(summaryStats.totalRevenue)}
+            iconColor="#9C27B0"
+            gradientColor="secondary"
+          />
         </Grid>
 
-        <Grid item xs={12} md={4}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(244, 67, 54, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <ExpenseIcon sx={{ color: 'error.main', mr: 1 }} />
-              <Typography color="textSecondary">Total Expenses</Typography>
-            </Box>
-            <Typography variant="h4" sx={{ color: 'error.main' }}>
-              {formatCurrency(summary.profitLoss.expenses)}
-            </Typography>
-          </Paper>
+        <Grid item xs={12} sm={6} md={3}>
+          <SummaryCard
+            icon={PaymentsIcon}
+            title="Total Expenses"
+            value={formatCurrency(summaryStats.totalExpenses)}
+            iconColor="#D32F2F"
+            gradientColor="error"
+          />
         </Grid>
 
-        <Grid item xs={12} md={4}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(25, 118, 210, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <BalanceIcon sx={{ color: 'primary.main', mr: 1 }} />
-              <Typography color="textSecondary">Net Income</Typography>
-            </Box>
-            <Typography 
-              variant="h4" 
-              sx={{ 
-                color: summary.profitLoss.netProfit >= 0 ? 'success.main' : 'error.main'
-              }}
-            >
-              {formatCurrency(summary.profitLoss.netProfit)}
-            </Typography>
-          </Paper>
+        <Grid item xs={12} sm={6} md={3}>
+          <SummaryCard
+            icon={TrendingUp}
+            title="Net Income"
+            value={formatCurrency(summaryStats.netIncome)}
+            iconColor="#ED6C02"
+            gradientColor="warning"
+          />
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <SummaryCard
+            icon={AccountBalanceWallet}
+            title="Cash Balance"
+            value={formatCurrency(summaryStats.cashBalance)}
+            iconColor="#0288D1"
+            gradientColor="info"
+          />
         </Grid>
       </Grid>
 
       {/* Main Content */}
       <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
-        <Tabs 
-          value={tabValue} 
+        <Tabs
+          value={tabValue}
           onChange={handleTabChange}
           sx={{ borderBottom: 1, borderColor: 'divider', px: 2, pt: 2 }}
         >
@@ -937,8 +921,8 @@ const Accounting = () => {
                     <TableCell>{transaction.type}</TableCell>
                     <TableCell>{transaction.description}</TableCell>
                     <TableCell>{transaction.entries?.[0]?.account_name || 'N/A'}</TableCell>
-                    <TableCell 
-                      sx={{ 
+                    <TableCell
+                      sx={{
                         color: transaction.type === 'revenue' ? 'success.main' : 'error.main'
                       }}
                     >
@@ -952,14 +936,14 @@ const Accounting = () => {
                       />
                     </TableCell>
                     <TableCell align="right">
-                      <IconButton 
+                      <IconButton
                         size="small"
                         onClick={() => handleOpenTransactionDialog(transaction)}
                         sx={{ color: 'primary.main' }}
                       >
                         <EditIcon />
                       </IconButton>
-                      <IconButton 
+                      <IconButton
                         size="small"
                         onClick={() => handleDeleteTransaction(transaction.id)}
                         sx={{ color: 'error.main', ml: 1 }}
@@ -1002,8 +986,8 @@ const Accounting = () => {
                       />
                     </TableCell>
                     <TableCell>{account.category}</TableCell>
-                    <TableCell 
-                      sx={{ 
+                    <TableCell
+                      sx={{
                         color: account.balance >= 0 ? 'success.main' : 'error.main'
                       }}
                     >
@@ -1017,14 +1001,14 @@ const Accounting = () => {
                       />
                     </TableCell>
                     <TableCell align="right">
-                      <IconButton 
+                      <IconButton
                         size="small"
                         onClick={() => handleOpenAccountDialog(account)}
                         sx={{ color: 'primary.main' }}
                       >
                         <EditIcon />
                       </IconButton>
-                      <IconButton 
+                      <IconButton
                         size="small"
                         onClick={() => handleDeleteAccount(account.id)}
                         sx={{ color: 'error.main', ml: 1 }}
@@ -1085,7 +1069,7 @@ const Accounting = () => {
                 </LocalizationProvider>
               </Grid>
             </Grid>
-            
+
             <TableContainer sx={{ mt: 3 }}>
               <Table>
                 <TableHead>
@@ -1308,8 +1292,8 @@ const Accounting = () => {
         </TabPanel>
 
         {/* Transaction Dialog */}
-        <Dialog 
-          open={openTransactionDialog} 
+        <Dialog
+          open={openTransactionDialog}
           onClose={handleCloseTransactionDialog}
           maxWidth="md"
           fullWidth
@@ -1442,8 +1426,8 @@ const Accounting = () => {
         </Dialog>
 
         {/* Account Dialog */}
-        <Dialog 
-          open={openAccountDialog} 
+        <Dialog
+          open={openAccountDialog}
           onClose={handleCloseAccountDialog}
           maxWidth="md"
           fullWidth
@@ -1544,4 +1528,4 @@ const Accounting = () => {
   );
 };
 
-export default Accounting; 
+export default Accounting;

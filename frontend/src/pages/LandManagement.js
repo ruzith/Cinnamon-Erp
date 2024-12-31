@@ -25,18 +25,17 @@ import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  Terrain,
-  Forest,
-  Agriculture,
-  LocationOn,
-  Home,
-  Assignment,
+  Terrain as TerrainIcon,
+  Home as OwnedIcon,
+  Assignment as RentedIcon,
+  Agriculture as AreaIcon,
 } from '@mui/icons-material';
 import { getLands, deleteLand } from '../features/lands/landSlice';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import LandForm from '../components/lands/LandForm';
+import SummaryCard from '../components/common/SummaryCard';
 
 const LandManagement = () => {
   const dispatch = useDispatch();
@@ -115,79 +114,43 @@ const LandManagement = () => {
       {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(25, 118, 210, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <Terrain sx={{ color: 'primary.main', mr: 1 }} />
-              <Typography color="textSecondary">Total Lands</Typography>
-            </Box>
-            <Typography variant="h4">{summaryStats.totalLands}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={TerrainIcon}
+            title="Total Lands"
+            value={summaryStats.totalLands}
+            iconColor="#9C27B0"
+            gradientColor="secondary"
+          />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(46, 125, 50, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <Home sx={{ color: 'success.main', mr: 1 }} />
-              <Typography color="textSecondary">Owned Lands</Typography>
-            </Box>
-            <Typography variant="h4">{summaryStats.ownedLands}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={OwnedIcon}
+            title="Owned Lands"
+            value={summaryStats.ownedLands}
+            iconColor="#D32F2F"
+            gradientColor="error"
+          />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(251, 140, 0, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <Assignment sx={{ color: 'warning.main', mr: 1 }} />
-              <Typography color="textSecondary">Rented Lands</Typography>
-            </Box>
-            <Typography variant="h4">{summaryStats.rentedLands}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={RentedIcon}
+            title="Rented Lands"
+            value={summaryStats.rentedLands}
+            iconColor="#ED6C02"
+            gradientColor="warning"
+          />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(25, 118, 210, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <LocationOn sx={{ color: 'info.main', mr: 1 }} />
-              <Typography color="textSecondary">Total Area</Typography>
-            </Box>
-            <Typography variant="h4">{summaryStats.totalArea.toFixed(2)} ha</Typography>
-          </Paper>
+          <SummaryCard
+            icon={AreaIcon}
+            title="Total Area"
+            value={`${summaryStats.totalArea.toFixed(2)} ha`}
+            iconColor="#0288D1"
+            gradientColor="info"
+          />
         </Grid>
       </Grid>
 
@@ -240,15 +203,15 @@ const LandManagement = () => {
                   />
                 </TableCell>
                 <TableCell align="right">
-                  <IconButton 
-                    size="small" 
+                  <IconButton
+                    size="small"
                     onClick={() => handleEdit(land)}
                     sx={{ color: 'primary.main' }}
                   >
                     <EditIcon />
                   </IconButton>
-                  <IconButton 
-                    size="small" 
+                  <IconButton
+                    size="small"
                     onClick={() => handleDelete(land.id)}
                     sx={{ color: 'error.main', ml: 1 }}
                   >
@@ -265,9 +228,9 @@ const LandManagement = () => {
       <Dialog open={openDialog} onClose={() => setOpenDialog(false)}>
         <DialogTitle>{selectedLand ? 'Edit Land' : 'New Land'}</DialogTitle>
         <DialogContent>
-          <LandForm 
-            land={selectedLand} 
-            onClose={() => setOpenDialog(false)} 
+          <LandForm
+            land={selectedLand}
+            onClose={() => setOpenDialog(false)}
           />
         </DialogContent>
       </Dialog>
@@ -275,4 +238,4 @@ const LandManagement = () => {
   );
 };
 
-export default LandManagement; 
+export default LandManagement;

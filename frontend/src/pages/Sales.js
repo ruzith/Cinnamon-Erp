@@ -36,9 +36,14 @@ import {
   People as CustomersIcon,
   TrendingUp as RevenueIcon,
   Print as PrintIcon,
+  ShoppingCart,
+  AttachMoney,
+  People,
+  PendingActions as PendingIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 import { useCurrencyFormatter } from '../utils/currencyUtils';
+import SummaryCard from '../components/common/SummaryCard';
 
 const TabPanel = (props) => {
   const { children, value, index, ...other } = props;
@@ -104,7 +109,7 @@ const Sales = () => {
     try {
       const response = await axios.get('/api/sales');
       setSales(response.data);
-      
+
       // Calculate stats from the sales data
       const stats = calculateStats(response.data);
       setStats({
@@ -250,7 +255,7 @@ const Sales = () => {
 
   const handleItemSelect = (event, value) => {
     setSelectedItems(value);
-    
+
     // Map the selected items with their selling prices from inventory
     const items = value.map(item => ({
       id: item.id,
@@ -276,7 +281,7 @@ const Sales = () => {
 
   const handleSaleSubmit = async (e) => {
     e.preventDefault();
-    
+
     // Validate the form data
     if (!saleFormData.items.length) {
       alert('Please select at least one product');
@@ -446,79 +451,43 @@ const Sales = () => {
       {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(25, 118, 210, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <SalesIcon sx={{ color: 'primary.main', mr: 1 }} />
-              <Typography color="textSecondary">Total Sales</Typography>
-            </Box>
-            <Typography variant="h4">{summaryStats.totalSales}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={ShoppingCart}
+            title="Total Sales"
+            value={sales.length}
+            iconColor="#9C27B0"
+            gradientColor="secondary"
+          />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(46, 125, 50, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <RevenueIcon sx={{ color: 'success.main', mr: 1 }} />
-              <Typography color="textSecondary">Total Revenue</Typography>
-            </Box>
-            <Typography variant="h4">{formatCurrency(summaryStats.totalRevenue)}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={AttachMoney}
+            title="Total Revenue"
+            value={formatCurrency(stats.totalRevenue)}
+            iconColor="#2E7D32"
+            gradientColor="success"
+          />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(251, 140, 0, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <PaymentIcon sx={{ color: 'warning.main', mr: 1 }} />
-              <Typography color="textSecondary">Pending Orders</Typography>
-            </Box>
-            <Typography variant="h4">{summaryStats.pendingOrders}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={People}
+            title="Total Customers"
+            value={customers.length}
+            iconColor="#D32F2F"
+            gradientColor="error"
+          />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(156, 39, 176, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <CustomersIcon sx={{ color: 'secondary.main', mr: 1 }} />
-              <Typography color="textSecondary">Active Customers</Typography>
-            </Box>
-            <Typography variant="h4">{summaryStats.activeCustomers}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={PendingIcon}
+            title="Pending Orders"
+            value={stats.pendingOrders}
+            iconColor="#0288D1"
+            gradientColor="info"
+          />
         </Grid>
       </Grid>
 
@@ -600,8 +569,8 @@ const Sales = () => {
       </Paper>
 
       {/* Add this dialog component before the final closing Box tag */}
-      <Dialog 
-        open={openDialog} 
+      <Dialog
+        open={openDialog}
         onClose={handleCloseDialog}
         maxWidth="md"
         fullWidth
@@ -680,12 +649,12 @@ const Sales = () => {
                               onChange={(e) => {
                                 const newItems = [...saleFormData.items];
                                 newItems[index].quantity = parseFloat(e.target.value) || 0;
-                                newItems[index].sub_total = 
+                                newItems[index].sub_total =
                                   newItems[index].quantity * newItems[index].unit_price;
-                                
-                                const newTotal = newItems.reduce((sum, item) => 
+
+                                const newTotal = newItems.reduce((sum, item) =>
                                   sum + (item.quantity * item.unit_price), 0);
-                                
+
                                 setSaleFormData(prev => ({
                                   ...prev,
                                   items: newItems,
@@ -704,12 +673,12 @@ const Sales = () => {
                               onChange={(e) => {
                                 const newItems = [...saleFormData.items];
                                 newItems[index].unit_price = parseFloat(e.target.value) || 0;
-                                newItems[index].sub_total = 
+                                newItems[index].sub_total =
                                   newItems[index].quantity * newItems[index].unit_price;
-                                
-                                const newTotal = newItems.reduce((sum, item) => 
+
+                                const newTotal = newItems.reduce((sum, item) =>
                                   sum + (item.quantity * item.unit_price), 0);
-                                
+
                                 setSaleFormData(prev => ({
                                   ...prev,
                                   items: newItems,
@@ -824,8 +793,8 @@ const Sales = () => {
             <Grid container spacing={3} sx={{ mt: 1 }}>
               {/* Invoice To Section */}
               <Grid item xs={12}>
-                <Typography variant="h6" sx={{ 
-                  fontWeight: 600, 
+                <Typography variant="h6" sx={{
+                  fontWeight: 600,
                   mb: 2,
                   pb: 1,
                   borderBottom: '1px solid',
@@ -851,8 +820,8 @@ const Sales = () => {
 
               {/* Invoice Details Section */}
               <Grid item xs={12}>
-                <Typography variant="h6" sx={{ 
-                  fontWeight: 600, 
+                <Typography variant="h6" sx={{
+                  fontWeight: 600,
                   mb: 2,
                   pb: 1,
                   borderBottom: '1px solid',
@@ -944,4 +913,4 @@ const Sales = () => {
   );
 };
 
-export default Sales; 
+export default Sales;

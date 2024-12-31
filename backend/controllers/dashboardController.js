@@ -44,7 +44,7 @@ const updateMonthlyTarget = async (req, res) => {
   try {
     const { period } = req.params;
     const { target_amount } = req.body;
-    
+
     if (!target_amount || isNaN(target_amount)) {
       return res.status(400).json({ message: 'Invalid target amount' });
     }

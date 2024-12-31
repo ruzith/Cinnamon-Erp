@@ -31,11 +31,12 @@ import {
   Delete as DeleteIcon,
   Inventory as InventoryIcon,
   Warning as AlertIcon,
-  LocalShipping as ShippingIcon,
-  TrendingUp as TrendingIcon,
+  Factory as ManufacturingIcon,
+  AttachMoney as ValueIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 import { useCurrencyFormatter } from '../utils/currencyUtils';
+import SummaryCard from '../components/common/SummaryCard';
 
 const TabPanel = (props) => {
   const { children, value, index, ...other } = props;
@@ -307,7 +308,7 @@ const Inventory = () => {
         fetchInventory();
       } catch (error) {
         console.error('Error deleting inventory item:', error);
-        if (error.response?.status === 400 && 
+        if (error.response?.status === 400 &&
             error.response?.data?.message?.includes('Cannot delete item with existing transactions')) {
           if (window.confirm(error.response.data.message)) {
             await handleDeactivate(itemId, false);
@@ -369,88 +370,50 @@ const Inventory = () => {
       {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(25, 118, 210, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <InventoryIcon sx={{ color: 'primary.main', mr: 1 }} />
-              <Typography color="textSecondary">Total Items</Typography>
-            </Box>
-            <Typography variant="h4">{summaryStats.totalItems}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={InventoryIcon}
+            title="Active Items"
+            value={inventory.filter(item => item.status === 'active').length}
+            iconColor="#9C27B0"
+            gradientColor="secondary"
+          />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(211, 47, 47, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <AlertIcon sx={{ color: 'error.main', mr: 1 }} />
-              <Typography color="textSecondary">Low Stock Items</Typography>
-            </Box>
-            <Typography variant="h4">{summaryStats.lowStock}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={AlertIcon}
+            title="Low Stock Items"
+            value={inventory.filter(item => Number(item.quantity) <= Number(item.min_stock_level)).length}
+            iconColor="#D32F2F"
+            gradientColor="error"
+          />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(46, 125, 50, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <TrendingIcon sx={{ color: 'success.main', mr: 1 }} />
-              <Typography color="textSecondary">Total Value</Typography>
-            </Box>
-            <Typography variant="h4">
-              {formatCurrency(summaryStats.totalValue)}
-            </Typography>
-          </Paper>
+          <SummaryCard
+            icon={ManufacturingIcon}
+            title="Manufacturing Orders"
+            value={new Set(transactions.filter(t => t.reference.startsWith('MO-')).map(t => t.reference)).size}
+            iconColor="#ED6C02"
+            gradientColor="warning"
+          />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(251, 140, 0, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <ShippingIcon sx={{ color: 'warning.main', mr: 1 }} />
-              <Typography color="textSecondary">Active Transactions</Typography>
-            </Box>
-            <Typography variant="h4">{summaryStats.activeTransactions}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={ValueIcon}
+            title="Total Inventory Value"
+            value={formatCurrency(inventory.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.purchase_price)), 0))}
+            iconColor="#0288D1"
+            gradientColor="info"
+          />
         </Grid>
       </Grid>
 
       {/* Tabs and Table */}
       <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
-        <Tabs 
-          value={tabValue} 
+        <Tabs
+          value={tabValue}
           onChange={handleTabChange}
           sx={{ borderBottom: 1, borderColor: 'divider', px: 2, pt: 2 }}
         >
@@ -493,8 +456,8 @@ const Inventory = () => {
                     </TableCell>
                     <TableCell align="right">{formatCurrency(item.purchase_price)}</TableCell>
                     <TableCell align="right">
-                      {item.product_type === 'finished_good' 
-                        ? formatCurrency(item.selling_price) 
+                      {item.product_type === 'finished_good'
+                        ? formatCurrency(item.selling_price)
                         : 'N/A'}
                     </TableCell>
                     <TableCell>{item.location}</TableCell>
@@ -506,15 +469,15 @@ const Inventory = () => {
                       />
                     </TableCell>
                     <TableCell align="right">
-                      <IconButton 
-                        size="small" 
+                      <IconButton
+                        size="small"
                         onClick={() => handleOpenDialog(item)}
                         sx={{ color: 'primary.main' }}
                       >
                         <EditIcon />
                       </IconButton>
-                      <IconButton 
-                        size="small" 
+                      <IconButton
+                        size="small"
                         onClick={() => handleDelete(item.id)}
                         sx={{ color: 'error.main', ml: 1 }}
                       >
@@ -558,8 +521,8 @@ const Inventory = () => {
                     <TableCell>{transaction.reference}</TableCell>
                     <TableCell>{transaction.notes}</TableCell>
                     <TableCell align="right">
-                      <IconButton 
-                        size="small" 
+                      <IconButton
+                        size="small"
                         onClick={() => handleOpenTransactionDialog(transaction)}
                         sx={{ color: 'primary.main' }}
                       >
@@ -575,8 +538,8 @@ const Inventory = () => {
       </Paper>
 
       {/* Keep your existing dialog with the current form fields */}
-      <Dialog 
-        open={openDialog} 
+      <Dialog
+        open={openDialog}
         onClose={handleCloseDialog}
         maxWidth="md"
         fullWidth
@@ -713,8 +676,8 @@ const Inventory = () => {
         </DialogActions>
       </Dialog>
 
-      <Dialog 
-        open={openTransactionDialog} 
+      <Dialog
+        open={openTransactionDialog}
         onClose={handleCloseTransactionDialog}
         maxWidth="md"
         fullWidth
@@ -797,4 +760,4 @@ const Inventory = () => {
   );
 };
 
-export default Inventory; 
+export default Inventory;

@@ -27,13 +27,14 @@ import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  Forest as ForestIcon,
-  LocalFlorist as TreeIcon,
   Engineering as WorkerIcon,
-  Speed as VolumeIcon,
+  Forest as ForestIcon,
+  Assignment as AssignmentIcon,
+  Groups as ContractorsIcon,
   Payment as PaymentIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
+import SummaryCard from '../components/common/SummaryCard';
 
 const CuttingManagement = () => {
   const [contractors, setContractors] = useState([]);
@@ -161,7 +162,7 @@ const CuttingManagement = () => {
         const shouldReassign = window.confirm(
           `This contractor has ${error.response.data.assignmentCount} active assignments. Would you like to reassign them to another contractor?`
         );
-        
+
         if (shouldReassign) {
           setOpenReassignDialog(true);
           setContractorToDelete(contractorId);
@@ -181,7 +182,7 @@ const CuttingManagement = () => {
         alert('Please select a new contractor');
         return;
       }
-      
+
       await axios.delete(`/api/cutting/contractors/${contractorToDelete}?forceDelete=true&newContractorId=${newContractorId}`);
       setOpenReassignDialog(false);
       setContractorToDelete(null);
@@ -198,26 +199,26 @@ const CuttingManagement = () => {
     try {
       const startDate = new Date(assignmentFormData.start_date);
       const endDate = new Date(assignmentFormData.end_date);
-      
+
       if (endDate <= startDate) {
         alert('End date must be after start date');
         return;
       }
 
-      if (!assignmentFormData.contractor_id || !assignmentFormData.land_id || 
+      if (!assignmentFormData.contractor_id || !assignmentFormData.land_id ||
           !assignmentFormData.start_date || !assignmentFormData.end_date) {
         alert('Please fill in all required fields');
         return;
       }
 
       await axios.post('/api/cutting/assignments', assignmentFormData);
-      
+
       // Refresh both assignments and contractors data
       await Promise.all([
         fetchAssignments(),
         fetchContractors()
       ]);
-      
+
       setOpenAssignmentDialog(false);
       setAssignmentFormData({
         contractor_id: '',
@@ -235,9 +236,9 @@ const CuttingManagement = () => {
   const handleOpenPaymentDialog = async (contractor) => {
     try {
       await fetchAssignments();
-      
+
       const contractorAssignments = assignments.filter(
-        a => a.contractor_id === contractor.id && 
+        a => a.contractor_id === contractor.id &&
         (a.status === 'active' || a.status === 'in_progress')
       );
 
@@ -265,7 +266,7 @@ const CuttingManagement = () => {
       if (!paymentFormData.assignment_id) {
         throw new Error('Please select an assignment for this payment');
       }
-      
+
       await axios.post('/api/cutting/payments', paymentFormData);
       fetchContractors();
       setOpenPaymentDialog(false);
@@ -315,7 +316,7 @@ const CuttingManagement = () => {
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Button
             variant="outlined"
-            startIcon={<TreeIcon />}
+            startIcon={<ForestIcon />}
             onClick={() => setOpenAssignmentDialog(true)}
           >
             Assign Land
@@ -332,79 +333,43 @@ const CuttingManagement = () => {
 
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(25, 118, 210, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <ForestIcon sx={{ color: 'primary.main', mr: 1 }} />
-              <Typography color="textSecondary">Total Contractors</Typography>
-            </Box>
-            <Typography variant="h4">{summaryStats.total_contractors}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={WorkerIcon}
+            title="Active Contractors"
+            value={summaryStats.active_contractors}
+            iconColor="#9C27B0"
+            gradientColor="secondary"
+          />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(46, 125, 50, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <WorkerIcon sx={{ color: 'success.main', mr: 1 }} />
-              <Typography color="textSecondary">Active Contractors</Typography>
-            </Box>
-            <Typography variant="h4">{summaryStats.active_contractors}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={ForestIcon}
+            title="Active Assignments"
+            value={summaryStats.active_assignments}
+            iconColor="#D32F2F"
+            gradientColor="error"
+          />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(251, 140, 0, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <TreeIcon sx={{ color: 'warning.main', mr: 1 }} />
-              <Typography color="textSecondary">Total Assignments</Typography>
-            </Box>
-            <Typography variant="h4">{summaryStats.total_assignments}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={AssignmentIcon}
+            title="Total Assignments"
+            value={summaryStats.total_assignments}
+            iconColor="#ED6C02"
+            gradientColor="warning"
+          />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(2, 136, 209, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <VolumeIcon sx={{ color: 'info.main', mr: 1 }} />
-              <Typography color="textSecondary">Active Assignments</Typography>
-            </Box>
-            <Typography variant="h4">{summaryStats.active_assignments}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={ContractorsIcon}
+            title="Total Contractors"
+            value={summaryStats.total_contractors}
+            iconColor="#0288D1"
+            gradientColor="info"
+          />
         </Grid>
       </Grid>
 
@@ -438,8 +403,8 @@ const CuttingManagement = () => {
                     />
                   </TableCell>
                   <TableCell align="right">
-                    <IconButton 
-                      size="small" 
+                    <IconButton
+                      size="small"
                       onClick={() => {
                         setAssignmentFormData(prev => ({
                           ...prev,
@@ -449,24 +414,24 @@ const CuttingManagement = () => {
                       }}
                       sx={{ color: 'success.main' }}
                     >
-                      <TreeIcon />
+                      <ForestIcon />
                     </IconButton>
-                    <IconButton 
-                      size="small" 
+                    <IconButton
+                      size="small"
                       onClick={() => handleOpenDialog(contractor)}
                       sx={{ color: 'primary.main', ml: 1 }}
                     >
                       <EditIcon />
                     </IconButton>
-                    <IconButton 
-                      size="small" 
+                    <IconButton
+                      size="small"
                       onClick={() => handleOpenPaymentDialog(contractor)}
                       sx={{ color: 'info.main', ml: 1 }}
                     >
                       <PaymentIcon />
                     </IconButton>
-                    <IconButton 
-                      size="small" 
+                    <IconButton
+                      size="small"
                       onClick={() => handleDelete(contractor.id)}
                       sx={{ color: 'error.main', ml: 1 }}
                     >
@@ -641,8 +606,8 @@ const CuttingManagement = () => {
                   }))}
                 >
                   {assignments
-                    .filter(a => 
-                      a.contractor_id === paymentFormData.contractor_id && 
+                    .filter(a =>
+                      a.contractor_id === paymentFormData.contractor_id &&
                       (a.status === 'active' || a.status === 'in_progress')
                     )
                     .map(assignment => (
@@ -715,8 +680,8 @@ const CuttingManagement = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpenPaymentDialog(false)}>Cancel</Button>
-          <Button 
-            variant="contained" 
+          <Button
+            variant="contained"
             onClick={handlePaymentSubmit}
             disabled={!paymentFormData.assignment_id}
           >
@@ -766,4 +731,4 @@ const CuttingManagement = () => {
   );
 };
 
-export default CuttingManagement; 
+export default CuttingManagement;

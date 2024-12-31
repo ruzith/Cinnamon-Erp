@@ -20,7 +20,7 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  FormControl as MuiFormControl,
+  FormControl,
   InputLabel,
   Select,
   MenuItem,
@@ -29,15 +29,17 @@ import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  Build as BuildIcon,
-  Timeline as TimelineIcon,
   Inventory as AssetIcon,
   Warning as AlertIcon,
-  Engineering as MaintenanceIcon,
+  Build as BuildIcon,
+  Timeline as TimelineIcon,
   AttachMoney as ValueIcon,
+  Construction as ConstructionIcon,
+  AttachMoney as AttachMoneyIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 import { useCurrencyFormatter } from '../utils/currencyUtils';
+import SummaryCard from '../components/common/SummaryCard';
 
 const TabPanel = (props) => {
   const { children, value, index, ...other } = props;
@@ -278,14 +280,12 @@ const AssetManagement = () => {
 
   // Calculate summary statistics
   const summaryStats = {
-    totalAssets: assets.length,
-    maintenanceNeeded: assets.filter(asset => asset.status === 'maintenance').length,
-    totalValue: assets.reduce((sum, asset) => sum + Number(asset.current_value), 0),
-    activeMaintenanceJobs: maintenanceRecords.filter(record => {
-      const nextDate = new Date(record.next_maintenance_date);
-      const today = new Date();
-      return nextDate >= today;
-    }).length
+    activeAssets: assets.filter(asset => asset.status === 'active').length,
+    totalValue: assets.reduce((sum, asset) => sum + Number(asset.current_value || 0), 0),
+    pendingMaintenance: maintenanceRecords.filter(record => record.status === 'pending').length,
+    avgMaintenanceCost: maintenanceRecords.length > 0
+      ? maintenanceRecords.reduce((sum, record) => sum + Number(record.cost || 0), 0) / maintenanceRecords.length
+      : 0
   };
 
   const formatDate = (dateString) => {
@@ -294,8 +294,8 @@ const AssetManagement = () => {
 
   // Add maintenance dialog
   const MaintenanceDialog = () => (
-    <Dialog 
-      open={openMaintenanceDialog} 
+    <Dialog
+      open={openMaintenanceDialog}
       onClose={handleCloseMaintenanceDialog}
       maxWidth="md"
       fullWidth
@@ -304,7 +304,7 @@ const AssetManagement = () => {
       <DialogContent>
         <Grid container spacing={2} sx={{ mt: 1 }}>
           <Grid item xs={12} sm={6}>
-            <MuiFormControl fullWidth>
+            <FormControl fullWidth>
               <InputLabel>Type</InputLabel>
               <Select
                 name="type"
@@ -316,7 +316,7 @@ const AssetManagement = () => {
                 <MenuItem value="repair">Repair</MenuItem>
                 <MenuItem value="upgrade">Upgrade</MenuItem>
               </Select>
-            </MuiFormControl>
+            </FormControl>
           </Grid>
           <Grid item xs={12} sm={6}>
             <TextField
@@ -394,8 +394,8 @@ const AssetManagement = () => {
 
   // Add history dialog
   const HistoryDialog = () => (
-    <Dialog 
-      open={openHistoryDialog} 
+    <Dialog
+      open={openHistoryDialog}
       onClose={handleCloseHistoryDialog}
       maxWidth="md"
       fullWidth
@@ -420,9 +420,9 @@ const AssetManagement = () => {
                   <TableRow key={record.id}>
                     <TableCell>{formatDate(record.maintenance_date)}</TableCell>
                     <TableCell>
-                      <Chip 
+                      <Chip
                         label={record.type}
-                        color={record.type === 'repair' ? 'error' : 
+                        color={record.type === 'repair' ? 'error' :
                                record.type === 'upgrade' ? 'info' : 'default'}
                         size="small"
                         sx={{ textTransform: 'capitalize' }}
@@ -475,88 +475,50 @@ const AssetManagement = () => {
       {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(25, 118, 210, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <AssetIcon sx={{ color: 'primary.main', mr: 1 }} />
-              <Typography color="textSecondary">Total Assets</Typography>
-            </Box>
-            <Typography variant="h4">{summaryStats.totalAssets}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={BuildIcon}
+            title="Active Assets"
+            value={summaryStats.activeAssets}
+            iconColor="#9C27B0"
+            gradientColor="secondary"
+          />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(211, 47, 47, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <AlertIcon sx={{ color: 'error.main', mr: 1 }} />
-              <Typography color="textSecondary">Needs Maintenance</Typography>
-            </Box>
-            <Typography variant="h4">{summaryStats.maintenanceNeeded}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={AttachMoneyIcon}
+            title="Total Asset Value"
+            value={formatCurrency(summaryStats.totalValue)}
+            iconColor="#D32F2F"
+            gradientColor="error"
+          />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(46, 125, 50, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <ValueIcon sx={{ color: 'success.main', mr: 1 }} />
-              <Typography color="textSecondary">Total Value</Typography>
-            </Box>
-            <Typography variant="h4">
-              {formatCurrency(summaryStats.totalValue)}
-            </Typography>
-          </Paper>
+          <SummaryCard
+            icon={TimelineIcon}
+            title="Pending Maintenance"
+            value={summaryStats.pendingMaintenance}
+            iconColor="#ED6C02"
+            gradientColor="warning"
+          />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(156, 39, 176, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <MaintenanceIcon sx={{ color: 'secondary.main', mr: 1 }} />
-              <Typography color="textSecondary">Active Maintenance</Typography>
-            </Box>
-            <Typography variant="h4">{summaryStats.activeMaintenanceJobs}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={ConstructionIcon}
+            title="Avg Maintenance Cost"
+            value={formatCurrency(summaryStats.avgMaintenanceCost)}
+            iconColor="#0288D1"
+            gradientColor="info"
+          />
         </Grid>
       </Grid>
 
       {/* Tabs and Tables */}
       <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
-        <Tabs 
-          value={tabValue} 
+        <Tabs
+          value={tabValue}
           onChange={handleTabChange}
           sx={{ borderBottom: 1, borderColor: 'divider', px: 2, pt: 2 }}
         >
@@ -659,7 +621,7 @@ const AssetManagement = () => {
                     <TableCell>
                       <Chip
                         label={record.type}
-                        color={record.type === 'repair' ? 'error' : 
+                        color={record.type === 'repair' ? 'error' :
                                record.type === 'upgrade' ? 'info' : 'default'}
                         size="small"
                         sx={{ textTransform: 'capitalize' }}
@@ -685,8 +647,8 @@ const AssetManagement = () => {
       </Paper>
 
       {/* Keep your existing dialogs with current form fields */}
-      <Dialog 
-        open={openDialog} 
+      <Dialog
+        open={openDialog}
         onClose={handleCloseDialog}
         maxWidth="md"
         fullWidth
@@ -717,7 +679,7 @@ const AssetManagement = () => {
               />
             </Grid>
             <Grid item xs={12} sm={6}>
-              <MuiFormControl fullWidth>
+              <FormControl fullWidth>
                 <InputLabel>Category</InputLabel>
                 <Select
                   name="category"
@@ -731,10 +693,10 @@ const AssetManagement = () => {
                     </MenuItem>
                   ))}
                 </Select>
-              </MuiFormControl>
+              </FormControl>
             </Grid>
             <Grid item xs={12} sm={6}>
-              <MuiFormControl fullWidth>
+              <FormControl fullWidth>
                 <InputLabel>Type</InputLabel>
                 <Select
                   name="type"
@@ -746,7 +708,7 @@ const AssetManagement = () => {
                   <MenuItem value="vehicle">Vehicle</MenuItem>
                   <MenuItem value="tool">Tool</MenuItem>
                 </Select>
-              </MuiFormControl>
+              </FormControl>
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
@@ -780,7 +742,7 @@ const AssetManagement = () => {
               />
             </Grid>
             <Grid item xs={12} sm={6}>
-              <MuiFormControl fullWidth>
+              <FormControl fullWidth>
                 <InputLabel>Status</InputLabel>
                 <Select
                   name="status"
@@ -793,7 +755,7 @@ const AssetManagement = () => {
                   <MenuItem value="retired">Retired</MenuItem>
                   <MenuItem value="disposed">Disposed</MenuItem>
                 </Select>
-              </MuiFormControl>
+              </FormControl>
             </Grid>
           </Grid>
         </DialogContent>
@@ -812,4 +774,4 @@ const AssetManagement = () => {
   );
 };
 
-export default AssetManagement; 
+export default AssetManagement;

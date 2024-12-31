@@ -36,11 +36,14 @@ import {
   Grade as QualityIcon,
   Payment as PaymentIcon,
   ShoppingCart as ShoppingCartIcon,
+  Speed as SpeedIcon,
+  Grade as GradeIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 import PurchaseInvoiceForm from '../components/PurchaseInvoiceForm';
 import { useCurrencyFormatter } from '../utils/currencyUtils';
 import { formatDate, getCurrentDateTime } from '../utils/dateUtils';
+import SummaryCard from '../components/common/SummaryCard';
 
 const STATUS_OPTIONS = ['planned', 'in_progress', 'completed', 'cancelled'];
 
@@ -171,7 +174,7 @@ const Manufacturing = () => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'assignedWorkers' ? 
+      [name]: name === 'assignedWorkers' ?
         typeof value === 'string' ? value.split(',') : value :
         value
     }));
@@ -235,7 +238,7 @@ const Manufacturing = () => {
           const shouldReassign = window.confirm(
             `This contractor has ${error.response.data.assignmentCount || 0} active assignments and ${error.response.data.pendingPayments || 0} pending payments. Would you like to reassign them to another contractor?`
           );
-          
+
           if (shouldReassign) {
             setOpenReassignDialog(true);
             setContractorToDelete(contractorId);
@@ -251,7 +254,7 @@ const Manufacturing = () => {
   const calculateAverageQuality = (orders) => {
     const completedOrders = orders.filter(order => order.status === 'completed');
     if (!completedOrders.length) return 0;
-    
+
     const qualityMap = { 'A': 4, 'B': 3, 'C': 2, 'D': 1 };
     const sum = completedOrders.reduce((acc, order) => acc + (qualityMap[order.qualityGrade] || 0), 0);
     return (sum / completedOrders.length).toFixed(1);
@@ -349,13 +352,13 @@ const Manufacturing = () => {
         // Create new assignment
         response = await axios.post('/api/manufacturing/assignments', assignmentFormData);
       }
-      
+
       // Refresh both assignments and contractors data
       await Promise.all([
         fetchAssignments(),
         fetchContractors()
       ]);
-      
+
       setOpenAssignmentDialog(false);
       // Reset form
       setAssignmentFormData({
@@ -377,17 +380,17 @@ const Manufacturing = () => {
     e.preventDefault();
     try {
       const response = await axios.post('/api/manufacturing/advance-payments', advancePaymentData);
-      
+
       // Create a new window and write the receipt HTML
       const receiptWindow = window.open('', '_blank');
       receiptWindow.document.write(response.data.receiptHtml);
       receiptWindow.document.close();
-      
+
       // Add print automatically option
       receiptWindow.onload = function() {
         receiptWindow.print();
       };
-      
+
       fetchContractors();
       setOpenPaymentDialog(false);
       setAdvancePaymentData({
@@ -435,36 +438,36 @@ const Manufacturing = () => {
 
   const renderContractorActions = (contractor) => (
     <>
-      <IconButton 
-        size="small" 
+      <IconButton
+        size="small"
         onClick={() => handleOpenDialog(contractor)}
         sx={{ color: 'primary.main' }}
       >
         <EditIcon />
       </IconButton>
-      <IconButton 
-        size="small" 
+      <IconButton
+        size="small"
         onClick={() => handleOpenAssignmentDialog(null, contractor)}
         sx={{ color: 'success.main', ml: 1 }}
       >
         <AddIcon />
       </IconButton>
-      <IconButton 
-        size="small" 
+      <IconButton
+        size="small"
         onClick={() => handleOpenPaymentDialog(contractor)}
         sx={{ color: 'info.main', ml: 1 }}
       >
         <PaymentIcon />
       </IconButton>
-      <IconButton 
-        size="small" 
+      <IconButton
+        size="small"
         onClick={() => handleDelete(contractor.id)}
         sx={{ color: 'error.main', ml: 1 }}
       >
         <DeleteIcon />
       </IconButton>
-      <IconButton 
-        size="small" 
+      <IconButton
+        size="small"
         onClick={() => {
           setSelectedContractor(contractor);
           setOpenPurchaseDialog(true);
@@ -482,7 +485,7 @@ const Manufacturing = () => {
         alert('Please select a new contractor');
         return;
       }
-      
+
       await axios.delete(`/api/manufacturing/contractors/${contractorToDelete}?forceDelete=true&newContractorId=${newContractorId}`);
       setOpenReassignDialog(false);
       setContractorToDelete(null);
@@ -519,90 +522,69 @@ const Manufacturing = () => {
         </Box>
       </Box>
 
-      {/* Summary Stats - Updated background gradients */}
+      {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(25, 118, 210, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <FactoryIcon sx={{ color: 'primary.main', mr: 1 }} />
-              <Typography color="textSecondary">Total Contractors</Typography>
-            </Box>
-            <Typography variant="h4">{contractors.length}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={FactoryIcon}
+            title="Manufacturing Orders"
+            value={manufacturingOrders.length}
+            subtitle={`${manufacturingOrders.filter(o => o.status === 'in_progress').length} In Progress`}
+            iconColor="#9C27B0"
+            gradientColor="secondary"
+            trend={`${manufacturingOrders.filter(o => o.status === 'completed').length} Completed`}
+          />
         </Grid>
+
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(46, 125, 50, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <WorkerIcon sx={{ color: 'success.main', mr: 1 }} />
-              <Typography color="textSecondary">Active Contractors</Typography>
-            </Box>
-            <Typography variant="h4">
-              {contractors.filter(c => c.status === 'active').length}
-            </Typography>
-          </Paper>
+          <SummaryCard
+            icon={WorkerIcon}
+            title="Active Contractors"
+            value={contractors.filter(c => c.status === 'active').length}
+            subtitle={`${assignments.filter(a => a.status === 'active').length} Active Assignments`}
+            iconColor="#D32F2F"
+            gradientColor="error"
+            trend={`${formatCurrency(assignments.reduce((sum, a) => sum + parseFloat(a.quantity), 0))} kg Total Assigned`}
+          />
         </Grid>
+
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(251, 140, 0, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <ProductIcon sx={{ color: 'warning.main', mr: 1 }} />
-              <Typography color="textSecondary">Total Assignments</Typography>
-            </Box>
-            <Typography variant="h4">{assignments.length}</Typography>
-          </Paper>
+          <SummaryCard
+            icon={SpeedIcon}
+            title="Avg. Production Efficiency"
+            value={`${(manufacturingOrders
+              .filter(o => o.status === 'completed')
+              .reduce((sum, o) => sum + parseFloat(o.efficiency), 0) /
+              manufacturingOrders.filter(o => o.status === 'completed').length * 100).toFixed(1)}%`}
+            subtitle="Based on Completed Orders"
+            iconColor="#ED6C02"
+            gradientColor="warning"
+            trend={`${manufacturingOrders.filter(o => o.status === 'completed').length} Orders Analyzed`}
+          />
         </Grid>
+
         <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              background: (theme) => 
-                `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(2, 136, 209, 0.05) 100%)`,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <QualityIcon sx={{ color: 'info.main', mr: 1 }} />
-              <Typography color="textSecondary">Active Assignments</Typography>
-            </Box>
-            <Typography variant="h4">
-              {assignments.filter(a => a.status === 'active').length}
-            </Typography>
-          </Paper>
+          <SummaryCard
+            icon={QualityIcon}
+            title="Avg. Defect Rate"
+            value={`${(manufacturingOrders
+              .filter(o => o.status === 'completed')
+              .reduce((sum, o) => sum + parseFloat(o.defect_rate), 0) /
+              manufacturingOrders.filter(o => o.status === 'completed').length).toFixed(1)}%`}
+            subtitle="Quality Control Metric"
+            iconColor="#2E7D32"
+            gradientColor="success"
+            trend={`${formatCurrency(manufacturingOrders
+              .filter(o => o.status === 'completed')
+              .reduce((sum, o) => sum + parseFloat(o.downtime_hours), 0))} Hours Downtime`}
+          />
         </Grid>
       </Grid>
 
       {/* Tabs Navigation - Moved inside Paper component */}
       <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
-        <Tabs 
-          value={currentTab} 
+        <Tabs
+          value={currentTab}
           onChange={handleTabChange}
           sx={{ borderBottom: 1, borderColor: 'divider', px: 2, pt: 2 }}
         >
@@ -640,15 +622,15 @@ const Manufacturing = () => {
                       />
                     </TableCell>
                     <TableCell align="right">
-                      <IconButton 
-                        size="small" 
+                      <IconButton
+                        size="small"
                         onClick={() => handleOpenOrderDialog(order)}
                         sx={{ color: 'primary.main' }}
                       >
                         <EditIcon />
                       </IconButton>
-                      <IconButton 
-                        size="small" 
+                      <IconButton
+                        size="small"
                         onClick={() => handleDelete(order.id)}
                         sx={{ color: 'error.main', ml: 1 }}
                       >
@@ -731,8 +713,8 @@ const Manufacturing = () => {
                       />
                     </TableCell>
                     <TableCell align="right">
-                      <IconButton 
-                        size="small" 
+                      <IconButton
+                        size="small"
                         onClick={() => handleOpenAssignmentDialog(assignment)}
                         sx={{ color: 'primary.main' }}
                       >
@@ -1145,4 +1127,4 @@ const Manufacturing = () => {
   );
 };
 
-export default Manufacturing; 
+export default Manufacturing;

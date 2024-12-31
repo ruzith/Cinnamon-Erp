@@ -3,13 +3,13 @@ import { useTheme } from '@mui/material/styles';
 import { Grid, Paper, Typography, Box, Card, CardContent, LinearProgress, IconButton, TextField, Button } from '@mui/material';
 import axios from 'axios';
 import {
-  People,
-  Terrain,
-  Assignment,
-  AccountBalance,
+  People as PeopleIcon,
+  Terrain as TerrainIcon,
+  Assignment as TaskIcon,
+  AccountBalance as AccountIcon,
   TrendingUp,
   TrendingDown,
-  Edit
+  Edit,
 } from '@mui/icons-material';
 import {
   LineChart,
@@ -22,65 +22,7 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import { useCurrencyFormatter } from '../utils/currencyUtils';
-
-const StatCard = ({ title, value, icon, color, trend, trendValue }) => {
-  const theme = useTheme();
-  return (
-    <Paper 
-      elevation={0}
-      sx={{ 
-        p: 3,
-        height: '100%',
-        background: 
-          theme.palette.mode === 'dark' 
-            ? `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(${color}, 0.1) 100%)`
-            : `linear-gradient(45deg, ${theme.palette.background.paper} 0%, rgba(${color}, 0.05) 100%)`,
-        border: '1px solid',
-        borderColor: theme.palette.divider,
-        transition: 'transform 0.2s',
-        '&:hover': {
-          transform: 'translateY(-2px)',
-        }
-      }}
-    >
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-        <Box>
-          <Typography color="textSecondary" variant="body2" sx={{ mb: 1 }}>
-            {title}
-          </Typography>
-          <Typography variant="h4" sx={{ fontWeight: 600 }}>
-            {value}
-          </Typography>
-        </Box>
-        <Box 
-          sx={{ 
-            p: 1, 
-            borderRadius: 2,
-            bgcolor: `rgba(${color}, 0.1)`,
-            color: `rgb(${color})`
-          }}
-        >
-          {icon}
-        </Box>
-      </Box>
-      {trend && (
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          {trendValue > 0 ? (
-            <TrendingUp sx={{ color: 'success.main', fontSize: 16, mr: 0.5 }} />
-          ) : (
-            <TrendingDown sx={{ color: 'error.main', fontSize: 16, mr: 0.5 }} />
-          )}
-          <Typography 
-            variant="body2" 
-            color={trendValue > 0 ? 'success.main' : 'error.main'}
-          >
-            {Math.abs(trendValue)}% from last month
-          </Typography>
-        </Box>
-      )}
-    </Paper>
-  );
-};
+import SummaryCard from '../components/common/SummaryCard';
 
 const ProgressCard = ({ title, value, target, color, period, isMonetary }) => {
   const theme = useTheme();
@@ -117,7 +59,7 @@ const ProgressCard = ({ title, value, target, color, period, isMonetary }) => {
   };
 
   const progress = Math.min((value / target) * 100, 100);
-  
+
   return (
     <Paper elevation={0} sx={{ p: 3, height: '100%', position: 'relative' }}>
       <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -125,8 +67,8 @@ const ProgressCard = ({ title, value, target, color, period, isMonetary }) => {
           {title}
         </Typography>
         {title === 'Monthly Target' && (
-          <IconButton 
-            size="small" 
+          <IconButton
+            size="small"
             onClick={() => setIsEditing(true)}
             sx={{ opacity: 0.7 }}
           >
@@ -134,7 +76,7 @@ const ProgressCard = ({ title, value, target, color, period, isMonetary }) => {
           </IconButton>
         )}
       </Box>
-      
+
       {isEditing ? (
         <Box sx={{ mb: 2 }}>
           <TextField
@@ -145,8 +87,8 @@ const ProgressCard = ({ title, value, target, color, period, isMonetary }) => {
             sx={{ width: '100%', mb: 1 }}
           />
           <Box sx={{ display: 'flex', gap: 1 }}>
-            <Button 
-              variant="contained" 
+            <Button
+              variant="contained"
               size="small"
               onClick={handleUpdateTarget}
               disabled={loading}
@@ -170,9 +112,9 @@ const ProgressCard = ({ title, value, target, color, period, isMonetary }) => {
         <>
           <Typography variant="h4" sx={{ mb: 2 }}>
             {formatValue(value)}
-            <Typography 
-              component="span" 
-              variant="body2" 
+            <Typography
+              component="span"
+              variant="body2"
               color="textSecondary"
               sx={{ ml: 1 }}
             >
@@ -242,37 +184,40 @@ const Dashboard = () => {
           Dashboard
         </Typography>
       </Box>
-      
+
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={4}>
-          <StatCard
+          <SummaryCard
             title="Total Lands"
             value={dashboardData.summary.totalLands.toString()}
-            icon={<Terrain />}
-            color="2, 136, 209"
+            icon={TerrainIcon}
+            gradientColor="info"
+            iconColor="info.main"
           />
         </Grid>
         <Grid item xs={12} sm={6} md={4}>
-          <StatCard
+          <SummaryCard
             title="Active Employees"
             value={dashboardData.summary.activeEmployees.toString()}
-            icon={<People />}
-            color="46, 125, 50"
+            icon={PeopleIcon}
+            gradientColor="success"
+            iconColor="success.main"
           />
         </Grid>
         <Grid item xs={12} sm={6} md={4}>
-          <StatCard
+          <SummaryCard
             title="Pending Tasks"
             value={dashboardData.summary.pendingTasks.toString()}
-            icon={<Assignment />}
-            color="251, 140, 0"
+            icon={TaskIcon}
+            gradientColor="warning"
+            iconColor="warning.main"
           />
         </Grid>
 
         <Grid item xs={12} md={8}>
-          <Paper 
+          <Paper
             elevation={0}
-            sx={{ 
+            sx={{
               p: 3,
               height: '400px',
               border: '1px solid',
@@ -283,22 +228,22 @@ const Dashboard = () => {
               Revenue Overview
             </Typography>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart 
+              <LineChart
                 data={dashboardData.revenueData}
                 margin={{ left: 20 , top: 20 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
-                <XAxis 
-                  dataKey="month" 
+                <XAxis
+                  dataKey="month"
                   stroke={theme.palette.text.secondary}
                   tick={{ fill: theme.palette.text.secondary }}
                 />
-                <YAxis 
+                <YAxis
                   tickFormatter={(value) => formatCurrency(value)}
                   stroke={theme.palette.text.secondary}
                   tick={{ fill: theme.palette.text.secondary }}
                 />
-                <Tooltip 
+                <Tooltip
                   formatter={(value) => [formatCurrency(value), 'Revenue']}
                   contentStyle={{
                     backgroundColor: theme.palette.background.paper,
@@ -313,12 +258,12 @@ const Dashboard = () => {
                   dataKey="revenue"
                   stroke={theme.palette.primary.main}
                   strokeWidth={3}
-                  dot={{ 
-                    r: 4, 
+                  dot={{
+                    r: 4,
                     fill: theme.palette.background.paper,
                     strokeWidth: 2,
                   }}
-                  activeDot={{ 
+                  activeDot={{
                     r: 6,
                     strokeWidth: 0,
                     fill: theme.palette.primary.main,
@@ -358,4 +303,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard; 
+export default Dashboard;

@@ -10,7 +10,7 @@ class CuttingTask extends BaseModel {
       SELECT ct.*,
              la.contractor_id,
              cc.name as contractor_name,
-             l.parcel_number
+             l.land_number
       FROM cutting_tasks ct
       JOIN land_assignments la ON ct.assignment_id = la.id
       JOIN cutting_contractors cc ON la.contractor_id = cc.id
@@ -26,7 +26,7 @@ class CuttingTask extends BaseModel {
       SELECT ct.*,
              la.contractor_id,
              cc.name as contractor_name,
-             l.parcel_number
+             l.land_number
       FROM cutting_tasks ct
       JOIN land_assignments la ON ct.assignment_id = la.id
       JOIN cutting_contractors cc ON la.contractor_id = cc.id
@@ -62,4 +62,4 @@ class CuttingTask extends BaseModel {
   }
 }
 
-module.exports = new CuttingTask(); 
+module.exports = new CuttingTask();

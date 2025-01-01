@@ -544,7 +544,7 @@ const CuttingManagement = () => {
                 >
                   {lands.map(land => (
                     <MenuItem key={land.id} value={land.id}>
-                      {land.name} ({land.parcel_number})
+                      {land.name} ({land.land_number})
                     </MenuItem>
                   ))}
                 </Select>
@@ -612,7 +612,7 @@ const CuttingManagement = () => {
                     )
                     .map(assignment => (
                       <MenuItem key={assignment.id} value={assignment.id}>
-                        {`Land ${assignment.parcel_number} - ${assignment.location} (${assignment.status})`}
+                        {`Land ${assignment.land_number} - ${assignment.location} (${assignment.status})`}
                       </MenuItem>
                     ))}
                 </Select>

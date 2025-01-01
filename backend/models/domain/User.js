@@ -8,7 +8,7 @@ class User extends BaseModel {
 
   async findAll() {
     const [rows] = await this.pool.execute(
-      'SELECT id, name, email, role, department, status FROM users'
+      'SELECT id, name, email, role, status FROM users'
     );
     return rows;
   }
@@ -23,7 +23,7 @@ class User extends BaseModel {
 
   async findById(id) {
     const [rows] = await this.pool.execute(
-      'SELECT id, name, email, role, department, status FROM users WHERE id = ?',
+      'SELECT id, name, email, role, status FROM users WHERE id = ?',
       [id]
     );
     return rows[0];
@@ -45,8 +45,7 @@ class User extends BaseModel {
       ...otherData,
       password_hash: hashedPassword,
       role,
-      status,
-      department: data.department || null
+      status
     });
   }
 
@@ -80,29 +79,36 @@ class User extends BaseModel {
     // Fix: Use proper MySQL query format
     const keys = Object.keys(data);
     const values = Object.values(data);
-    
+
     const setClause = keys.map(key => `${key} = ?`).join(', ');
-    
+
     await this.pool.execute(
       `UPDATE users SET ${setClause} WHERE id = ?`,
       [...values, id]
     );
-    
+
     return this.findById(id);
   }
 
-  async delete(id) {
+  async delete(id, permanent = false) {
     const user = await this.findById(id);
     if (!user) return null;
 
-    // Instead of deleting, update status to inactive
-    await this.pool.execute(
-      'UPDATE users SET status = ? WHERE id = ?',
-      ['inactive', id]
-    );
-    
+    if (permanent) {
+      await this.pool.execute(
+        'DELETE FROM users WHERE id = ?',
+        [id]
+      );
+    } else {
+      // Soft delete - update status to inactive
+      await this.pool.execute(
+        'UPDATE users SET status = ? WHERE id = ?',
+        ['inactive', id]
+      );
+    }
+
     return user;
   }
 }
 
-module.exports = new User(); 
+module.exports = new User();

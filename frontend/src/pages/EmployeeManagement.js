@@ -30,6 +30,10 @@ import {
   ListItem,
   ListItemText,
   Alert,
+  Switch,
+  Stack,
+  ListItemIcon,
+  Checkbox,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -44,6 +48,8 @@ import {
   Group as GroupIcon,
   PersonOff as PersonOffIcon,
   Pending as PendingIcon,
+  Timeline as TimelineIcon,
+  Assessment as AssessmentIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 import {
@@ -52,8 +58,17 @@ import {
   updateDesignation,
   deleteDesignation
 } from '../features/designations/designationSlice';
+import { updateEmployee } from '../features/employees/employeeSlice';
 import { useCurrencyFormatter } from '../utils/currencyUtils';
 import SummaryCard from '../components/common/SummaryCard';
+import EmployeeForm from '../components/employees/EmployeeForm';
+import employeeService from '../features/employees/employeeService';
+
+const SALARY_TYPES = {
+  DAILY: 'daily',
+  WEEKLY: 'weekly',
+  MONTHLY: 'monthly'
+};
 
 const EmployeeManagement = () => {
   const dispatch = useDispatch();
@@ -69,7 +84,8 @@ const EmployeeManagement = () => {
     designation_id: '',
     employment_type: 'permanent',
     status: 'active',
-    salary_structure_id: '',
+    basic_salary: '',
+    salary_type: SALARY_TYPES.MONTHLY,
     bank_name: '',
     account_number: '',
     account_name: ''
@@ -91,9 +107,22 @@ const EmployeeManagement = () => {
     newDesignationId: '',
     affectedEmployees: [],
   });
+  const [employeeGroups, setEmployeeGroups] = useState([]);
+  const [groupDialog, setGroupDialog] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState(null);
+  const [groupFormData, setGroupFormData] = useState({
+    name: '',
+    description: ''
+  });
+  const [groupMembersDialog, setGroupMembersDialog] = useState(false);
+  const [selectedEmployees, setSelectedEmployees] = useState([]);
+  const [taskReportDialog, setTaskReportDialog] = useState(false);
+  const [selectedEmployeeReport, setSelectedEmployeeReport] = useState(null);
+  const [taskReport, setTaskReport] = useState(null);
 
   useEffect(() => {
     fetchEmployees();
+    fetchEmployeeGroups();
   }, []);
 
   useEffect(() => {
@@ -131,6 +160,24 @@ const EmployeeManagement = () => {
     }
   };
 
+  const fetchEmployeeGroups = async () => {
+    try {
+      const response = await axios.get('/api/employee-groups');
+      const groupsWithMembers = await Promise.all(
+        response.data.map(async (group) => {
+          const memberResponse = await axios.get(`/api/employee-groups/${group.id}`);
+          return {
+            ...group,
+            members: memberResponse.data.members || []
+          };
+        })
+      );
+      setEmployeeGroups(groupsWithMembers);
+    } catch (error) {
+      console.error('Error fetching employee groups:', error);
+    }
+  };
+
   const handleOpenDialog = (employee = null) => {
     if (employee) {
       setSelectedEmployee(employee);
@@ -143,7 +190,8 @@ const EmployeeManagement = () => {
         designation_id: employee.designation_id,
         employment_type: employee.employment_type,
         status: employee.status,
-        salary_structure_id: employee.salary_structure_id,
+        basic_salary: employee.basic_salary,
+        salary_type: employee.salary_type,
         bank_name: employee.bank_name || '',
         account_number: employee.account_number || '',
         account_name: employee.account_name || ''
@@ -159,7 +207,8 @@ const EmployeeManagement = () => {
         designation_id: '',
         employment_type: 'permanent',
         status: 'active',
-        salary_structure_id: '',
+        basic_salary: '',
+        salary_type: SALARY_TYPES.MONTHLY,
         bank_name: '',
         account_number: '',
         account_name: ''
@@ -183,15 +232,10 @@ const EmployeeManagement = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const submitData = {
-        ...formData,
-        salary_structure_id: formData.salary_structure_id || null
-      };
-
       if (selectedEmployee) {
-        await axios.put(`/api/employees/${selectedEmployee.id}`, submitData);
+        await axios.put(`/api/employees/${selectedEmployee.id}`, formData);
       } else {
-        await axios.post('/api/employees', submitData);
+        await axios.post('/api/employees', formData);
       }
       await fetchEmployees();
       const designationsResponse = await axios.get('/api/designations');
@@ -219,10 +263,21 @@ const EmployeeManagement = () => {
   const summaryStats = {
     totalEmployees: employees.length,
     activeEmployees: employees.filter(emp => emp.status === 'active').length,
-    departments: [...new Set(employees.map(emp => emp.department))].length,
-    averageSalary: employees.length
-      ? employees.reduce((sum, emp) => sum + Number(emp.basic_salary || 0), 0) / employees.length
-      : 0
+    totalMonthlyCost: employees
+      .filter(emp => emp.status === 'active')
+      .reduce((total, emp) => {
+        const salary = Number(emp.basic_salary) || 0;
+        switch(emp.salary_type) {
+          case 'daily':
+            return total + (salary * 22); // Assuming 22 working days
+          case 'weekly':
+            return total + (salary * 4); // 4 weeks per month
+          case 'monthly':
+          default:
+            return total + salary;
+        }
+      }, 0),
+    departmentsCount: [...new Set(designations.map(d => d.department))].length,
   };
 
   const getStatusColor = (status) => {
@@ -406,6 +461,290 @@ const EmployeeManagement = () => {
     </Dialog>
   );
 
+  const handleToggleStatus = async (employee) => {
+    try {
+      const newStatus = employee.status === 'active' ? 'inactive' : 'active';
+      const {
+        id,
+        created_at,
+        updated_at,
+        designation_title,
+        salary_structure_name,
+        department,
+        group_names,
+        ...employeeData
+      } = employee;
+
+      if (employeeData.birthday) {
+        employeeData.birthday = employeeData.birthday.split('T')[0];
+      }
+
+      // Convert group_ids to array if it's a string
+      if (typeof employeeData.group_ids === 'string') {
+        employeeData.group_ids = employeeData.group_ids.split(',').filter(id => id).map(id => parseInt(id));
+      } else if (!Array.isArray(employeeData.group_ids)) {
+        employeeData.group_ids = [];
+      }
+
+      await dispatch(updateEmployee({
+        id: employee.id,
+        employeeData: {
+          ...employeeData,
+          status: newStatus
+        }
+      })).unwrap();
+
+      await fetchEmployees();
+    } catch (error) {
+      console.error('Error updating employee status:', error);
+    }
+  };
+
+  const handleOpenGroupDialog = (group = null) => {
+    if (group) {
+      setSelectedGroup(group);
+      setGroupFormData({
+        name: group.name,
+        description: group.description || ''
+      });
+    } else {
+      setSelectedGroup(null);
+      setGroupFormData({
+        name: '',
+        description: ''
+      });
+    }
+    setGroupDialog(true);
+  };
+
+  const handleCloseGroupDialog = () => {
+    setGroupDialog(false);
+    setSelectedGroup(null);
+  };
+
+  const handleGroupInputChange = (e) => {
+    setGroupFormData({
+      ...groupFormData,
+      [e.target.name]: e.target.value
+    });
+  };
+
+  const handleGroupSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      if (selectedGroup) {
+        await axios.put(`/api/employee-groups/${selectedGroup.id}`, groupFormData);
+      } else {
+        await axios.post('/api/employee-groups', groupFormData);
+      }
+      await fetchEmployeeGroups();
+      handleCloseGroupDialog();
+    } catch (error) {
+      console.error('Error saving employee group:', error);
+    }
+  };
+
+  const handleDeleteGroup = async (groupId) => {
+    if (window.confirm('Are you sure you want to delete this group?')) {
+      try {
+        await axios.delete(`/api/employee-groups/${groupId}`);
+        await fetchEmployeeGroups();
+      } catch (error) {
+        console.error('Error deleting employee group:', error);
+      }
+    }
+  };
+
+  const handleOpenGroupMembersDialog = async (group) => {
+    try {
+      const response = await axios.get(`/api/employee-groups/${group.id}`);
+      setSelectedGroup(response.data);
+      setSelectedEmployees(response.data.members.map(member => member.id));
+      setGroupMembersDialog(true);
+    } catch (error) {
+      console.error('Error fetching group members:', error);
+    }
+  };
+
+  const handleCloseGroupMembersDialog = () => {
+    setGroupMembersDialog(false);
+    setSelectedGroup(null);
+    setSelectedEmployees([]);
+  };
+
+  const handleEmployeeSelection = (employeeId) => {
+    setSelectedEmployees(prev => {
+      if (prev.includes(employeeId)) {
+        return prev.filter(id => id !== employeeId);
+      } else {
+        return [...prev, employeeId];
+      }
+    });
+  };
+
+  const handleUpdateGroupMembers = async () => {
+    try {
+      // Get current members of the group
+      const currentMembers = selectedGroup.members.map(member => member.id);
+
+      // Find members to add and remove
+      const membersToAdd = selectedEmployees.filter(id => !currentMembers.includes(id));
+      const membersToRemove = currentMembers.filter(id => !selectedEmployees.includes(id));
+
+      // Add new members if any
+      if (membersToAdd.length > 0) {
+        await axios.post(`/api/employee-groups/${selectedGroup.id}/members`, {
+          employeeIds: membersToAdd
+        });
+      }
+
+      // Remove unselected members if any
+      if (membersToRemove.length > 0) {
+        await axios.delete(`/api/employee-groups/${selectedGroup.id}/members`, {
+          data: { employeeIds: membersToRemove }
+        });
+      }
+
+      await fetchEmployeeGroups();
+      handleCloseGroupMembersDialog();
+    } catch (error) {
+      console.error('Error updating group members:', error);
+    }
+  };
+
+  const getEmployeeGroups = (employeeId) => {
+    const groups = employeeGroups.filter(group =>
+      group.members?.some(member => member.id === employeeId)
+    );
+    return groups;
+  };
+
+  const getGroupColor = (groupName) => {
+    if (!groupName) return 'default';
+
+    // Find the group object by name
+    const group = employeeGroups.find(g => g.name === groupName);
+    if (!group) return 'default';
+
+    // List of available MUI colors
+    const colors = ['primary', 'secondary', 'success', 'warning', 'error', 'info'];
+
+    // Use the group ID to consistently assign a color
+    return colors[group.id % colors.length];
+  };
+
+  const handleOpenTaskReport = async (employee) => {
+    setSelectedEmployeeReport(employee);
+    try {
+      const report = await employeeService.getEmployeeTaskReport(employee.id);
+      setTaskReport(report);
+      setTaskReportDialog(true);
+    } catch (error) {
+      console.error('Error fetching task report:', error);
+    }
+  };
+
+  const handleCloseTaskReport = () => {
+    setTaskReportDialog(false);
+    setSelectedEmployeeReport(null);
+    setTaskReport(null);
+  };
+
+  const TaskReportDialog = () => (
+    <Dialog
+      open={taskReportDialog}
+      onClose={handleCloseTaskReport}
+      maxWidth="md"
+      fullWidth
+    >
+      <DialogTitle>
+        Task Report - {selectedEmployeeReport?.name}
+      </DialogTitle>
+      <DialogContent>
+        {taskReport && (
+          <Box>
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+              <Grid item xs={12} sm={6} md={4}>
+                <SummaryCard
+                  title="Total Tasks"
+                  value={taskReport.summary.totalTasks}
+                  icon={AssessmentIcon}
+                  iconColor="info.main"
+                  gradientColor="info"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={4}>
+                <SummaryCard
+                  title="Total Hours"
+                  value={`${taskReport.summary.totalHours} hrs`}
+                  icon={TimelineIcon}
+                  iconColor="primary.main"
+                  gradientColor="primary"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={4}>
+                <SummaryCard
+                  title="Completed Hours"
+                  value={`${taskReport.summary.completedHours} hrs`}
+                  icon={TimelineIcon}
+                  iconColor="success.main"
+                  gradientColor="success"
+                />
+              </Grid>
+            </Grid>
+
+            <TableContainer component={Paper}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Task</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>Hours</TableCell>
+                    <TableCell>Due Date</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {taskReport.tasks.map((task) => (
+                    <TableRow key={task.id}>
+                      <TableCell>
+                        <Typography variant="subtitle2">{task.title}</Typography>
+                        <Typography variant="body2" color="textSecondary">
+                          {task.description}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={task.status.replace('_', ' ')}
+                          color={
+                            task.status === 'completed'
+                              ? 'success'
+                              : task.status === 'in_progress'
+                              ? 'warning'
+                              : 'default'
+                          }
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell>{task.estimated_hours} hrs</TableCell>
+                      <TableCell>
+                        {task.due_date
+                          ? new Date(task.due_date).toLocaleDateString()
+                          : '-'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={handleCloseTaskReport}>Close</Button>
+      </DialogActions>
+    </Dialog>
+  );
+
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
       {/* Header */}
@@ -414,6 +753,13 @@ const EmployeeManagement = () => {
           Employee Management
         </Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="outlined"
+            startIcon={<AddIcon />}
+            onClick={() => handleOpenGroupDialog()}
+          >
+            New Group
+          </Button>
           <Button
             variant="outlined"
             startIcon={<AddIcon />}
@@ -438,8 +784,8 @@ const EmployeeManagement = () => {
             icon={GroupIcon}
             title="Total Employees"
             value={summaryStats.totalEmployees}
-            iconColor="#9C27B0"
-            gradientColor="secondary"
+            iconColor="#1976D2"
+            gradientColor="primary"
           />
         </Grid>
 
@@ -448,26 +794,26 @@ const EmployeeManagement = () => {
             icon={PersonIcon}
             title="Active Employees"
             value={summaryStats.activeEmployees}
-            iconColor="#D32F2F"
-            gradientColor="error"
+            iconColor="#2E7D32"
+            gradientColor="success"
           />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
           <SummaryCard
-            icon={PersonOffIcon}
-            title="Inactive Employees"
-            value={summaryStats.inactiveEmployees}
-            iconColor="#ED6C02"
-            gradientColor="warning"
+            icon={SalaryIcon}
+            title="Monthly Salary Cost"
+            value={formatCurrency(summaryStats.totalMonthlyCost)}
+            iconColor="#9C27B0"
+            gradientColor="secondary"
           />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
           <SummaryCard
-            icon={PendingIcon}
-            title="Pending Approvals"
-            value={summaryStats.pendingApprovals}
+            icon={BusinessIcon}
+            title="Departments"
+            value={summaryStats.departmentsCount}
             iconColor="#0288D1"
             gradientColor="info"
           />
@@ -483,6 +829,7 @@ const EmployeeManagement = () => {
         >
           <Tab label="Employees" />
           <Tab label="Designations" />
+          <Tab label="Groups" />
         </Tabs>
 
         {/* Employees Tab Content */}
@@ -512,22 +859,49 @@ const EmployeeManagement = () => {
                     </TableCell>
                     <TableCell>{employee.designation_title || 'N/A'}</TableCell>
                     <TableCell>
-                      <Chip
-                        label={employee.employment_type}
-                        color={employee.employment_type === 'permanent' ? 'primary' : 'default'}
-                        size="small"
-                        sx={{ textTransform: 'capitalize' }}
-                      />
+                      {getEmployeeGroups(employee.id).length > 0 ? (
+                        getEmployeeGroups(employee.id).map((group, index) => (
+                          <React.Fragment key={group.id}>
+                            {index > 0 && ' '}
+                            <Chip
+                              label={group.name}
+                              color={getGroupColor(group.name)}
+                              size="small"
+                              sx={{ textTransform: 'capitalize' }}
+                            />
+                          </React.Fragment>
+                        ))
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          No Group
+                        </Typography>
+                      )}
                     </TableCell>
                     <TableCell>
-                      <Chip
-                        label={employee.status}
-                        color={getStatusColor(employee.status)}
-                        size="small"
-                        sx={{ textTransform: 'capitalize' }}
-                      />
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <Chip
+                          label={employee.status}
+                          color={getStatusColor(employee.status)}
+                          size="small"
+                          sx={{ textTransform: 'capitalize' }}
+                        />
+                        <Switch
+                          checked={employee.status === 'active'}
+                          onChange={() => handleToggleStatus(employee)}
+                          color="success"
+                          size="small"
+                        />
+                      </Stack>
                     </TableCell>
                     <TableCell align="right">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpenTaskReport(employee)}
+                        title="View Task Report"
+                        sx={{ color: 'info.main' }}
+                      >
+                        <AssessmentIcon />
+                      </IconButton>
                       <IconButton
                         size="small"
                         onClick={() => handleOpenDialog(employee)}
@@ -538,7 +912,7 @@ const EmployeeManagement = () => {
                       <IconButton
                         size="small"
                         onClick={() => handleDeleteEmployee(employee.id)}
-                        sx={{ color: 'error.main', ml: 1 }}
+                        sx={{ color: 'error.main' }}
                       >
                         <DeleteIcon />
                       </IconButton>
@@ -581,6 +955,53 @@ const EmployeeManagement = () => {
                       <IconButton
                         size="small"
                         onClick={() => handleDeleteDesignation(designation.id)}
+                        sx={{ color: 'error.main', ml: 1 }}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+
+        {/* Groups Tab Content */}
+        {activeTab === 2 && (
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Name</TableCell>
+                  <TableCell>Description</TableCell>
+                  <TableCell>Members</TableCell>
+                  <TableCell align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {employeeGroups.map((group) => (
+                  <TableRow key={group.id} hover>
+                    <TableCell>{group.name}</TableCell>
+                    <TableCell>{group.description}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={`${group.member_count} members`}
+                        onClick={() => handleOpenGroupMembersDialog(group)}
+                        sx={{ cursor: 'pointer' }}
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpenGroupDialog(group)}
+                        sx={{ color: 'primary.main' }}
+                      >
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDeleteGroup(group.id)}
                         sx={{ color: 'error.main', ml: 1 }}
                       >
                         <DeleteIcon />
@@ -647,7 +1068,6 @@ const EmployeeManagement = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Employee Dialog - Keep your existing dialog code */}
       <Dialog
         open={openDialog}
         onClose={handleCloseDialog}
@@ -658,160 +1078,97 @@ const EmployeeManagement = () => {
           {selectedEmployee ? 'Edit Employee' : 'Add New Employee'}
         </DialogTitle>
         <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={6}>
-              <TextField
-                name="name"
-                label="Name"
-                fullWidth
-                value={formData.name}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={6}>
-              <TextField
-                name="nic"
-                label="NIC"
-                fullWidth
-                value={formData.nic}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={6}>
-              <TextField
-                name="phone"
-                label="Phone"
-                fullWidth
-                value={formData.phone}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={6}>
-              <TextField
-                name="address"
-                label="Address"
-                fullWidth
-                multiline
-                rows={2}
-                value={formData.address}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={6}>
-              <TextField
-                name="birthday"
-                label="Birthday"
-                type="date"
-                fullWidth
-                InputLabelProps={{ shrink: true }}
-                value={formData.birthday}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={6}>
-              <FormControl fullWidth>
-                <InputLabel>Designation</InputLabel>
-                <Select
-                  name="designation_id"
-                  value={formData.designation_id}
-                  label="Designation"
-                  onChange={handleInputChange}
-                  required
-                >
-                  <MenuItem value="">Select Designation</MenuItem>
-                  {designations.map((designation) => (
-                    <MenuItem key={designation.id} value={designation.id}>
-                      {designation.title} - {designation.department}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={6}>
-              <FormControl fullWidth>
-                <InputLabel>Employment Type</InputLabel>
-                <Select
-                  name="employment_type"
-                  value={formData.employment_type}
-                  label="Employment Type"
-                  onChange={handleInputChange}
-                  required
-                >
-                  <MenuItem value="permanent">Permanent</MenuItem>
-                  <MenuItem value="temporary">Temporary</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={6}>
-              <TextField
-                name="bank_name"
-                label="Bank Name"
-                fullWidth
-                value={formData.bank_name}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={6}>
-              <TextField
-                name="account_number"
-                label="Account Number"
-                fullWidth
-                value={formData.account_number}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={6}>
-              <TextField
-                name="account_name"
-                label="Account Name"
-                fullWidth
-                value={formData.account_name}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={6}>
-              <FormControl fullWidth>
-                <InputLabel>Salary Structure</InputLabel>
-                <Select
-                  name="salary_structure_id"
-                  value={formData.salary_structure_id}
-                  label="Salary Structure"
-                  onChange={handleInputChange}
-                >
-                  <MenuItem value="">None</MenuItem>
-                  {salaryStructures.map((structure) => (
-                    <MenuItem key={structure.id} value={structure.id}>
-                      {structure.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12}>
-              <FormControl fullWidth>
-                <InputLabel>Status</InputLabel>
-                <Select
-                  name="status"
-                  value={formData.status}
-                  label="Status"
-                  onChange={handleInputChange}
-                >
-                  <MenuItem value="active">Active</MenuItem>
-                  <MenuItem value="inactive">Inactive</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-          </Grid>
+          <EmployeeForm
+            employee={selectedEmployee}
+            setIsEditing={() => handleCloseDialog()}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <ReassignmentDialog />
+
+      {/* Group Dialog */}
+      <Dialog
+        open={groupDialog}
+        onClose={handleCloseGroupDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          {selectedGroup ? 'Edit Group' : 'Create Group'}
+        </DialogTitle>
+        <DialogContent>
+          <Box component="form" noValidate sx={{ mt: 1 }}>
+            <TextField
+              margin="normal"
+              required
+              fullWidth
+              id="name"
+              label="Group Name"
+              name="name"
+              value={groupFormData.name}
+              onChange={handleGroupInputChange}
+            />
+            <TextField
+              margin="normal"
+              fullWidth
+              id="description"
+              label="Description"
+              name="description"
+              multiline
+              rows={3}
+              value={groupFormData.description}
+              onChange={handleGroupInputChange}
+            />
+          </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
-          <Button onClick={handleSubmit} color="primary">
-            {selectedEmployee ? 'Update' : 'Create'}
+          <Button onClick={handleCloseGroupDialog}>Cancel</Button>
+          <Button onClick={handleGroupSubmit} variant="contained">
+            {selectedGroup ? 'Update' : 'Create'}
           </Button>
         </DialogActions>
       </Dialog>
 
-      <ReassignmentDialog />
+      {/* Group Members Dialog */}
+      <Dialog
+        open={groupMembersDialog}
+        onClose={handleCloseGroupMembersDialog}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          Manage Group Members - {selectedGroup?.name}
+        </DialogTitle>
+        <DialogContent>
+          <List>
+            {employees.map((employee) => (
+              <ListItem key={employee.id}>
+                <ListItemIcon>
+                  <Checkbox
+                    edge="start"
+                    checked={selectedEmployees.includes(employee.id)}
+                    onChange={() => handleEmployeeSelection(employee.id)}
+                  />
+                </ListItemIcon>
+                <ListItemText
+                  primary={employee.name}
+                  secondary={employee.designation_title}
+                />
+              </ListItem>
+            ))}
+          </List>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseGroupMembersDialog}>Cancel</Button>
+          <Button onClick={handleUpdateGroupMembers} variant="contained">
+            Save Changes
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Add the TaskReportDialog component */}
+      <TaskReportDialog />
     </Box>
   );
 };

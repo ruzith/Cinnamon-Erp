@@ -5,10 +5,10 @@ class Land extends BaseModel {
     super('lands');
   }
 
-  async findByParcelNumber(parcelNumber) {
+  async findByLandNumber(landNumber) {
     const [rows] = await this.pool.execute(
-      'SELECT * FROM lands WHERE parcel_number = ?',
-      [parcelNumber]
+      'SELECT * FROM lands WHERE land_number = ?',
+      [landNumber]
     );
     return rows[0];
   }
@@ -25,4 +25,4 @@ class Land extends BaseModel {
   }
 }
 
-module.exports = new Land(); 
+module.exports = new Land();

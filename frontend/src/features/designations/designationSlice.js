@@ -1,109 +1,79 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import designationService from './designationService';
+import axios from 'axios';
+
+// Async thunks
+export const getDesignations = createAsyncThunk(
+  'designations/getDesignations',
+  async () => {
+    const response = await axios.get('/api/designations');
+    return response.data;
+  }
+);
+
+export const createDesignation = createAsyncThunk(
+  'designations/createDesignation',
+  async (designationData) => {
+    const response = await axios.post('/api/designations', designationData);
+    return response.data;
+  }
+);
+
+export const updateDesignation = createAsyncThunk(
+  'designations/updateDesignation',
+  async ({ id, designationData }) => {
+    const response = await axios.put(`/api/designations/${id}`, designationData);
+    return response.data;
+  }
+);
+
+export const deleteDesignation = createAsyncThunk(
+  'designations/deleteDesignation',
+  async (id) => {
+    await axios.delete(`/api/designations/${id}`);
+    return id;
+  }
+);
 
 const initialState = {
   designations: [],
-  isError: false,
-  isSuccess: false,
-  isLoading: false,
-  message: ''
+  status: 'idle',
+  error: null
 };
 
-// Get designations
-export const getDesignations = createAsyncThunk('designations/getAll', async (_, thunkAPI) => {
-  try {
-    const token = thunkAPI.getState().auth.user.token;
-    return await designationService.getDesignations(token);
-  } catch (error) {
-    return thunkAPI.rejectWithValue(error.response.data.message);
-  }
-});
-
-// Create designation
-export const createDesignation = createAsyncThunk(
-  'designations/create',
-  async (designationData, thunkAPI) => {
-    try {
-      const token = thunkAPI.getState().auth.user.token;
-      return await designationService.createDesignation(designationData, token);
-    } catch (error) {
-      return thunkAPI.rejectWithValue(error.response.data.message);
-    }
-  }
-);
-
-// Update designation
-export const updateDesignation = createAsyncThunk(
-  'designations/update',
-  async ({ id, designationData }, thunkAPI) => {
-    try {
-      const token = thunkAPI.getState().auth.user.token;
-      return await designationService.updateDesignation(id, designationData, token);
-    } catch (error) {
-      return thunkAPI.rejectWithValue(error.response.data.message);
-    }
-  }
-);
-
-// Delete designation
-export const deleteDesignation = createAsyncThunk(
-  'designations/delete',
-  async (payload, thunkAPI) => {
-    try {
-      const token = thunkAPI.getState().auth.user.token;
-      // Handle both simple id and object with options
-      const id = typeof payload === 'object' ? payload.id : payload;
-      const options = typeof payload === 'object' ? payload.options : undefined;
-      
-      return await designationService.deleteDesignation(id, options);
-    } catch (error) {
-      return thunkAPI.rejectWithValue(error.response.data);
-    }
-  }
-);
-
-export const designationSlice = createSlice({
-  name: 'designation',
+const designationSlice = createSlice({
+  name: 'designations',
   initialState,
-  reducers: {
-    reset: (state) => initialState
-  },
+  reducers: {},
   extraReducers: (builder) => {
     builder
+      // Get designations
       .addCase(getDesignations.pending, (state) => {
-        state.isLoading = true;
+        state.status = 'loading';
       })
       .addCase(getDesignations.fulfilled, (state, action) => {
-        state.isLoading = false;
-        state.isSuccess = true;
+        state.status = 'succeeded';
         state.designations = action.payload;
       })
       .addCase(getDesignations.rejected, (state, action) => {
-        state.isLoading = false;
-        state.isError = true;
-        state.message = action.payload;
+        state.status = 'failed';
+        state.error = action.error.message;
       })
+      // Create designation
       .addCase(createDesignation.fulfilled, (state, action) => {
-        state.isLoading = false;
-        state.isSuccess = true;
         state.designations.push(action.payload);
       })
+      // Update designation
       .addCase(updateDesignation.fulfilled, (state, action) => {
-        state.isLoading = false;
-        state.isSuccess = true;
-        state.designations = state.designations.map(designation => 
-          designation.id === action.payload.id ? action.payload : designation
-        );
+        const index = state.designations.findIndex(designation => designation.id === action.payload.id);
+        if (index !== -1) {
+          state.designations[index] = action.payload;
+        }
       })
+      // Delete designation
       .addCase(deleteDesignation.fulfilled, (state, action) => {
-        state.isLoading = false;
-        state.isSuccess = true;
-        state.designations = state.designations.filter(
-          designation => designation.id !== action.payload.id
-        );
+        state.designations = state.designations.filter(designation => designation.id !== action.payload);
       });
   }
 });
 
-export const { reset } = designationSlice.actions;
-export default designationSlice.reducer; 
+export default designationSlice.reducer;

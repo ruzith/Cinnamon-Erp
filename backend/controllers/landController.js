@@ -40,10 +40,10 @@ exports.createLand = async (req, res) => {
       return res.status(400).json({ message: error.details[0].message });
     }
 
-    // Check for duplicate parcel number
-    const existingLand = await Land.findByParcelNumber(req.body.parcel_number);
+    // Check for duplicate land number
+    const existingLand = await Land.findByLandNumber(req.body.land_number);
     if (existingLand) {
-      return res.status(400).json({ message: 'Parcel number already exists' });
+      return res.status(400).json({ message: 'Land number already exists' });
     }
 
     const land = await Land.create({
@@ -72,11 +72,11 @@ exports.updateLand = async (req, res) => {
       return res.status(404).json({ message: 'Land not found' });
     }
 
-    // Check for duplicate parcel number if it's being changed
-    if (req.body.parcel_number && req.body.parcel_number !== land.parcel_number) {
-      const existingLand = await Land.findByParcelNumber(req.body.parcel_number);
+    // Check for duplicate land number if it's being changed
+    if (req.body.land_number && req.body.land_number !== land.land_number) {
+      const existingLand = await Land.findByLandNumber(req.body.land_number);
       if (existingLand) {
-        return res.status(400).json({ message: 'Parcel number already exists' });
+        return res.status(400).json({ message: 'Land number already exists' });
       }
     }
 
@@ -94,14 +94,14 @@ exports.deleteLand = async (req, res) => {
   try {
     const { forceDelete } = req.query;
     const land = await Land.findById(req.params.id);
-    
+
     if (!land) {
       return res.status(404).json({ message: 'Land not found' });
     }
 
     // Check for active assignments
     const [assignments] = await Land.pool.execute(`
-      SELECT la.*, cc.name as contractor_name 
+      SELECT la.*, cc.name as contractor_name
       FROM land_assignments la
       JOIN cutting_contractors cc ON la.contractor_id = cc.id
       WHERE la.land_id = ? AND la.status = 'active'`,
@@ -172,4 +172,4 @@ exports.deleteLand = async (req, res) => {
     console.error('Error deleting land:', error);
     res.status(500).json({ message: error.message });
   }
-}; 
+};

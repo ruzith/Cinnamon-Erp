@@ -6,6 +6,9 @@ import reportReducer from '../features/reports/reportSlice';
 import settingsReducer from '../features/settings/settingsSlice';
 import purchaseReducer from '../features/purchases/purchaseSlice';
 import currencyReducer from '../features/currencies/currencySlice';
+import employeeGroupReducer from '../features/employeeGroups/employeeGroupSlice';
+import designationReducer from '../features/designations/designationSlice';
+import employeeReducer from '../features/employees/employeeSlice';
 
 export const store = configureStore({
   reducer: {
@@ -16,5 +19,8 @@ export const store = configureStore({
     settings: settingsReducer,
     purchase: purchaseReducer,
     currencies: currencyReducer,
+    employeeGroups: employeeGroupReducer,
+    designations: designationReducer,
+    employees: employeeReducer,
   },
-}); 
+});

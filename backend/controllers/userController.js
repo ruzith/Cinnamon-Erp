@@ -27,9 +27,9 @@ const registerUser = asyncHandler(async (req, res) => {
     name,
     email,
     password,
-    role: 'staff', 
-    status: 'active', 
-    department: null 
+    role: 'staff',
+    status: 'active',
+    department: null
   });
 
   if (user) {
@@ -107,12 +107,18 @@ const updateUser = asyncHandler(async (req, res) => {
 // @route   DELETE /api/users/:id
 // @access  Private/Admin
 const deleteUser = asyncHandler(async (req, res) => {
-  const user = await User.delete(req.params.id);
+  const { permanent } = req.query;
+  const user = await User.delete(req.params.id, permanent === 'true');
+
   if (!user) {
     res.status(404);
     throw new Error('User not found');
   }
-  res.status(200).json({ message: 'User deleted successfully' });
+
+  res.status(200).json({
+    message: permanent === 'true' ? 'User permanently deleted' : 'User deactivated successfully',
+    user
+  });
 });
 
 // Generate JWT
@@ -143,7 +149,7 @@ const createUser = asyncHandler(async (req, res) => {
   // Create user with role validation
   const validRoles = ['admin', 'staff', 'accountant', 'manager'];
   const validStatuses = ['active', 'inactive'];
-  
+
   const user = await User.create({
     name,
     email,

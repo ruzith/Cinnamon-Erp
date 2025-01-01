@@ -21,8 +21,8 @@ const updateUser = async (id, userData) => {
 };
 
 // Delete user
-const deleteUser = async (id) => {
-  const response = await axios.delete(`${API_URL}${id}`);
+const deleteUser = async (id, permanent = false) => {
+  const response = await axios.delete(`${API_URL}${id}${permanent ? '?permanent=true' : ''}`);
   return response.data;
 };
 
@@ -33,4 +33,4 @@ const userService = {
   deleteUser
 };
 
-export default userService; 
+export default userService;

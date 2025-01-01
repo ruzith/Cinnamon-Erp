@@ -5,7 +5,7 @@ const { pool, connectDB } = require('../config/db');
 // @desc    Get all employees
 // @route   GET /api/employees
 // @access  Private
-exports.getEmployees = async (req, res) => {
+const getEmployees = async (req, res) => {
   try {
     const employeeModel = new Employee();
     const employees = await employeeModel.getWithDetails();
@@ -19,7 +19,7 @@ exports.getEmployees = async (req, res) => {
 // @desc    Get single employee
 // @route   GET /api/employees/:id
 // @access  Private
-exports.getEmployee = async (req, res) => {
+const getEmployee = async (req, res) => {
   try {
     const employeeModel = new Employee();
     const employee = await employeeModel.findById(req.params.id);
@@ -35,7 +35,7 @@ exports.getEmployee = async (req, res) => {
 // @desc    Create employee
 // @route   POST /api/employees
 // @access  Private/Admin
-exports.createEmployee = async (req, res) => {
+const createEmployee = async (req, res) => {
   try {
     const { error } = validateEmployee(req.body);
     if (error) {
@@ -59,7 +59,7 @@ exports.createEmployee = async (req, res) => {
 // @desc    Update employee
 // @route   PUT /api/employees/:id
 // @access  Private/Admin
-exports.updateEmployee = async (req, res) => {
+const updateEmployee = async (req, res) => {
   try {
     const { error } = validateEmployee(req.body);
     if (error) {
@@ -90,9 +90,9 @@ exports.updateEmployee = async (req, res) => {
 // @desc    Delete employee
 // @route   DELETE /api/employees/:id
 // @access  Private/Admin
-exports.deleteEmployee = async (req, res) => {
+const deleteEmployee = async (req, res) => {
   const { id } = req.params;
-  
+
   try {
     // Instead of DELETE, update the status to inactive
     const [result] = await pool.execute(
@@ -109,4 +109,60 @@ exports.deleteEmployee = async (req, res) => {
     console.error('Error deactivating employee:', error);
     res.status(500).json({ message: 'Error deactivating employee', error: error.message });
   }
+};
+
+// @desc    Get employee task report
+// @route   GET /api/employees/:id/task-report
+// @access  Private
+const getEmployeeTaskReport = async (req, res) => {
+  try {
+    const employeeId = req.params.id;
+
+    // Get tasks assigned to employee with total hours
+    const [tasks] = await pool.execute(`
+      SELECT
+        t.id,
+        t.title,
+        t.description,
+        t.status,
+        t.estimated_hours,
+        t.due_date,
+        t.created_at,
+        t.updated_at
+      FROM tasks t
+      WHERE t.assigned_to = ?
+      ORDER BY t.created_at DESC
+    `, [employeeId]);
+
+    // Calculate total working hours - convert string hours to numbers
+    const totalHours = tasks.reduce((sum, task) => sum + (parseFloat(task.estimated_hours) || 0), 0);
+    const completedHours = tasks
+      .filter(task => task.status === 'completed')
+      .reduce((sum, task) => sum + (parseFloat(task.estimated_hours) || 0), 0);
+
+    res.json({
+      tasks,
+      summary: {
+        totalTasks: tasks.length,
+        completedTasks: tasks.filter(task => task.status === 'completed').length,
+        pendingTasks: tasks.filter(task => task.status === 'pending').length,
+        inProgressTasks: tasks.filter(task => task.status === 'in_progress').length,
+        totalHours: parseFloat(totalHours.toFixed(2)),
+        completedHours: parseFloat(completedHours.toFixed(2)),
+        remainingHours: parseFloat((totalHours - completedHours).toFixed(2))
+      }
+    });
+  } catch (error) {
+    console.error('Error getting employee task report:', error);
+    res.status(500).json({ message: 'Error getting employee task report' });
+  }
+};
+
+module.exports = {
+  getEmployees,
+  getEmployee,
+  createEmployee,
+  updateEmployee,
+  deleteEmployee,
+  getEmployeeTaskReport
 };

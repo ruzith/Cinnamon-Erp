@@ -10,13 +10,13 @@ const LandItem = ({ land, onDelete }) => {
 
   return (
     <div className="land-item">
-      <h3>{land.parcel_number}</h3>
+      <h3>{land.land_number}</h3>
       <p>Size: {land.area} {land.area_unit}</p>
       <p>Forest Type: {land.forest_type}</p>
       <p>Soil Type: {land.soil_type}</p>
       <p>Location: {land.location}</p>
       {land.notes && <p>Notes: {land.notes}</p>}
-      
+
       <div className="actions">
         <button onClick={() => setIsEditing(true)}>Edit</button>
         <button onClick={onDelete}>Delete</button>
@@ -25,4 +25,4 @@ const LandItem = ({ land, onDelete }) => {
   );
 };
 
-export default LandItem; 
+export default LandItem;

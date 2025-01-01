@@ -17,9 +17,9 @@ class CuttingPayment extends BaseModel {
 
       // Insert payment record
       const [result] = await this.pool.execute(
-        `INSERT INTO cutting_payments 
-         (contractor_id, assignment_id, total_amount, company_contribution, manufacturing_contribution, 
-          status, payment_date, receipt_number, notes, created_by) 
+        `INSERT INTO cutting_payments
+         (contractor_id, assignment_id, total_amount, company_contribution, manufacturing_contribution,
+          status, payment_date, receipt_number, notes, created_by)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           paymentData.contractor_id,
@@ -46,7 +46,7 @@ class CuttingPayment extends BaseModel {
     const [payment] = await this.pool.execute(`
       SELECT cp.*,
              cc.name as contractor_name,
-             l.parcel_number,
+             l.land_number,
              l.location,
              u.name as created_by_name
       FROM cutting_payments cp
@@ -64,7 +64,7 @@ class CuttingPayment extends BaseModel {
     const [rows] = await this.pool.execute(`
       SELECT cp.*,
              cc.name as contractor_name,
-             l.parcel_number,
+             l.land_number,
              l.location,
              u.name as created_by_name
       FROM cutting_payments cp
@@ -88,4 +88,4 @@ class CuttingPayment extends BaseModel {
   }
 }
 
-module.exports = new CuttingPayment(); 
+module.exports = new CuttingPayment();

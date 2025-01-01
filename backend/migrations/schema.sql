@@ -21,6 +21,7 @@ DROP TABLE IF EXISTS sales_items;
 DROP TABLE IF EXISTS sales_invoices;
 DROP TABLE IF EXISTS inventory_transactions;
 DROP TABLE IF EXISTS tasks;
+DROP TABLE IF EXISTS task_categories;
 DROP TABLE IF EXISTS cutting_payments;
 DROP TABLE IF EXISTS cutting_tasks;
 DROP TABLE IF EXISTS land_assignments;
@@ -33,9 +34,9 @@ DROP TABLE IF EXISTS inventory;
 DROP TABLE IF EXISTS products;
 DROP TABLE IF EXISTS grades;
 DROP TABLE IF EXISTS product_categories;
+DROP TABLE IF EXISTS employee_group_members;
+DROP TABLE IF EXISTS employee_groups;
 DROP TABLE IF EXISTS employees;
-DROP TABLE IF EXISTS salary_structure_components;
-DROP TABLE IF EXISTS salary_structures;
 DROP TABLE IF EXISTS designations;
 DROP TABLE IF EXISTS customers;
 DROP TABLE IF EXISTS accounts;
@@ -47,7 +48,7 @@ DROP TABLE IF EXISTS settings;
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS currencies;
 
--- Currencies table 
+-- Currencies table
 CREATE TABLE IF NOT EXISTS currencies (
   id INT PRIMARY KEY AUTO_INCREMENT,
   code VARCHAR(3) NOT NULL UNIQUE,
@@ -67,13 +68,12 @@ CREATE TABLE users (
   email VARCHAR(255) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
   role ENUM('admin', 'staff', 'accountant', 'manager') NOT NULL DEFAULT 'staff',
-  department VARCHAR(100),
   status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
--- Settings table 
+-- Settings table
 CREATE TABLE settings (
   id INT PRIMARY KEY AUTO_INCREMENT,
   company_name VARCHAR(255) NOT NULL,
@@ -110,28 +110,13 @@ CREATE TABLE designations (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
--- Salary Structures table
-CREATE TABLE salary_structures (
+-- Employee Groups table
+CREATE TABLE employee_groups (
   id INT PRIMARY KEY AUTO_INCREMENT,
-  name VARCHAR(100) NOT NULL,
-  basic_salary DECIMAL(10,2) NOT NULL,
-  status ENUM('active', 'inactive') DEFAULT 'active',
+  name VARCHAR(100) NOT NULL UNIQUE,
   description TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
-
--- Salary Structure Components table
-CREATE TABLE salary_structure_components (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  structure_id INT NOT NULL,
-  name VARCHAR(100) NOT NULL,
-  type ENUM('earning', 'deduction') NOT NULL,
-  amount DECIMAL(10,2) NOT NULL,
-  is_percentage BOOLEAN DEFAULT FALSE,
-  description TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (structure_id) REFERENCES salary_structures(id)
 );
 
 -- Employees table
@@ -145,14 +130,24 @@ CREATE TABLE employees (
   designation_id INT,
   employment_type ENUM('permanent', 'temporary') DEFAULT 'permanent',
   status ENUM('active', 'inactive') DEFAULT 'active',
-  salary_structure_id INT,
+  basic_salary DECIMAL(15,2) NOT NULL,
+  salary_type VARCHAR(10) NOT NULL DEFAULT 'monthly' CHECK (salary_type IN ('daily', 'weekly', 'monthly')),
   bank_name VARCHAR(100),
   account_number VARCHAR(50),
   account_name VARCHAR(255),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (designation_id) REFERENCES designations(id),
-  FOREIGN KEY (salary_structure_id) REFERENCES salary_structures(id)
+  FOREIGN KEY (designation_id) REFERENCES designations(id)
+);
+
+-- Employee Group Members table
+CREATE TABLE employee_group_members (
+  group_id INT NOT NULL,
+  employee_id INT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (group_id, employee_id),
+  FOREIGN KEY (group_id) REFERENCES employee_groups(id) ON DELETE CASCADE,
+  FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
 );
 
 -- Payrolls table
@@ -183,6 +178,7 @@ CREATE TABLE payroll_items (
   payroll_id INT NOT NULL,
   employee_id INT NOT NULL,
   basic_salary DECIMAL(15,2) NOT NULL,
+  salary_type VARCHAR(10) NOT NULL CHECK (salary_type IN ('daily', 'weekly', 'monthly')),
   gross_salary DECIMAL(15,2) NOT NULL,
   net_salary DECIMAL(15,2) NOT NULL,
   status ENUM('pending', 'paid') DEFAULT 'pending',
@@ -208,7 +204,7 @@ CREATE TABLE payroll_components (
 CREATE TABLE lands (
   id INT PRIMARY KEY AUTO_INCREMENT,
   name VARCHAR(255) NOT NULL,
-  parcel_number VARCHAR(50) NOT NULL UNIQUE,
+  land_number VARCHAR(50) NOT NULL UNIQUE,
   size DECIMAL(10,2) NOT NULL,
   category ENUM('agricultural', 'residential', 'commercial', 'forest', 'other') NOT NULL,
   ownership_status ENUM('owned', 'rent') NOT NULL,
@@ -327,6 +323,15 @@ CREATE TABLE cutting_payments (
   FOREIGN KEY (created_by) REFERENCES users(id)
 );
 
+-- Task Categories table
+CREATE TABLE task_categories (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  name VARCHAR(100) NOT NULL UNIQUE,
+  description TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
 -- Tasks table
 CREATE TABLE tasks (
   id INT PRIMARY KEY AUTO_INCREMENT,
@@ -334,7 +339,7 @@ CREATE TABLE tasks (
   description TEXT,
   priority ENUM('low', 'medium', 'high') NOT NULL DEFAULT 'medium',
   status ENUM('pending', 'in_progress', 'completed', 'cancelled') NOT NULL DEFAULT 'pending',
-  category VARCHAR(100),
+  category_id INT,
   estimated_hours DECIMAL(5,2),
   notes TEXT,
   due_date DATE,
@@ -342,6 +347,7 @@ CREATE TABLE tasks (
   created_by INT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (category_id) REFERENCES task_categories(id),
   FOREIGN KEY (assigned_to) REFERENCES users(id),
   FOREIGN KEY (created_by) REFERENCES users(id)
 );
@@ -757,7 +763,7 @@ CREATE TABLE report_columns (
   format VARCHAR(20),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (report_id) REFERENCES reports(id)
-); 
+);
 
 -- Manufacturing Materials table
 CREATE TABLE manufacturing_materials (
@@ -784,7 +790,7 @@ CREATE TABLE monthly_targets (
 
 -- Insert default targets for the current year
 INSERT INTO monthly_targets (period, target_amount)
-SELECT 
+SELECT
   DATE(CONCAT(YEAR(CURRENT_DATE()), '-', LPAD(month.num, 2, '0'), '-01')),
   30000.00
 FROM (
@@ -792,5 +798,17 @@ FROM (
   UNION SELECT 5 UNION SELECT 6 UNION SELECT 7 UNION SELECT 8
   UNION SELECT 9 UNION SELECT 10 UNION SELECT 11 UNION SELECT 12
 ) as month;
+
+-- Task History table
+CREATE TABLE IF NOT EXISTS task_history (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  task_id INT NOT NULL,
+  user_id INT NOT NULL,
+  status VARCHAR(50),
+  comments TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
 
 

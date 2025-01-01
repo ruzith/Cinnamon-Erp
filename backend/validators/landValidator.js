@@ -2,7 +2,7 @@ const Joi = require('joi');
 
 const landSchema = Joi.object({
   name: Joi.string().required().trim(),
-  parcel_number: Joi.string().required().trim(),
+  land_number: Joi.string().required().trim(),
   size: Joi.number().required().positive(),
   category: Joi.string().valid('agricultural', 'residential', 'commercial', 'forest', 'other').required(),
   ownership_status: Joi.string().valid('owned', 'rent').required(),
@@ -34,4 +34,4 @@ const landSchema = Joi.object({
   }).allow(null)
 });
 
-exports.validateLand = (data) => landSchema.validate(data); 
+exports.validateLand = (data) => landSchema.validate(data);

@@ -86,7 +86,7 @@ exports.updateContractor = async (req, res) => {
 // @access  Private/Admin
 exports.deleteContractor = async (req, res) => {
   const connection = await CuttingContractor.pool.getConnection();
-  
+
   try {
     const { forceDelete, newContractorId } = req.query;
     await connection.beginTransaction();
@@ -100,7 +100,7 @@ exports.deleteContractor = async (req, res) => {
 
     // Check for active assignments
     const [assignments] = await connection.execute(`
-      SELECT la.*, l.parcel_number 
+      SELECT la.*, l.land_number
       FROM land_assignments la
       JOIN lands l ON la.land_id = l.id
       WHERE la.contractor_id = ? AND la.status = "active"`,
@@ -109,8 +109,8 @@ exports.deleteContractor = async (req, res) => {
 
     // Check for pending payments
     const [payments] = await connection.execute(`
-      SELECT COUNT(*) as count 
-      FROM cutting_payments 
+      SELECT COUNT(*) as count
+      FROM cutting_payments
       WHERE contractor_id = ? AND status IN ('pending', 'due')`,
       [req.params.id]
     );
@@ -118,7 +118,7 @@ exports.deleteContractor = async (req, res) => {
     if (payments[0].count > 0) {
       await connection.rollback();
       connection.release();
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: 'Cannot delete contractor with pending payments',
         pendingPayments: payments[0].count
       });
@@ -158,8 +158,8 @@ exports.deleteContractor = async (req, res) => {
 
         await connection.commit();
         connection.release();
-        
-        return res.status(200).json({ 
+
+        return res.status(200).json({
           message: 'Contractor deleted successfully',
           reassignedAssignments: assignments
         });
@@ -180,7 +180,7 @@ exports.deleteContractor = async (req, res) => {
           'UPDATE land_assignments SET contractor_id = ? WHERE contractor_id = ?',
           [newContractorId, req.params.id]
         );
-        
+
         await connection.execute(
           'UPDATE cutting_payments SET contractor_id = ? WHERE contractor_id = ?',
           [newContractorId, req.params.id]
@@ -195,8 +195,8 @@ exports.deleteContractor = async (req, res) => {
 
       await connection.commit();
       connection.release();
-      
-      return res.status(200).json({ 
+
+      return res.status(200).json({
         message: 'Contractor deleted successfully'
       });
     }
@@ -214,9 +214,9 @@ exports.deleteContractor = async (req, res) => {
 exports.getAssignments = async (req, res) => {
   try {
     const [rows] = await CuttingContractor.pool.execute(`
-      SELECT la.*, 
+      SELECT la.*,
              cc.name as contractor_name,
-             l.parcel_number,
+             l.land_number,
              l.location
       FROM land_assignments la
       JOIN cutting_contractors cc ON la.contractor_id = cc.id
@@ -265,8 +265,8 @@ exports.createAssignment = async (req, res) => {
 
     // Insert the assignment with explicit column names
     const [result] = await CuttingContractor.pool.execute(
-      `INSERT INTO land_assignments 
-       (contractor_id, land_id, start_date, end_date, status) 
+      `INSERT INTO land_assignments
+       (contractor_id, land_id, start_date, end_date, status)
        VALUES (?, ?, ?, ?, ?)`,
       [
         req.body.contractor_id,
@@ -279,7 +279,7 @@ exports.createAssignment = async (req, res) => {
 
     // Get the created assignment with details
     const [assignment] = await CuttingContractor.pool.execute(
-      `SELECT la.*, cc.name as contractor_name, l.parcel_number, l.location
+      `SELECT la.*, cc.name as contractor_name, l.land_number, l.location
        FROM land_assignments la
        JOIN cutting_contractors cc ON la.contractor_id = cc.id
        JOIN lands l ON la.land_id = l.id
@@ -345,7 +345,7 @@ exports.updateAssignment = async (req, res) => {
     );
 
     const [updatedAssignment] = await CuttingContractor.pool.execute(
-      `SELECT la.*, cc.name as contractor_name, l.parcel_number, l.location
+      `SELECT la.*, cc.name as contractor_name, l.land_number, l.location
        FROM land_assignments la
        JOIN cutting_contractors cc ON la.contractor_id = cc.id
        JOIN lands l ON la.land_id = l.id
@@ -375,8 +375,8 @@ exports.deleteAssignment = async (req, res) => {
 
     // Check if assignment can be deleted (e.g., not completed or in progress)
     if (assignment[0].status === 'completed' || assignment[0].status === 'in_progress') {
-      return res.status(400).json({ 
-        message: 'Cannot delete completed or in-progress assignments' 
+      return res.status(400).json({
+        message: 'Cannot delete completed or in-progress assignments'
       });
     }
 
@@ -397,11 +397,11 @@ exports.deleteAssignment = async (req, res) => {
 exports.getTasks = async (req, res) => {
   try {
     const [rows] = await CuttingContractor.pool.execute(`
-      SELECT ct.*, 
+      SELECT ct.*,
              la.start_date,
              la.end_date,
              cc.name as contractor_name,
-             l.parcel_number,
+             l.land_number,
              l.location
       FROM cutting_tasks ct
       JOIN land_assignments la ON ct.assignment_id = la.id
@@ -421,11 +421,11 @@ exports.getTasks = async (req, res) => {
 exports.getTask = async (req, res) => {
   try {
     const [rows] = await CuttingContractor.pool.execute(
-      `SELECT ct.*, 
+      `SELECT ct.*,
               la.start_date,
               la.end_date,
               cc.name as contractor_name,
-              l.parcel_number,
+              l.land_number,
               l.location
        FROM cutting_tasks ct
        JOIN land_assignments la ON ct.assignment_id = la.id
@@ -470,11 +470,11 @@ exports.createTask = async (req, res) => {
     );
 
     const [task] = await CuttingContractor.pool.execute(
-      `SELECT ct.*, 
+      `SELECT ct.*,
               la.start_date,
               la.end_date,
               cc.name as contractor_name,
-              l.parcel_number,
+              l.land_number,
               l.location
        FROM cutting_tasks ct
        JOIN land_assignments la ON ct.assignment_id = la.id
@@ -510,11 +510,11 @@ exports.updateTask = async (req, res) => {
     );
 
     const [updatedTask] = await CuttingContractor.pool.execute(
-      `SELECT ct.*, 
+      `SELECT ct.*,
               la.start_date,
               la.end_date,
               cc.name as contractor_name,
-              l.parcel_number,
+              l.land_number,
               l.location
        FROM cutting_tasks ct
        JOIN land_assignments la ON ct.assignment_id = la.id
@@ -546,8 +546,8 @@ exports.deleteTask = async (req, res) => {
 
     // Check if task can be deleted (e.g., not completed)
     if (task[0].status === 'completed') {
-      return res.status(400).json({ 
-        message: 'Cannot delete completed tasks' 
+      return res.status(400).json({
+        message: 'Cannot delete completed tasks'
       });
     }
 
@@ -607,9 +607,9 @@ exports.createPayment = async (req, res) => {
 exports.getPayments = async (req, res) => {
   try {
     const [rows] = await CuttingPayment.pool.execute(`
-      SELECT cp.*, 
+      SELECT cp.*,
              cc.name as contractor_name,
-             l.parcel_number,
+             l.land_number,
              l.location,
              u.name as created_by_name
       FROM cutting_payments cp
@@ -635,4 +635,4 @@ exports.getPaymentsByContractor = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
-}; 
+};

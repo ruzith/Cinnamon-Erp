@@ -37,4 +37,4 @@ class SalaryStructure extends BaseModel {
   }
 }
 
-module.exports = new SalaryStructure(); 
+module.exports = new SalaryStructure();

@@ -26,11 +26,18 @@ const deleteEmployee = async (id) => {
   return response.data;
 };
 
+// Get employee task report
+const getEmployeeTaskReport = async (id) => {
+  const response = await axios.get(API_URL + id + '/task-report');
+  return response.data;
+};
+
 const employeeService = {
   getEmployees,
   createEmployee,
   updateEmployee,
-  deleteEmployee
+  deleteEmployee,
+  getEmployeeTaskReport
 };
 
-export default employeeService; 
+export default employeeService;

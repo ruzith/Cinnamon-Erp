@@ -160,7 +160,7 @@ const LandManagement = () => {
           <TableHead>
             <TableRow>
               <TableCell>Name</TableCell>
-              <TableCell>Parcel Number</TableCell>
+              <TableCell>Land Number</TableCell>
               <TableCell>Size</TableCell>
               <TableCell>Category</TableCell>
               <TableCell>Ownership</TableCell>
@@ -173,7 +173,7 @@ const LandManagement = () => {
             {lands.map((land) => (
               <TableRow key={land.id} hover>
                 <TableCell>{land.name}</TableCell>
-                <TableCell>{land.parcel_number}</TableCell>
+                <TableCell>{land.land_number}</TableCell>
                 <TableCell>{land.size} ha</TableCell>
                 <TableCell>
                   <Chip

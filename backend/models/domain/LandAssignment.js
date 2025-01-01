@@ -9,7 +9,7 @@ class LandAssignment extends BaseModel {
     const [rows] = await this.pool.execute(`
       SELECT la.*,
              cc.name as contractor_name,
-             l.parcel_number,
+             l.land_number,
              l.name as land_name,
              u.name as created_by_name
       FROM land_assignments la
@@ -27,7 +27,7 @@ class LandAssignment extends BaseModel {
     const [rows] = await this.pool.execute(`
       SELECT la.*,
              cc.name as contractor_name,
-             l.parcel_number,
+             l.land_number,
              l.name as land_name
       FROM land_assignments la
       JOIN cutting_contractors cc ON la.contractor_id = cc.id
@@ -39,4 +39,4 @@ class LandAssignment extends BaseModel {
   }
 }
 
-module.exports = new LandAssignment(); 
+module.exports = new LandAssignment();

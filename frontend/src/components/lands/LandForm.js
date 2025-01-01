@@ -16,7 +16,7 @@ const LandForm = ({ land, onClose }) => {
   const dispatch = useDispatch();
   const [formData, setFormData] = useState({
     name: land?.name || '',
-    parcel_number: land?.parcel_number || '',
+    land_number: land?.land_number || '',
     size: land?.size || '',
     category: land?.category || '',
     ownership_status: land?.ownership_status || 'owned',
@@ -83,9 +83,9 @@ const LandForm = ({ land, onClose }) => {
         <Grid item xs={12} sm={6}>
           <TextField
             fullWidth
-            label="Parcel Number"
-            name="parcel_number"
-            value={formData.parcel_number}
+            label="Land Number"
+            name="land_number"
+            value={formData.land_number}
             onChange={handleChange}
             required
           />
@@ -237,4 +237,4 @@ const LandForm = ({ land, onClose }) => {
   );
 };
 
-export default LandForm; 
+export default LandForm;

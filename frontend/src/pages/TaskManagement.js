@@ -23,6 +23,8 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -32,6 +34,11 @@ import {
   CheckCircle as CompletedIcon,
   Pending as PendingIcon,
   Schedule as InProgressIcon,
+  Cancel as CancelIcon,
+  PersonAdd as AssignIcon,
+  Assessment as AssessmentIcon,
+  Timeline as TimelineIcon,
+  Schedule,
 } from '@mui/icons-material';
 import axios from 'axios';
 import SummaryCard from '../components/common/SummaryCard';
@@ -39,8 +46,16 @@ import SummaryCard from '../components/common/SummaryCard';
 const TaskManagement = () => {
   const [tasks, setTasks] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
+  const [assignDialog, setAssignDialog] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
+  const [categoryDialog, setCategoryDialog] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [categoryFormData, setCategoryFormData] = useState({
+    name: '',
+    description: ''
+  });
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -48,15 +63,30 @@ const TaskManagement = () => {
     priority: 'medium',
     status: 'pending',
     due_date: '',
-    category: '',
+    category_id: '',
     estimated_hours: '',
     notes: ''
   });
+  const [activeTab, setActiveTab] = useState(0);
+  const [selectedEmployee, setSelectedEmployee] = useState('');
+  const [taskReportDialog, setTaskReportDialog] = useState(false);
+  const [selectedTaskReport, setSelectedTaskReport] = useState(null);
+  const [taskReport, setTaskReport] = useState(null);
 
   useEffect(() => {
     fetchTasks();
     fetchEmployees();
+    fetchCategories();
   }, []);
+
+  const fetchCategories = async () => {
+    try {
+      const response = await axios.get('/api/task-categories');
+      setCategories(response.data);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
+  };
 
   const fetchTasks = async () => {
     try {
@@ -86,7 +116,7 @@ const TaskManagement = () => {
         priority: task.priority,
         status: task.status,
         due_date: task.due_date?.split('T')[0] || '',
-        category: task.category,
+        category_id: task.category_id || '',
         estimated_hours: task.estimated_hours,
         notes: task.notes
       });
@@ -99,7 +129,7 @@ const TaskManagement = () => {
         priority: 'medium',
         status: 'pending',
         due_date: '',
-        category: '',
+        category_id: '',
         estimated_hours: '',
         notes: ''
       });
@@ -127,7 +157,7 @@ const TaskManagement = () => {
         ...formData,
         estimated_hours: formData.estimated_hours ? Number(formData.estimated_hours) : null,
         // Ensure empty strings are sent as null
-        category: formData.category || null,
+        category_id: formData.category_id || null,
         notes: formData.notes || null,
         assigned_to: formData.assigned_to || null
       };
@@ -151,6 +181,17 @@ const TaskManagement = () => {
         fetchTasks();
       } catch (error) {
         console.error('Error deleting task:', error);
+      }
+    }
+  };
+
+  const handleCancelTask = async (taskId) => {
+    if (window.confirm('Are you sure you want to cancel this task?')) {
+      try {
+        await axios.put(`/api/tasks/${taskId}`, { status: 'cancelled' });
+        fetchTasks();
+      } catch (error) {
+        console.error('Error cancelling task:', error);
       }
     }
   };
@@ -193,6 +234,222 @@ const TaskManagement = () => {
     }
   };
 
+  const getCategoryColor = (categoryName) => {
+    if (!categoryName) return 'default';
+
+    // Find the category object by name to get its ID
+    const category = categories.find(c => c.name === categoryName);
+    if (!category) return 'default';
+
+    // List of available MUI colors
+    const colors = ['primary', 'secondary', 'success', 'warning', 'error', 'info'];
+
+    // Use the category ID to consistently assign a color
+    return colors[category.id % colors.length];
+  };
+
+  const handleOpenCategoryDialog = (category = null) => {
+    if (category) {
+      setSelectedCategory(category);
+      setCategoryFormData({
+        name: category.name,
+        description: category.description || ''
+      });
+    } else {
+      setSelectedCategory(null);
+      setCategoryFormData({
+        name: '',
+        description: ''
+      });
+    }
+    setCategoryDialog(true);
+  };
+
+  const handleCloseCategoryDialog = () => {
+    setCategoryDialog(false);
+    setSelectedCategory(null);
+  };
+
+  const handleCategoryInputChange = (e) => {
+    setCategoryFormData({
+      ...categoryFormData,
+      [e.target.name]: e.target.value
+    });
+  };
+
+  const handleCategorySubmit = async (e) => {
+    e.preventDefault();
+    try {
+      if (selectedCategory) {
+        await axios.put(`/api/task-categories/${selectedCategory.id}`, categoryFormData);
+      } else {
+        await axios.post('/api/task-categories', categoryFormData);
+      }
+      await fetchCategories();
+      handleCloseCategoryDialog();
+    } catch (error) {
+      console.error('Error saving task category:', error);
+    }
+  };
+
+  const handleDeleteCategory = async (categoryId) => {
+    if (window.confirm('Are you sure you want to delete this category?')) {
+      try {
+        await axios.delete(`/api/task-categories/${categoryId}`);
+        await fetchCategories();
+      } catch (error) {
+        if (error.response?.data?.hasTasks) {
+          alert('Cannot delete category that has tasks assigned to it. Please reassign or delete the tasks first.');
+        } else {
+          console.error('Error deleting category:', error);
+        }
+      }
+    }
+  };
+
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
+  };
+
+  const handleOpenAssignDialog = (task) => {
+    setSelectedTask(task);
+    setSelectedEmployee(task.assigned_to?.id || '');
+    setAssignDialog(true);
+  };
+
+  const handleCloseAssignDialog = () => {
+    setAssignDialog(false);
+    setSelectedTask(null);
+    setSelectedEmployee('');
+  };
+
+  const handleAssignTask = async () => {
+    try {
+      await axios.put(`/api/tasks/${selectedTask.id}`, {
+        assigned_to: selectedEmployee || null
+      });
+      fetchTasks();
+      handleCloseAssignDialog();
+    } catch (error) {
+      console.error('Error assigning task:', error);
+    }
+  };
+
+  const handleOpenTaskReport = async (task) => {
+    setSelectedTaskReport(task);
+    try {
+      // Fetch task report data
+      const response = await axios.get(`/api/tasks/${task.id}/report`);
+      setTaskReport(response.data);
+      setTaskReportDialog(true);
+    } catch (error) {
+      console.error('Error fetching task report:', error);
+    }
+  };
+
+  const handleCloseTaskReport = () => {
+    setTaskReportDialog(false);
+    setSelectedTaskReport(null);
+    setTaskReport(null);
+  };
+
+  const TaskReportDialog = () => (
+    <Dialog
+      open={taskReportDialog}
+      onClose={handleCloseTaskReport}
+      maxWidth="md"
+      fullWidth
+    >
+      <DialogTitle>
+        Task Report - {selectedTaskReport?.title}
+      </DialogTitle>
+      <DialogContent>
+        {taskReport && (
+          <Box>
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+              <Grid item xs={12} sm={6} md={4}>
+                <SummaryCard
+                  title="Estimated Hours"
+                  value={`${taskReport.estimated_hours || 0} hrs`}
+                  icon={TimelineIcon}
+                  iconColor="primary.main"
+                  gradientColor="primary"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={4}>
+                <SummaryCard
+                  title="Progress"
+                  value={`${taskReport.progress || 0}%`}
+                  icon={AssessmentIcon}
+                  iconColor="info.main"
+                  gradientColor="info"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={4}>
+                <SummaryCard
+                  title="Days Remaining"
+                  value={taskReport.days_remaining}
+                  icon={Schedule}
+                  iconColor="warning.main"
+                  gradientColor="warning"
+                />
+              </Grid>
+            </Grid>
+
+            <Typography variant="h6" sx={{ mb: 2 }}>Task Details</Typography>
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+              <Grid item xs={12} md={6}>
+                <Paper sx={{ p: 2 }}>
+                  <Typography variant="subtitle2" color="text.secondary">Description</Typography>
+                  <Typography>{selectedTaskReport?.description || 'No description'}</Typography>
+                </Paper>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Paper sx={{ p: 2 }}>
+                  <Typography variant="subtitle2" color="text.secondary">Notes</Typography>
+                  <Typography>{selectedTaskReport?.notes || 'No notes'}</Typography>
+                </Paper>
+              </Grid>
+            </Grid>
+
+            <Typography variant="h6" sx={{ mb: 2 }}>History & Updates</Typography>
+            <TableContainer component={Paper}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Date</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>Updated By</TableCell>
+                    <TableCell>Comments</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {taskReport.history?.map((entry, index) => (
+                    <TableRow key={index}>
+                      <TableCell>{new Date(entry.created_at).toLocaleDateString()}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={entry.status}
+                          color={getStatusColor(entry.status)}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell>{entry.updated_by}</TableCell>
+                      <TableCell>{entry.comments}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={handleCloseTaskReport}>Close</Button>
+      </DialogActions>
+    </Dialog>
+  );
+
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
       {/* Header */}
@@ -200,24 +457,32 @@ const TaskManagement = () => {
         <Typography variant="h4" sx={{ fontWeight: 600 }}>
           Task Management
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => handleOpenDialog()}
-        >
-          New Task
-        </Button>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="outlined"
+            startIcon={<AddIcon />}
+            onClick={() => handleOpenCategoryDialog()}
+          >
+            New Category
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => handleOpenDialog()}
+          >
+            New Task
+          </Button>
+        </Box>
       </Box>
 
-      {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
           <SummaryCard
             icon={TaskIcon}
             title="Total Tasks"
             value={summaryStats.totalTasks}
-            iconColor="#9C27B0"
-            gradientColor="secondary"
+            iconColor="#1976d2"
+            gradientColor="primary"
           />
         </Grid>
 
@@ -226,8 +491,8 @@ const TaskManagement = () => {
             icon={CompletedIcon}
             title="Completed"
             value={summaryStats.completedTasks}
-            iconColor="#D32F2F"
-            gradientColor="error"
+            iconColor="#2e7d32"
+            gradientColor="success"
           />
         </Grid>
 
@@ -236,7 +501,7 @@ const TaskManagement = () => {
             icon={PendingIcon}
             title="Pending"
             value={summaryStats.pendingTasks}
-            iconColor="#ED6C02"
+            iconColor="#ed6c02"
             gradientColor="warning"
           />
         </Grid>
@@ -246,78 +511,166 @@ const TaskManagement = () => {
             icon={InProgressIcon}
             title="In Progress"
             value={summaryStats.inProgressTasks}
-            iconColor="#0288D1"
+            iconColor="#0288d1"
             gradientColor="info"
           />
         </Grid>
       </Grid>
 
-      {/* Tasks Table */}
       <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Title</TableCell>
-                <TableCell>Assigned To</TableCell>
-                <TableCell>Due Date</TableCell>
-                <TableCell>Priority</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {tasks.map((task) => (
-                <TableRow key={task.id} hover>
-                  <TableCell>
-                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                      {task.title}
-                    </Typography>
-                    <Typography variant="caption" color="textSecondary">
-                      {task.description}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    {task.assigned_to_name || 'Unassigned'}
-                  </TableCell>
-                  <TableCell>
-                    {new Date(task.due_date).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={task.priority || 'Not Set'}
-                      color={getPriorityColor(task.priority)}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={task.status}
-                      color={getStatusColor(task.status)}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell align="right">
-                    <IconButton
-                      size="small"
-                      onClick={() => handleOpenDialog(task)}
-                      sx={{ color: 'primary.main' }}
-                    >
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleDeleteTask(task.id)}
-                      sx={{ color: 'error.main', ml: 1 }}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </TableCell>
+        <Tabs
+          value={activeTab}
+          onChange={handleTabChange}
+          sx={{ borderBottom: 1, borderColor: 'divider', px: 2, pt: 2 }}
+        >
+          <Tab label="Tasks" />
+          <Tab label="Categories" />
+        </Tabs>
+
+        {/* Tasks Tab Content */}
+        {activeTab === 0 && (
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Title</TableCell>
+                  <TableCell>Category</TableCell>
+                  <TableCell>Assigned To</TableCell>
+                  <TableCell>Due Date</TableCell>
+                  <TableCell>Priority</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="right">Actions</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+              </TableHead>
+              <TableBody>
+                {tasks.map((task) => (
+                  <TableRow key={task.id} hover>
+                    <TableCell>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        {task.title}
+                      </Typography>
+                      <Typography variant="caption" color="textSecondary">
+                        {task.description}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      {task.category_name && (
+                        <Chip
+                          label={task.category_name}
+                          size="small"
+                          color={getCategoryColor(task.category_name)}
+                          sx={{ textTransform: 'capitalize' }}
+                        />
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {task.assigned_to_name || 'Unassigned'}
+                    </TableCell>
+                    <TableCell>
+                      {task.due_date ? new Date(task.due_date).toLocaleDateString() : '-'}
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={task.priority || 'Not Set'}
+                        color={getPriorityColor(task.priority)}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={task.status}
+                        color={getStatusColor(task.status)}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpenTaskReport(task)}
+                        sx={{ color: 'info.main' }}
+                        title="View Task Report"
+                      >
+                        <AssessmentIcon />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpenAssignDialog(task)}
+                        sx={{ color: 'info.main', ml: 1 }}
+                        title="Assign Task"
+                      >
+                        <AssignIcon />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpenDialog(task)}
+                        sx={{ color: 'primary.main', ml: 1 }}
+                      >
+                        <EditIcon />
+                      </IconButton>
+                      {task.status !== 'cancelled' && (
+                        <IconButton
+                          size="small"
+                          onClick={() => handleCancelTask(task.id)}
+                          sx={{ color: 'warning.main', ml: 1 }}
+                        >
+                          <CancelIcon />
+                        </IconButton>
+                      )}
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDeleteTask(task.id)}
+                        sx={{ color: 'error.main', ml: 1 }}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+
+        {/* Categories Tab Content */}
+        {activeTab === 1 && (
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Name</TableCell>
+                  <TableCell>Description</TableCell>
+                  <TableCell>Task Count</TableCell>
+                  <TableCell align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {categories.map((category) => (
+                  <TableRow key={category.id} hover>
+                    <TableCell>{category.name}</TableCell>
+                    <TableCell>{category.description || '-'}</TableCell>
+                    <TableCell>{category.task_count || 0}</TableCell>
+                    <TableCell align="right">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpenCategoryDialog(category)}
+                        sx={{ color: 'primary.main' }}
+                      >
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDeleteCategory(category.id)}
+                        sx={{ color: 'error.main', ml: 1 }}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
       </Paper>
 
       {/* Task Dialog */}
@@ -420,13 +773,24 @@ const TaskManagement = () => {
               </FormControl>
             </Grid>
             <Grid item xs={12} sm={6}>
-              <TextField
-                name="category"
-                label="Category"
-                fullWidth
-                value={formData.category}
-                onChange={handleInputChange}
-              />
+              <FormControl fullWidth>
+                <InputLabel>Category</InputLabel>
+                <Select
+                  name="category_id"
+                  value={formData.category_id}
+                  label="Category"
+                  onChange={handleInputChange}
+                >
+                  <MenuItem value="">
+                    <em>No Category</em>
+                  </MenuItem>
+                  {categories.map((category) => (
+                    <MenuItem key={category.id} value={category.id}>
+                      {category.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
@@ -463,6 +827,98 @@ const TaskManagement = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Assignment Dialog */}
+      <Dialog
+        open={assignDialog}
+        onClose={handleCloseAssignDialog}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>
+          Assign Task
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 2 }}>
+            <FormControl fullWidth>
+              <InputLabel>Assign To</InputLabel>
+              <Select
+                value={selectedEmployee}
+                label="Assign To"
+                onChange={(e) => setSelectedEmployee(e.target.value)}
+              >
+                <MenuItem value="">
+                  <em>Unassigned</em>
+                </MenuItem>
+                {employees.map((employee) => (
+                  <MenuItem key={employee.id} value={employee.id}>
+                    {employee.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseAssignDialog}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleAssignTask}
+            color="primary"
+          >
+            Assign
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Category Dialog */}
+      <Dialog
+        open={categoryDialog}
+        onClose={handleCloseCategoryDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          {selectedCategory ? 'Edit Category' : 'New Category'}
+        </DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <TextField
+                name="name"
+                label="Category Name"
+                fullWidth
+                value={categoryFormData.name}
+                onChange={handleCategoryInputChange}
+                required
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                name="description"
+                label="Description"
+                fullWidth
+                multiline
+                rows={3}
+                value={categoryFormData.description}
+                onChange={handleCategoryInputChange}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseCategoryDialog}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleCategorySubmit}
+            color="primary"
+          >
+            {selectedCategory ? 'Update Category' : 'Create Category'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <TaskReportDialog />
     </Box>
   );
 };

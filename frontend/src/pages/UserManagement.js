@@ -24,6 +24,8 @@ import {
     InputLabel,
     Select,
     MenuItem,
+    Switch,
+    Stack,
 } from '@mui/material';
 import {
     Add as AddIcon,
@@ -32,7 +34,7 @@ import {
     Group as UsersIcon,
     AdminPanelSettings as AdminIcon,
     Person as ActiveUserIcon,
-    Business as DepartmentIcon,
+    SupervisorAccount as ManagerIcon,
 } from '@mui/icons-material';
 import { getUsers, deleteUser, updateUser, createUser } from '../features/users/userSlice';
 import SummaryCard from '../components/common/SummaryCard';
@@ -52,7 +54,7 @@ const UserManagement = () => {
         totalUsers: users.length,
         adminUsers: users.filter(user => user.role === 'admin').length,
         activeUsers: users.filter(user => user.status === 'active').length,
-        departments: [...new Set(users.map(user => user.department))].length
+        managerUsers: users.filter(user => user.role === 'manager').length
     };
 
     const handleEdit = (user) => {
@@ -61,13 +63,26 @@ const UserManagement = () => {
     };
 
     const handleDelete = async (userId) => {
-        if (window.confirm('Are you sure you want to delete this user?')) {
+        if (window.confirm('Do you want to permanently delete this user? This action cannot be undone.')) {
             try {
-                await dispatch(deleteUser(userId));
+                await dispatch(deleteUser({ id: userId, permanent: true }));
                 dispatch(getUsers());
             } catch (error) {
                 console.error('Error deleting user:', error);
             }
+        }
+    };
+
+    const handleToggleStatus = async (user) => {
+        try {
+            const newStatus = user.status === 'active' ? 'inactive' : 'active';
+            await dispatch(updateUser({
+                id: user.id,
+                userData: { ...user, status: newStatus }
+            }));
+            dispatch(getUsers());
+        } catch (error) {
+            console.error('Error updating user status:', error);
         }
     };
 
@@ -96,7 +111,6 @@ const UserManagement = () => {
                 email: formData.get('email'),
                 role: formData.get('role'),
                 status: formData.get('status'),
-                department: formData.get('department'),
                 ...(selectedUser ? {} : {
                     password: formData.get('password')
                 })
@@ -149,15 +163,6 @@ const UserManagement = () => {
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
                     <SummaryCard
-                        icon={AdminIcon}
-                        title="Administrators"
-                        value={summaryStats.adminUsers}
-                        iconColor="#D32F2F"
-                        gradientColor="error"
-                    />
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                    <SummaryCard
                         icon={ActiveUserIcon}
                         title="Active Users"
                         value={summaryStats.activeUsers}
@@ -167,11 +172,20 @@ const UserManagement = () => {
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
                     <SummaryCard
-                        icon={DepartmentIcon}
-                        title="Departments"
-                        value={summaryStats.departments}
+                        icon={ManagerIcon}
+                        title="Managers"
+                        value={summaryStats.managerUsers}
                         iconColor="#ED6C02"
                         gradientColor="warning"
+                    />
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                    <SummaryCard
+                        icon={AdminIcon}
+                        title="Administrators"
+                        value={summaryStats.adminUsers}
+                        iconColor="#D32F2F"
+                        gradientColor="error"
                     />
                 </Grid>
             </Grid>
@@ -184,7 +198,6 @@ const UserManagement = () => {
                             <TableRow>
                                 <TableCell>Full Name</TableCell>
                                 <TableCell>Email</TableCell>
-                                <TableCell>Department</TableCell>
                                 <TableCell>Role</TableCell>
                                 <TableCell>Status</TableCell>
                                 <TableCell align="right">Actions</TableCell>
@@ -195,7 +208,6 @@ const UserManagement = () => {
                                 <TableRow key={user.id} hover>
                                     <TableCell>{user.name}</TableCell>
                                     <TableCell>{user.email}</TableCell>
-                                    <TableCell>{user.department}</TableCell>
                                     <TableCell>
                                         <Chip
                                             label={user.role}
@@ -204,11 +216,19 @@ const UserManagement = () => {
                                         />
                                     </TableCell>
                                     <TableCell>
-                                        <Chip
-                                            label={user.status}
-                                            color={user.status === 'active' ? 'success' : 'default'}
-                                            size="small"
-                                        />
+                                        <Stack direction="row" spacing={1} alignItems="center">
+                                            <Chip
+                                                label={user.status}
+                                                color={user.status === 'active' ? 'success' : 'default'}
+                                                size="small"
+                                            />
+                                            <Switch
+                                                checked={user.status === 'active'}
+                                                onChange={() => handleToggleStatus(user)}
+                                                color="success"
+                                                size="small"
+                                            />
+                                        </Stack>
                                     </TableCell>
                                     <TableCell align="right">
                                         <IconButton
@@ -307,14 +327,6 @@ const UserManagement = () => {
                                         <MenuItem value="inactive">Inactive</MenuItem>
                                     </Select>
                                 </FormControl>
-                            </Grid>
-                            <Grid item xs={12}>
-                                <TextField
-                                    fullWidth
-                                    label="Department"
-                                    name="department"
-                                    defaultValue={selectedUser?.department || ''}
-                                />
                             </Grid>
                         </Grid>
                     </form>

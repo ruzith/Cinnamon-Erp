@@ -55,4 +55,18 @@ router.delete('/:id', protect, authorize('admin', 'manager'), async (req, res) =
   }
 });
 
-module.exports = router; 
+// Get task report
+router.get('/:id/report', protect, async (req, res) => {
+  try {
+    const report = await Task.getTaskReport(req.params.id);
+    res.json(report);
+  } catch (error) {
+    if (error.message === 'Task not found') {
+      res.status(404).json({ message: error.message });
+    } else {
+      res.status(500).json({ message: error.message });
+    }
+  }
+});
+
+module.exports = router;

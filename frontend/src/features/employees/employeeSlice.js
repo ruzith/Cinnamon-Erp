@@ -1,101 +1,79 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import employeeService from './employeeService';
+import axios from 'axios';
 
-const initialState = {
-  employees: [],
-  isError: false,
-  isSuccess: false,
-  isLoading: false,
-  message: ''
-};
-
-export const getEmployees = createAsyncThunk('employees/getAll', async (_, thunkAPI) => {
-  try {
-    const token = thunkAPI.getState().auth.user.token;
-    return await employeeService.getEmployees(token);
-  } catch (error) {
-    return thunkAPI.rejectWithValue(error.response.data.message);
+// Async thunks
+export const getEmployees = createAsyncThunk(
+  'employees/getEmployees',
+  async () => {
+    const response = await axios.get('/api/employees');
+    return response.data;
   }
-});
+);
 
 export const createEmployee = createAsyncThunk(
-  'employees/create',
-  async (employeeData, thunkAPI) => {
-    try {
-      const token = thunkAPI.getState().auth.user.token;
-      return await employeeService.createEmployee(employeeData, token);
-    } catch (error) {
-      return thunkAPI.rejectWithValue(error.response.data.message);
-    }
+  'employees/createEmployee',
+  async (employeeData) => {
+    const response = await axios.post('/api/employees', employeeData);
+    return response.data;
   }
 );
 
 export const updateEmployee = createAsyncThunk(
-  'employees/update',
-  async ({ id, employeeData }, thunkAPI) => {
-    try {
-      const token = thunkAPI.getState().auth.user.token;
-      return await employeeService.updateEmployee(id, employeeData, token);
-    } catch (error) {
-      return thunkAPI.rejectWithValue(error.response.data.message);
-    }
+  'employees/updateEmployee',
+  async ({ id, employeeData }) => {
+    const response = await axios.put(`/api/employees/${id}`, employeeData);
+    return response.data;
   }
 );
 
 export const deleteEmployee = createAsyncThunk(
-  'employees/delete',
-  async (id, thunkAPI) => {
-    try {
-      const token = thunkAPI.getState().auth.user.token;
-      return await employeeService.deleteEmployee(id, token);
-    } catch (error) {
-      return thunkAPI.rejectWithValue(error.response.data.message);
-    }
+  'employees/deleteEmployee',
+  async (id) => {
+    await axios.delete(`/api/employees/${id}`);
+    return id;
   }
 );
 
-export const employeeSlice = createSlice({
-  name: 'employee',
+const initialState = {
+  employees: [],
+  status: 'idle',
+  error: null
+};
+
+const employeeSlice = createSlice({
+  name: 'employees',
   initialState,
-  reducers: {
-    reset: (state) => initialState
-  },
+  reducers: {},
   extraReducers: (builder) => {
     builder
+      // Get employees
       .addCase(getEmployees.pending, (state) => {
-        state.isLoading = true;
+        state.status = 'loading';
       })
       .addCase(getEmployees.fulfilled, (state, action) => {
-        state.isLoading = false;
-        state.isSuccess = true;
+        state.status = 'succeeded';
         state.employees = action.payload;
       })
       .addCase(getEmployees.rejected, (state, action) => {
-        state.isLoading = false;
-        state.isError = true;
-        state.message = action.payload;
+        state.status = 'failed';
+        state.error = action.error.message;
       })
+      // Create employee
       .addCase(createEmployee.fulfilled, (state, action) => {
-        state.isLoading = false;
-        state.isSuccess = true;
         state.employees.push(action.payload);
       })
+      // Update employee
       .addCase(updateEmployee.fulfilled, (state, action) => {
-        state.isLoading = false;
-        state.isSuccess = true;
-        state.employees = state.employees.map(employee => 
-          employee.id === action.payload.id ? action.payload : employee
-        );
+        const index = state.employees.findIndex(employee => employee.id === action.payload.id);
+        if (index !== -1) {
+          state.employees[index] = action.payload;
+        }
       })
+      // Delete employee
       .addCase(deleteEmployee.fulfilled, (state, action) => {
-        state.isLoading = false;
-        state.isSuccess = true;
-        state.employees = state.employees.filter(
-          employee => employee.id !== action.payload.id
-        );
+        state.employees = state.employees.filter(employee => employee.id !== action.payload);
       });
   }
 });
 
-export const { reset } = employeeSlice.actions;
-export default employeeSlice.reducer; 
+export default employeeSlice.reducer;

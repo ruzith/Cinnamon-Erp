@@ -25,6 +25,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { useCurrencies } from './hooks/useCurrencies';
 import { useSettings } from './hooks/useSettings';
+import HRManagement from './pages/HRManagement';
 
 function App() {
   const [darkMode, setDarkMode] = useState(() => {
@@ -50,7 +51,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
-          
+
           <Route path="/*" element={
             <PrivateRoute>
               <Layout darkMode={darkMode} toggleDarkMode={toggleDarkMode}>
@@ -69,6 +70,7 @@ function App() {
                   <Route path="/loans/*" element={<LoanBook />} />
                   <Route path="/reports/*" element={<Reports />} />
                   <Route path="/settings/*" element={<Settings />} />
+                  <Route path="/hr" element={<HRManagement />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </Layout>

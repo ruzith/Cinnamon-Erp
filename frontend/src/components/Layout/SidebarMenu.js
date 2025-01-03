@@ -14,6 +14,7 @@ import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import SettingsIcon from '@mui/icons-material/Settings';
 import LocalFloristIcon from '@mui/icons-material/LocalFlorist';
+import PaymentsIcon from '@mui/icons-material/Payments';
 
 export const menuItems = [
     {
@@ -41,7 +42,11 @@ export const menuItems = [
         text: 'Task Management',
         icon: <AssignmentIcon />
     },
-
+    {
+        path: '/hr',
+        text: 'HR Management',
+        icon: <PaymentsIcon />
+    },
     {
         path: '/cutting',
         text: 'Cutting Management',
@@ -87,4 +92,4 @@ export const menuItems = [
         text: 'Settings',
         icon: <SettingsIcon />
     }
-]; 
+];

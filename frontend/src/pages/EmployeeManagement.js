@@ -50,6 +50,7 @@ import {
   Pending as PendingIcon,
   Timeline as TimelineIcon,
   Assessment as AssessmentIcon,
+  Clear as ClearIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 import {
@@ -664,7 +665,7 @@ const EmployeeManagement = () => {
         {taskReport && (
           <Box>
             <Grid container spacing={2} sx={{ mb: 3 }}>
-              <Grid item xs={12} sm={6} md={4}>
+              <Grid item xs={12} sm={6} md={3}>
                 <SummaryCard
                   title="Total Tasks"
                   value={taskReport.summary.totalTasks}
@@ -673,7 +674,7 @@ const EmployeeManagement = () => {
                   gradientColor="info"
                 />
               </Grid>
-              <Grid item xs={12} sm={6} md={4}>
+              <Grid item xs={12} sm={6} md={3}>
                 <SummaryCard
                   title="Total Hours"
                   value={`${taskReport.summary.totalHours} hrs`}
@@ -682,7 +683,7 @@ const EmployeeManagement = () => {
                   gradientColor="primary"
                 />
               </Grid>
-              <Grid item xs={12} sm={6} md={4}>
+              <Grid item xs={12} sm={6} md={3}>
                 <SummaryCard
                   title="Completed Hours"
                   value={`${taskReport.summary.completedHours} hrs`}
@@ -691,8 +692,44 @@ const EmployeeManagement = () => {
                   gradientColor="success"
                 />
               </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <SummaryCard
+                  title="Remaining Hours"
+                  value={`${taskReport.summary.remainingHours} hrs`}
+                  icon={PendingIcon}
+                  iconColor="warning.main"
+                  gradientColor="warning"
+                />
+              </Grid>
             </Grid>
 
+            {/* Task Status Summary */}
+            <Paper sx={{ p: 2, mb: 3 }}>
+              <Typography variant="h6" gutterBottom>Task Status</Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={4}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Chip label="Completed" color="success" size="small" />
+                    <Typography>{taskReport.summary.completedTasks} tasks</Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Chip label="In Progress" color="warning" size="small" />
+                    <Typography>{taskReport.summary.inProgressTasks} tasks</Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Chip label="Pending" color="default" size="small" />
+                    <Typography>{taskReport.summary.pendingTasks} tasks</Typography>
+                  </Box>
+                </Grid>
+              </Grid>
+            </Paper>
+
+            {/* Task List */}
+            <Typography variant="h6" sx={{ mb: 2 }}>Assigned Tasks</Typography>
             <TableContainer component={Paper}>
               <Table>
                 <TableHead>
@@ -708,7 +745,7 @@ const EmployeeManagement = () => {
                     <TableRow key={task.id}>
                       <TableCell>
                         <Typography variant="subtitle2">{task.title}</Typography>
-                        <Typography variant="body2" color="textSecondary">
+                        <Typography variant="body2" color="text.secondary">
                           {task.description}
                         </Typography>
                       </TableCell>
@@ -725,7 +762,7 @@ const EmployeeManagement = () => {
                           size="small"
                         />
                       </TableCell>
-                      <TableCell>{task.estimated_hours} hrs</TableCell>
+                      <TableCell>{Number(task.estimated_hours).toFixed(1)} hrs</TableCell>
                       <TableCell>
                         {task.due_date
                           ? new Date(task.due_date).toLocaleDateString()
@@ -830,6 +867,7 @@ const EmployeeManagement = () => {
           <Tab label="Employees" />
           <Tab label="Designations" />
           <Tab label="Groups" />
+          <Tab label="Task Reports" />
         </Tabs>
 
         {/* Employees Tab Content */}
@@ -894,14 +932,6 @@ const EmployeeManagement = () => {
                       </Stack>
                     </TableCell>
                     <TableCell align="right">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleOpenTaskReport(employee)}
-                        title="View Task Report"
-                        sx={{ color: 'info.main' }}
-                      >
-                        <AssessmentIcon />
-                      </IconButton>
                       <IconButton
                         size="small"
                         onClick={() => handleOpenDialog(employee)}
@@ -1012,6 +1042,88 @@ const EmployeeManagement = () => {
               </TableBody>
             </Table>
           </TableContainer>
+        )}
+
+        {/* Task Reports Tab Content */}
+        {activeTab === 3 && (
+          <Box sx={{ p: 3 }}>
+            <Grid container spacing={3}>
+              {employees.map((employee) => (
+                <Grid item xs={12} md={6} lg={4} key={employee.id}>
+                  <Paper
+                    sx={{
+                      p: 2,
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      cursor: 'pointer',
+                      '&:hover': {
+                        bgcolor: 'action.hover',
+                      },
+                    }}
+                    onClick={() => handleOpenTaskReport(employee)}
+                  >
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="h6" gutterBottom>
+                        {employee.name}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                        {employee.designation_title || 'No Designation'}
+                      </Typography>
+                    </Box>
+
+                    {taskReport && taskReport.employee_id === employee.id ? (
+                      <>
+                        <Grid container spacing={2}>
+                          <Grid item xs={6}>
+                            <Typography variant="caption" color="text.secondary">
+                              Total Tasks
+                            </Typography>
+                            <Typography variant="h6">
+                              {taskReport.summary.totalTasks}
+                            </Typography>
+                          </Grid>
+                          <Grid item xs={6}>
+                            <Typography variant="caption" color="text.secondary">
+                              Completed Tasks
+                            </Typography>
+                            <Typography variant="h6">
+                              {taskReport.summary.completedTasks}
+                            </Typography>
+                          </Grid>
+                        </Grid>
+
+                        <Box sx={{ mt: 2 }}>
+                          <Typography variant="caption" color="text.secondary">
+                            Total Hours
+                          </Typography>
+                          <Typography variant="body2">
+                            {taskReport.summary.totalHours} hrs
+                          </Typography>
+                        </Box>
+                      </>
+                    ) : (
+                      <Box sx={{ flexGrow: 1 }} />
+                    )}
+
+                    <Box sx={{ mt: 'auto', pt: 2 }}>
+                      <Button
+                        variant="outlined"
+                        fullWidth
+                        startIcon={<AssessmentIcon />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenTaskReport(employee);
+                        }}
+                      >
+                        View Report
+                      </Button>
+                    </Box>
+                  </Paper>
+                </Grid>
+              ))}
+            </Grid>
+          </Box>
         )}
       </Paper>
 
@@ -1167,7 +1279,7 @@ const EmployeeManagement = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Add the TaskReportDialog component */}
+      {/* Task Report Dialog */}
       <TaskReportDialog />
     </Box>
   );

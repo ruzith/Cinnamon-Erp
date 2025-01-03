@@ -1317,6 +1317,154 @@ const generateTaskCategories = () => [
   }
 ];
 
+// Add these helper functions after generateEmployees
+const generateSalaryAdvances = async (connection, count = 15) => {
+  const [employees] = await connection.query(
+    'SELECT id FROM employees WHERE employment_type = "permanent"'
+  );
+  const [users] = await connection.query('SELECT id FROM users WHERE role = "admin"');
+
+  return Array.from({ length: count }, () => {
+    const requestDate = faker.date.recent({ days: 30 });
+    const status = faker.helpers.arrayElement(['pending', 'approved', 'rejected']);
+
+    return {
+      employee_id: faker.helpers.arrayElement(employees).id,
+      amount: faker.number.float({ min: 5000, max: 50000, multipleOf: 100 }),
+      request_date: requestDate.toISOString().split('T')[0],
+      approval_status: status,
+      approved_by: status !== 'pending' ? users[0].id : null,
+      notes: faker.helpers.arrayElement([
+        'Emergency medical expenses',
+        'Children education fees',
+        'Family wedding',
+        'House repair',
+        null
+      ])
+    };
+  });
+};
+
+const generateEmployeePayrolls = async (connection, count = 30) => {
+  const [employees] = await connection.query(
+    'SELECT id, basic_salary FROM employees WHERE employment_type = "permanent"'
+  );
+  const [users] = await connection.query('SELECT id FROM users WHERE role = "admin"');
+
+  const payrolls = [];
+  const currentDate = new Date();
+  const currentYear = currentDate.getFullYear();
+  const currentMonth = currentDate.getMonth() + 1;
+
+  // Generate payrolls for the last 3 months
+  for (let i = 0; i < 3; i++) {
+    const month = currentMonth - i;
+    const year = month <= 0 ? currentYear - 1 : currentYear;
+    const adjustedMonth = month <= 0 ? month + 12 : month;
+
+    for (const employee of employees) {
+      const basicSalary = parseFloat(employee.basic_salary);
+      const additionalAmount = faker.number.float({ min: 0, max: 10000, multipleOf: 100 });
+      const deductions = faker.number.float({ min: 0, max: 5000, multipleOf: 100 });
+      const netSalary = basicSalary + additionalAmount - deductions;
+
+      payrolls.push({
+        employee_id: employee.id,
+        month: adjustedMonth,
+        year: year,
+        basic_salary: basicSalary,
+        additional_amount: additionalAmount,
+        deductions: deductions,
+        net_salary: netSalary,
+        status: faker.helpers.arrayElement(['draft', 'approved', 'paid']),
+        payment_date: faker.helpers.arrayElement([null, faker.date.recent({ days: 30 })]),
+        created_by: users[0].id
+      });
+    }
+  }
+
+  return payrolls;
+};
+
+const generateEmployeePayrollItems = async (connection, payrollId, additionalAmount, deductions) => {
+  const items = [];
+
+  // Generate additions
+  if (additionalAmount > 0) {
+    const additions = [
+      { description: 'Overtime', amount: faker.number.float({ min: 1000, max: 5000, multipleOf: 100 }) },
+      { description: 'Performance Bonus', amount: faker.number.float({ min: 2000, max: 5000, multipleOf: 100 }) },
+      { description: 'Transport Allowance', amount: faker.number.float({ min: 1000, max: 3000, multipleOf: 100 }) }
+    ];
+
+    let remainingAdditions = additionalAmount;
+    for (const addition of additions) {
+      if (remainingAdditions <= 0) break;
+      const amount = Math.min(addition.amount, remainingAdditions);
+      items.push({
+        payroll_id: payrollId,
+        type: 'addition',
+        description: addition.description,
+        amount: amount
+      });
+      remainingAdditions -= amount;
+    }
+  }
+
+  // Generate deductions
+  if (deductions > 0) {
+    const deductionItems = [
+      { description: 'Salary Advance', amount: faker.number.float({ min: 1000, max: 3000, multipleOf: 100 }) },
+      { description: 'EPF', amount: faker.number.float({ min: 500, max: 2000, multipleOf: 100 }) },
+      { description: 'Insurance', amount: faker.number.float({ min: 500, max: 1000, multipleOf: 100 }) }
+    ];
+
+    let remainingDeductions = deductions;
+    for (const deduction of deductionItems) {
+      if (remainingDeductions <= 0) break;
+      const amount = Math.min(deduction.amount, remainingDeductions);
+      items.push({
+        payroll_id: payrollId,
+        type: 'deduction',
+        description: deduction.description,
+        amount: amount
+      });
+      remainingDeductions -= amount;
+    }
+  }
+
+  return items;
+};
+
+const generateEmployeeWorkHours = async (connection, count = 100) => {
+  const [employees] = await connection.query(
+    'SELECT id FROM employees WHERE employment_type = "permanent"'
+  );
+
+  const workHours = [];
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - 30); // Last 30 days
+
+  for (const employee of employees) {
+    // Generate work hours for each day
+    for (let i = 0; i < 30; i++) {
+      const workDate = new Date(startDate);
+      workDate.setDate(workDate.getDate() + i);
+
+      // Skip weekends
+      if (workDate.getDay() === 0 || workDate.getDay() === 6) continue;
+
+      workHours.push({
+        employee_id: employee.id,
+        work_date: workDate.toISOString().split('T')[0],
+        hours_worked: faker.number.float({ min: 6, max: 10, multipleOf: 0.5 })
+      });
+    }
+  }
+
+  return workHours;
+};
+
 const seedData = async () => {
   const connection = await pool.getConnection();
 
@@ -1765,6 +1913,37 @@ const seedData = async () => {
     const groupAssignments = await assignEmployeesToGroups(connection);
     for (const assignment of groupAssignments) {
       await connection.query('INSERT INTO employee_group_members SET ?', assignment);
+    }
+
+    // Add HR management seeding in the seedData function
+    console.log('Seeding salary advances...');
+    const salaryAdvances = await generateSalaryAdvances(connection);
+    for (const advance of salaryAdvances) {
+      await connection.query('INSERT INTO salary_advances SET ?', advance);
+    }
+
+    console.log('Seeding employee payrolls...');
+    const employeePayrolls = await generateEmployeePayrolls(connection);
+    for (const payroll of employeePayrolls) {
+      const [result] = await connection.query('INSERT INTO employee_payrolls SET ?', payroll);
+
+      // Generate and insert payroll items
+      const items = await generateEmployeePayrollItems(
+        connection,
+        result.insertId,
+        payroll.additional_amount,
+        payroll.deductions
+      );
+
+      for (const item of items) {
+        await connection.query('INSERT INTO employee_payroll_items SET ?', item);
+      }
+    }
+
+    console.log('Seeding employee work hours...');
+    const workHours = await generateEmployeeWorkHours(connection);
+    for (const workHour of workHours) {
+      await connection.query('INSERT INTO employee_work_hours SET ?', workHour);
     }
 
     await connection.commit();

@@ -20,6 +20,7 @@ DROP TABLE IF EXISTS purchase_invoices;
 DROP TABLE IF EXISTS sales_items;
 DROP TABLE IF EXISTS sales_invoices;
 DROP TABLE IF EXISTS inventory_transactions;
+DROP TABLE IF EXISTS task_history;
 DROP TABLE IF EXISTS tasks;
 DROP TABLE IF EXISTS task_categories;
 DROP TABLE IF EXISTS cutting_payments;
@@ -36,6 +37,10 @@ DROP TABLE IF EXISTS grades;
 DROP TABLE IF EXISTS product_categories;
 DROP TABLE IF EXISTS employee_group_members;
 DROP TABLE IF EXISTS employee_groups;
+DROP TABLE IF EXISTS salary_advances;
+DROP TABLE IF EXISTS employee_payrolls;
+DROP TABLE IF EXISTS employee_payroll_items;
+DROP TABLE IF EXISTS employee_work_hours;
 DROP TABLE IF EXISTS employees;
 DROP TABLE IF EXISTS designations;
 DROP TABLE IF EXISTS customers;
@@ -49,7 +54,7 @@ DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS currencies;
 
 -- Currencies table
-CREATE TABLE IF NOT EXISTS currencies (
+CREATE TABLE currencies (
   id INT PRIMARY KEY AUTO_INCREMENT,
   code VARCHAR(3) NOT NULL UNIQUE,
   name VARCHAR(50) NOT NULL,
@@ -800,7 +805,7 @@ FROM (
 ) as month;
 
 -- Task History table
-CREATE TABLE IF NOT EXISTS task_history (
+CREATE TABLE task_history (
   id INT PRIMARY KEY AUTO_INCREMENT,
   task_id INT NOT NULL,
   user_id INT NOT NULL,
@@ -809,6 +814,60 @@ CREATE TABLE IF NOT EXISTS task_history (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- HR Management Tables
+CREATE TABLE salary_advances (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    employee_id INT NOT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    request_date DATE NOT NULL,
+    approval_status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
+    approved_by INT,
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (employee_id) REFERENCES employees(id),
+    FOREIGN KEY (approved_by) REFERENCES users(id)
+);
+
+CREATE TABLE employee_payrolls (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    employee_id INT NOT NULL,
+    month INT NOT NULL,
+    year INT NOT NULL,
+    basic_salary DECIMAL(10,2) NOT NULL,
+    additional_amount DECIMAL(10,2) DEFAULT 0,
+    deductions DECIMAL(10,2) DEFAULT 0,
+    net_salary DECIMAL(10,2) NOT NULL,
+    status ENUM('draft', 'approved', 'paid') DEFAULT 'draft',
+    payment_date DATE,
+    created_by INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (employee_id) REFERENCES employees(id),
+    FOREIGN KEY (created_by) REFERENCES users(id),
+    UNIQUE KEY month_year_employee (month, year, employee_id)
+);
+
+CREATE TABLE employee_payroll_items (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    payroll_id INT NOT NULL,
+    type ENUM('addition', 'deduction') NOT NULL,
+    description VARCHAR(255) NOT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (payroll_id) REFERENCES employee_payrolls(id)
+);
+
+CREATE TABLE employee_work_hours (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    employee_id INT NOT NULL,
+    work_date DATE NOT NULL,
+    hours_worked DECIMAL(5,2) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (employee_id) REFERENCES employees(id)
 );
 
 

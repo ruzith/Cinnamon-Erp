@@ -544,6 +544,13 @@ const Sales = () => {
                     >
                       <VisibilityIcon fontSize="small" />
                     </IconButton>
+                    <IconButton
+                      size="small"
+                      onClick={() => handlePrintInvoice(sale)}
+                      sx={{ color: 'success.main', ml: 1 }}
+                    >
+                      <PrintIcon fontSize="small" />
+                    </IconButton>
                     {sale.status === 'draft' && (
                       <IconButton
                         size="small"
@@ -553,13 +560,6 @@ const Sales = () => {
                         <EditIcon fontSize="small" />
                       </IconButton>
                     )}
-                    <IconButton
-                      size="small"
-                      onClick={() => handlePrintInvoice(sale)}
-                      sx={{ color: 'success.main', ml: 1 }}
-                    >
-                      <PrintIcon fontSize="small" />
-                    </IconButton>
                   </TableCell>
                 </TableRow>
               ))}

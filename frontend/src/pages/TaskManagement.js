@@ -39,6 +39,7 @@ import {
   Assessment as AssessmentIcon,
   Timeline as TimelineIcon,
   Schedule,
+  Clear as ClearIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 import SummaryCard from '../components/common/SummaryCard';
@@ -72,11 +73,19 @@ const TaskManagement = () => {
   const [taskReportDialog, setTaskReportDialog] = useState(false);
   const [selectedTaskReport, setSelectedTaskReport] = useState(null);
   const [taskReport, setTaskReport] = useState(null);
+  const [taskReports, setTaskReports] = useState([]);
+  const [filters, setFilters] = useState({
+    employee: '',
+    startDate: null,
+    endDate: null,
+    category: ''
+  });
 
   useEffect(() => {
     fetchTasks();
     fetchEmployees();
     fetchCategories();
+    fetchTaskReports();
   }, []);
 
   const fetchCategories = async () => {
@@ -104,6 +113,44 @@ const TaskManagement = () => {
     } catch (error) {
       console.error('Error fetching employees:', error);
     }
+  };
+
+  const fetchTaskReports = async () => {
+    try {
+      let url = '/api/tasks/reports?';
+      const params = new URLSearchParams();
+
+      if (filters.employee) {
+        params.append('employee', filters.employee);
+      }
+      if (filters.startDate) {
+        params.append('startDate', filters.startDate);
+      }
+      if (filters.endDate) {
+        params.append('endDate', filters.endDate);
+      }
+      if (filters.category) {
+        params.append('category', filters.category);
+      }
+
+      const response = await axios.get(`${url}${params.toString()}`);
+      setTaskReports(response.data);
+    } catch (error) {
+      console.error('Error fetching task reports:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 2) {
+      fetchTaskReports();
+    }
+  }, [filters, activeTab]);
+
+  const handleFilterChange = (field, value) => {
+    setFilters(prev => ({
+      ...prev,
+      [field]: value
+    }));
   };
 
   const handleOpenDialog = (task = null) => {
@@ -353,6 +400,13 @@ const TaskManagement = () => {
     setTaskReport(null);
   };
 
+  const handleClearFilter = (fieldName) => {
+    setFilters(prev => ({
+      ...prev,
+      [fieldName]: fieldName.includes('date') ? null : ''
+    }));
+  };
+
   const TaskReportDialog = () => (
     <Dialog
       open={taskReportDialog}
@@ -366,6 +420,7 @@ const TaskManagement = () => {
       <DialogContent>
         {taskReport && (
           <Box>
+            {/* Summary Cards */}
             <Grid container spacing={2} sx={{ mb: 3 }}>
               <Grid item xs={12} sm={6} md={4}>
                 <SummaryCard
@@ -396,22 +451,67 @@ const TaskManagement = () => {
               </Grid>
             </Grid>
 
+            {/* Task Details */}
             <Typography variant="h6" sx={{ mb: 2 }}>Task Details</Typography>
             <Grid container spacing={2} sx={{ mb: 3 }}>
               <Grid item xs={12} md={6}>
                 <Paper sx={{ p: 2 }}>
-                  <Typography variant="subtitle2" color="text.secondary">Description</Typography>
-                  <Typography>{selectedTaskReport?.description || 'No description'}</Typography>
+                  <Box sx={{ mb: 2 }}>
+                    <Typography variant="subtitle2" color="text.secondary">Description</Typography>
+                    <Typography>{taskReport.description || 'No description'}</Typography>
+                  </Box>
+                  <Box sx={{ mb: 2 }}>
+                    <Typography variant="subtitle2" color="text.secondary">Category</Typography>
+                    <Chip
+                      label={taskReport.category_name || 'No Category'}
+                      size="small"
+                      color={getCategoryColor(taskReport.category_name)}
+                      sx={{ mt: 0.5 }}
+                    />
+                  </Box>
+                  <Box>
+                    <Typography variant="subtitle2" color="text.secondary">Due Date</Typography>
+                    <Typography>
+                      {taskReport.due_date ? new Date(taskReport.due_date).toLocaleDateString() : 'Not set'}
+                    </Typography>
+                  </Box>
                 </Paper>
               </Grid>
               <Grid item xs={12} md={6}>
                 <Paper sx={{ p: 2 }}>
-                  <Typography variant="subtitle2" color="text.secondary">Notes</Typography>
-                  <Typography>{selectedTaskReport?.notes || 'No notes'}</Typography>
+                  <Box sx={{ mb: 2 }}>
+                    <Typography variant="subtitle2" color="text.secondary">Notes</Typography>
+                    <Typography>{taskReport.notes || 'No notes'}</Typography>
+                  </Box>
+                  <Box sx={{ mb: 2 }}>
+                    <Typography variant="subtitle2" color="text.secondary">Assigned To</Typography>
+                    <Typography>{taskReport.assigned_to_name || 'Unassigned'}</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', gap: 2 }}>
+                    <Box>
+                      <Typography variant="subtitle2" color="text.secondary">Priority</Typography>
+                      <Chip
+                        label={taskReport.priority || 'Not Set'}
+                        color={getPriorityColor(taskReport.priority)}
+                        size="small"
+                        sx={{ mt: 0.5 }}
+                      />
+                    </Box>
+                    <Box>
+                      <Typography variant="subtitle2" color="text.secondary">Status</Typography>
+                      <Chip
+                        label={taskReport.status}
+                        color={getStatusColor(taskReport.status)}
+                        size="small"
+                        sx={{ mt: 0.5 }}
+                      />
+                    </Box>
+                  </Box>
                 </Paper>
               </Grid>
             </Grid>
 
+            {/* Task History */}
             <Typography variant="h6" sx={{ mb: 2 }}>History & Updates</Typography>
             <TableContainer component={Paper}>
               <Table>
@@ -525,6 +625,7 @@ const TaskManagement = () => {
         >
           <Tab label="Tasks" />
           <Tab label="Categories" />
+          <Tab label="Reports" />
         </Tabs>
 
         {/* Tasks Tab Content */}
@@ -533,7 +634,7 @@ const TaskManagement = () => {
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>Title</TableCell>
+                  <TableCell sx={{ width: '35%', maxWidth: '400px' }}>Title</TableCell>
                   <TableCell>Category</TableCell>
                   <TableCell>Assigned To</TableCell>
                   <TableCell>Due Date</TableCell>
@@ -545,7 +646,17 @@ const TaskManagement = () => {
               <TableBody>
                 {tasks.map((task) => (
                   <TableRow key={task.id} hover>
-                    <TableCell>
+                    <TableCell sx={{
+                      width: '35%',
+                      maxWidth: '400px',
+                      '& .MuiTypography-root': {
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical'
+                      }
+                    }}>
                       <Typography variant="body2" sx={{ fontWeight: 500 }}>
                         {task.title}
                       </Typography>
@@ -586,26 +697,11 @@ const TaskManagement = () => {
                     <TableCell align="right">
                       <IconButton
                         size="small"
-                        onClick={() => handleOpenTaskReport(task)}
-                        sx={{ color: 'info.main' }}
-                        title="View Task Report"
-                      >
-                        <AssessmentIcon />
-                      </IconButton>
-                      <IconButton
-                        size="small"
                         onClick={() => handleOpenAssignDialog(task)}
                         sx={{ color: 'info.main', ml: 1 }}
                         title="Assign Task"
                       >
                         <AssignIcon />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleOpenDialog(task)}
-                        sx={{ color: 'primary.main', ml: 1 }}
-                      >
-                        <EditIcon />
                       </IconButton>
                       {task.status !== 'cancelled' && (
                         <IconButton
@@ -616,6 +712,13 @@ const TaskManagement = () => {
                           <CancelIcon />
                         </IconButton>
                       )}
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpenDialog(task)}
+                        sx={{ color: 'primary.main', ml: 1 }}
+                      >
+                        <EditIcon />
+                      </IconButton>
                       <IconButton
                         size="small"
                         onClick={() => handleDeleteTask(task.id)}
@@ -670,6 +773,204 @@ const TaskManagement = () => {
               </TableBody>
             </Table>
           </TableContainer>
+        )}
+
+        {/* Task Reports Tab Content */}
+        {activeTab === 2 && (
+          <Box sx={{ p: 3 }}>
+            {/* Filters Section */}
+            <Paper sx={{ p: 2, mb: 3 }}>
+              <Grid container spacing={2} alignItems="center">
+                <Grid item xs={12} sm={6} md={3}>
+                  <FormControl fullWidth>
+                    <InputLabel>Employee</InputLabel>
+                    <Select
+                      value={filters.employee}
+                      label="Employee"
+                      onChange={(e) => handleFilterChange('employee', e.target.value)}
+                      endAdornment={
+                        filters.employee && (
+                          <IconButton
+                            size="small"
+                            sx={{ mr: 2 }}
+                            onClick={() => handleClearFilter('employee')}
+                          >
+                            <ClearIcon fontSize="small" />
+                          </IconButton>
+                        )
+                      }
+                    >
+                      <MenuItem value="">
+                        <em>All Employees</em>
+                      </MenuItem>
+                      {employees.map((employee) => (
+                        <MenuItem key={employee.id} value={employee.id}>
+                          {employee.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <FormControl fullWidth>
+                    <InputLabel>Category</InputLabel>
+                    <Select
+                      value={filters.category}
+                      label="Category"
+                      onChange={(e) => handleFilterChange('category', e.target.value)}
+                      endAdornment={
+                        filters.category && (
+                          <IconButton
+                            size="small"
+                            sx={{ mr: 2 }}
+                            onClick={() => handleClearFilter('category')}
+                          >
+                            <ClearIcon fontSize="small" />
+                          </IconButton>
+                        )
+                      }
+                    >
+                      <MenuItem value="">
+                        <em>All Categories</em>
+                      </MenuItem>
+                      {categories.map((category) => (
+                        <MenuItem key={category.id} value={category.id}>
+                          {category.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField
+                    fullWidth
+                    label="Start Date"
+                    type="date"
+                    value={filters.startDate || ''}
+                    onChange={(e) => handleFilterChange('startDate', e.target.value)}
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                    InputProps={{
+                      endAdornment: filters.startDate && (
+                        <IconButton
+                          size="small"
+                          onClick={() => handleClearFilter('startDate')}
+                        >
+                          <ClearIcon fontSize="small" />
+                        </IconButton>
+                      )
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField
+                    fullWidth
+                    label="End Date"
+                    type="date"
+                    value={filters.endDate || ''}
+                    onChange={(e) => handleFilterChange('endDate', e.target.value)}
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                    InputProps={{
+                      endAdornment: filters.endDate && (
+                        <IconButton
+                          size="small"
+                          onClick={() => handleClearFilter('endDate')}
+                        >
+                          <ClearIcon fontSize="small" />
+                        </IconButton>
+                      ),
+                      inputProps: {
+                        min: filters.startDate || undefined
+                      }
+                    }}
+                  />
+                </Grid>
+              </Grid>
+            </Paper>
+
+            {/* Reports Grid */}
+            <Grid container spacing={3}>
+              {taskReports.map((task) => (
+                <Grid item xs={12} md={6} lg={4} key={task.id}>
+                  <Paper
+                    sx={{
+                      p: 2,
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      cursor: 'pointer',
+                      '&:hover': {
+                        bgcolor: 'action.hover',
+                      },
+                    }}
+                    onClick={() => handleOpenTaskReport(task)}
+                  >
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="h6" gutterBottom>
+                        {task.title}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                        {task.description}
+                      </Typography>
+                    </Box>
+
+                    <Grid container spacing={2}>
+                      <Grid item xs={6}>
+                        <Typography variant="caption" color="text.secondary">
+                          Status
+                        </Typography>
+                        <Box sx={{ mt: 0.5 }}>
+                          <Chip
+                            label={task.status}
+                            color={getStatusColor(task.status)}
+                            size="small"
+                          />
+                        </Box>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="caption" color="text.secondary">
+                          Priority
+                        </Typography>
+                        <Box sx={{ mt: 0.5 }}>
+                          <Chip
+                            label={task.priority || 'Not Set'}
+                            color={getPriorityColor(task.priority)}
+                            size="small"
+                          />
+                        </Box>
+                      </Grid>
+                    </Grid>
+
+                    <Box sx={{ mt: 2 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        Assigned To
+                      </Typography>
+                      <Typography variant="body2">
+                        {task.assigned_to_name || 'Unassigned'}
+                      </Typography>
+                    </Box>
+
+                    <Box sx={{ mt: 'auto', pt: 2 }}>
+                      <Button
+                        variant="outlined"
+                        fullWidth
+                        startIcon={<AssessmentIcon />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenTaskReport(task);
+                        }}
+                      >
+                        View Report
+                      </Button>
+                    </Box>
+                  </Paper>
+                </Grid>
+              ))}
+            </Grid>
+          </Box>
         )}
       </Paper>
 

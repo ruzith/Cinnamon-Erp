@@ -418,17 +418,17 @@ const CuttingManagement = () => {
                     </IconButton>
                     <IconButton
                       size="small"
-                      onClick={() => handleOpenDialog(contractor)}
-                      sx={{ color: 'primary.main', ml: 1 }}
-                    >
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton
-                      size="small"
                       onClick={() => handleOpenPaymentDialog(contractor)}
                       sx={{ color: 'info.main', ml: 1 }}
                     >
                       <PaymentIcon />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleOpenDialog(contractor)}
+                      sx={{ color: 'primary.main', ml: 1 }}
+                    >
+                      <EditIcon />
                     </IconButton>
                     <IconButton
                       size="small"

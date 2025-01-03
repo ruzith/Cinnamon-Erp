@@ -563,14 +563,6 @@ const AssetManagement = () => {
                     <TableCell>
                       <IconButton
                         size="small"
-                        onClick={() => handleEdit(asset)}
-                        title="Edit Asset"
-                        sx={{ color: 'primary.main' }}
-                      >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
                         onClick={() => handleMaintenance(asset)}
                         title="Maintenance"
                         sx={{ color: 'info.main', ml: 1 }}
@@ -584,6 +576,22 @@ const AssetManagement = () => {
                         sx={{ color: 'success.main', ml: 1 }}
                       >
                         <TimelineIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleEdit(asset)}
+                        title="Edit Asset"
+                        sx={{ color: 'primary.main', ml: 1 }}
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDelete(asset.id)}
+                        title="Delete Asset"
+                        sx={{ color: 'error.main', ml: 1 }}
+                      >
+                        <DeleteIcon fontSize="small" />
                       </IconButton>
                     </TableCell>
                   </TableRow>

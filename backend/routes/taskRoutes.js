@@ -13,6 +13,54 @@ router.get('/', protect, async (req, res) => {
   }
 });
 
+// Get all task reports
+router.get('/reports', protect, async (req, res) => {
+  try {
+    const { employee, startDate, endDate, category } = req.query;
+    let tasks = await Task.getAllTasks();
+
+    // Apply filters
+    if (tasks.length > 0) {
+      // Filter by employee
+      if (employee) {
+        tasks = tasks.filter(task => task.assigned_to?.toString() === employee);
+      }
+
+      // Filter by date range
+      if (startDate && endDate) {
+        tasks = tasks.filter(task => {
+          const taskDate = new Date(task.created_at);
+          return taskDate >= new Date(startDate) && taskDate <= new Date(endDate);
+        });
+      }
+
+      // Filter by category
+      if (category) {
+        tasks = tasks.filter(task => task.category_id?.toString() === category);
+      }
+    }
+
+    // Get reports for filtered tasks
+    const reports = await Promise.all(
+      tasks.map(async (task) => {
+        try {
+          const report = await Task.getTaskReport(task.id);
+          return report;
+        } catch (error) {
+          console.error(`Error getting report for task ${task.id}:`, error);
+          return null;
+        }
+      })
+    );
+
+    // Filter out any null reports (in case of errors)
+    const validReports = reports.filter(report => report !== null);
+    res.json(validReports);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Create task
 router.post('/', protect, authorize('admin', 'manager'), async (req, res) => {
   try {

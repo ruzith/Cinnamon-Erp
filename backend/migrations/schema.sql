@@ -49,6 +49,7 @@ DROP TABLE IF EXISTS accounts;
 DROP TABLE IF EXISTS wells;
 DROP TABLE IF EXISTS leases;
 DROP TABLE IF EXISTS lands;
+DROP TABLE IF EXISTS land_categories;
 DROP TABLE IF EXISTS monthly_targets;
 DROP TABLE IF EXISTS settings;
 DROP TABLE IF EXISTS users;
@@ -207,12 +208,24 @@ CREATE TABLE payroll_components (
 );
 
 -- Lands table
+CREATE TABLE land_categories (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  name VARCHAR(255) NOT NULL UNIQUE,
+  description TEXT,
+  status ENUM('active', 'inactive') DEFAULT 'active',
+  created_by INT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+-- Lands table
 CREATE TABLE lands (
   id INT PRIMARY KEY AUTO_INCREMENT,
   name VARCHAR(255) NOT NULL,
   land_number VARCHAR(50) NOT NULL UNIQUE,
   size DECIMAL(10,2) NOT NULL,
-  category ENUM('agricultural', 'residential', 'commercial', 'forest', 'other') NOT NULL,
+  category_id INT NOT NULL,
   ownership_status ENUM('owned', 'rent') NOT NULL,
   location VARCHAR(255) NOT NULL,
   acquisition_date DATE NOT NULL,
@@ -222,6 +235,7 @@ CREATE TABLE lands (
   created_by INT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (category_id) REFERENCES land_categories(id),
   FOREIGN KEY (created_by) REFERENCES users(id)
 );
 

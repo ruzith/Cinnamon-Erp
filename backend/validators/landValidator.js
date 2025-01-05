@@ -4,7 +4,7 @@ const landSchema = Joi.object({
   name: Joi.string().required().trim(),
   land_number: Joi.string().required().trim(),
   size: Joi.number().required().positive(),
-  category: Joi.string().valid('agricultural', 'residential', 'commercial', 'forest', 'other').required(),
+  category_id: Joi.number().integer().required(),
   ownership_status: Joi.string().valid('owned', 'rent').required(),
   location: Joi.string().required().trim(),
   acquisition_date: Joi.date().required(),

@@ -5,17 +5,8 @@ import axios from 'axios';
 export const getEmployeeGroups = createAsyncThunk(
   'employeeGroups/getEmployeeGroups',
   async () => {
-    const response = await axios.get('/api/employee-groups');
-    const groupsWithMembers = await Promise.all(
-      response.data.map(async (group) => {
-        const memberResponse = await axios.get(`/api/employee-groups/${group.id}`);
-        return {
-          ...group,
-          members: memberResponse.data.members || []
-        };
-      })
-    );
-    return groupsWithMembers;
+    const response = await axios.get('/api/employee-groups?include=members');
+    return response.data;
   }
 );
 

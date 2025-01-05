@@ -89,25 +89,75 @@ const updateEmployee = async (req, res) => {
 
 // @desc    Delete employee
 // @route   DELETE /api/employees/:id
-// @access  Private/Admin
+// @access  Private
 const deleteEmployee = async (req, res) => {
-  const { id } = req.params;
-
+  const connection = await pool.getConnection();
   try {
-    // Instead of DELETE, update the status to inactive
-    const [result] = await pool.execute(
-      'UPDATE employees SET status = ? WHERE id = ?',
-      ['inactive', id]
-    );
+    await connection.beginTransaction();
 
-    if (result.affectedRows === 0) {
+    const employeeModel = new Employee();
+    const employee = await employeeModel.findById(req.params.id);
+    if (!employee) {
+      await connection.rollback();
+      connection.release();
       return res.status(404).json({ message: 'Employee not found' });
     }
 
-    res.status(200).json({ message: 'Employee deactivated successfully' });
+    // Delete payroll items first
+    await connection.execute(
+      'DELETE pi FROM employee_payroll_items pi ' +
+      'INNER JOIN employee_payrolls p ON pi.payroll_id = p.id ' +
+      'WHERE p.employee_id = ?',
+      [req.params.id]
+    );
+
+    // Then delete payroll records
+    await connection.execute(
+      'DELETE FROM employee_payrolls WHERE employee_id = ?',
+      [req.params.id]
+    );
+
+    // Delete salary advances
+    await connection.execute(
+      'DELETE FROM salary_advances WHERE employee_id = ?',
+      [req.params.id]
+    );
+
+    // Delete work hours records
+    await connection.execute(
+      'DELETE FROM employee_work_hours WHERE employee_id = ?',
+      [req.params.id]
+    );
+
+    // Remove employee from groups
+    await connection.execute(
+      'DELETE FROM employee_group_members WHERE employee_id = ?',
+      [req.params.id]
+    );
+
+    // Delete tasks assigned to employee
+    await connection.execute(
+      'DELETE FROM tasks WHERE assigned_to = ?',
+      [req.params.id]
+    );
+
+    // Finally delete the employee
+    await connection.execute(
+      'DELETE FROM employees WHERE id = ?',
+      [req.params.id]
+    );
+
+    await connection.commit();
+    connection.release();
+    res.status(200).json({ message: 'Employee and all related records deleted successfully' });
   } catch (error) {
-    console.error('Error deactivating employee:', error);
-    res.status(500).json({ message: 'Error deactivating employee', error: error.message });
+    await connection.rollback();
+    connection.release();
+    console.error('Error deleting employee:', error);
+    res.status(500).json({
+      message: 'Error deleting employee and related records.',
+      error: error.message
+    });
   }
 };
 

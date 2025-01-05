@@ -25,6 +25,10 @@ import {
   MenuItem,
   Tabs,
   Tab,
+  Alert,
+  List,
+  ListItem,
+  ListItemText,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -79,6 +83,12 @@ const TaskManagement = () => {
     startDate: null,
     endDate: null,
     category: ''
+  });
+  const [reassignDialog, setReassignDialog] = useState(false);
+  const [reassignmentData, setReassignmentData] = useState({
+    oldCategoryId: null,
+    newCategoryId: '',
+    affectedTasks: []
   });
 
   useEffect(() => {
@@ -159,7 +169,7 @@ const TaskManagement = () => {
       setFormData({
         title: task.title,
         description: task.description,
-        assigned_to: task.assigned_to?.id || '',
+        assigned_to: task.assigned_to || '',
         priority: task.priority,
         status: task.status,
         due_date: task.due_date?.split('T')[0] || '',
@@ -346,11 +356,53 @@ const TaskManagement = () => {
         await fetchCategories();
       } catch (error) {
         if (error.response?.data?.hasTasks) {
-          alert('Cannot delete category that has tasks assigned to it. Please reassign or delete the tasks first.');
+          // Get tasks using this category
+          const tasksResponse = await axios.get(`/api/tasks`, {
+            params: {
+              category_id: categoryId
+            }
+          });
+          setReassignmentData({
+            oldCategoryId: categoryId,
+            newCategoryId: '',
+            affectedTasks: tasksResponse.data.filter(task => task.category_id === categoryId)
+          });
+          setReassignDialog(true);
         } else {
           console.error('Error deleting category:', error);
+          alert('Failed to delete category');
         }
       }
+    }
+  };
+
+  const handleReassignmentClose = () => {
+    setReassignDialog(false);
+    setReassignmentData({
+      oldCategoryId: null,
+      newCategoryId: '',
+      affectedTasks: []
+    });
+  };
+
+  const handleReassignmentSubmit = async () => {
+    if (!reassignmentData.newCategoryId) {
+      return;
+    }
+
+    try {
+      // Single API call to reassign tasks and delete category
+      await axios.post(`/api/task-categories/${reassignmentData.oldCategoryId}/reassign`, {
+        newCategoryId: reassignmentData.newCategoryId
+      });
+
+      // Refresh the data
+      await fetchCategories();
+      await fetchTasks();
+      handleReassignmentClose();
+    } catch (error) {
+      console.error('Error in reassignment:', error);
+      alert('Failed to reassign tasks and delete category');
     }
   };
 
@@ -550,6 +602,68 @@ const TaskManagement = () => {
     </Dialog>
   );
 
+  const ReassignmentDialog = () => (
+    <Dialog
+      open={reassignDialog}
+      onClose={handleReassignmentClose}
+      maxWidth="sm"
+      fullWidth
+    >
+      <DialogTitle>Reassign Tasks</DialogTitle>
+      <DialogContent>
+        <Box sx={{ mt: 2 }}>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            This category has tasks assigned to it. Please select a new category for these tasks before deleting.
+          </Alert>
+
+          <FormControl fullWidth sx={{ mb: 2 }}>
+            <InputLabel>New Category</InputLabel>
+            <Select
+              value={reassignmentData.newCategoryId}
+              onChange={(e) => setReassignmentData(prev => ({
+                ...prev,
+                newCategoryId: e.target.value
+              }))}
+              label="New Category"
+            >
+              {categories
+                .filter(c => c.id !== reassignmentData.oldCategoryId)
+                .map((category) => (
+                  <MenuItem key={category.id} value={category.id}>
+                    {category.name}
+                  </MenuItem>
+                ))}
+            </Select>
+          </FormControl>
+
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>
+            Affected Tasks ({reassignmentData.affectedTasks.length}):
+          </Typography>
+          <List dense>
+            {reassignmentData.affectedTasks.map((task) => (
+              <ListItem key={task.id}>
+                <ListItemText
+                  primary={task.title}
+                  secondary={task.description}
+                />
+              </ListItem>
+            ))}
+          </List>
+        </Box>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={handleReassignmentClose}>Cancel</Button>
+        <Button
+          onClick={handleReassignmentSubmit}
+          color="primary"
+          disabled={!reassignmentData.newCategoryId}
+        >
+          Reassign and Delete
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
       {/* Header */}
@@ -695,37 +809,43 @@ const TaskManagement = () => {
                       />
                     </TableCell>
                     <TableCell align="right">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleOpenAssignDialog(task)}
-                        sx={{ color: 'info.main', ml: 1 }}
-                        title="Assign Task"
-                      >
-                        <AssignIcon />
-                      </IconButton>
-                      {task.status !== 'cancelled' && (
-                        <IconButton
-                          size="small"
-                          onClick={() => handleCancelTask(task.id)}
-                          sx={{ color: 'warning.main', ml: 1 }}
-                        >
-                          <CancelIcon />
-                        </IconButton>
-                      )}
-                      <IconButton
-                        size="small"
-                        onClick={() => handleOpenDialog(task)}
-                        sx={{ color: 'primary.main', ml: 1 }}
-                      >
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDeleteTask(task.id)}
-                        sx={{ color: 'error.main', ml: 1 }}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
+                        {task.status !== 'cancelled' && (
+                          <Button
+                            size="small"
+                            color="warning"
+                            onClick={() => handleCancelTask(task.id)}
+                          >
+                            Cancel
+                          </Button>
+                        )}
+                        <Box sx={{ display: 'flex', gap: 0.5 }}>
+                          {task.status !== 'cancelled' && (
+                            <IconButton
+                              size="small"
+                              onClick={() => handleOpenAssignDialog(task)}
+                              sx={{ color: 'info.main' }}
+                              title="Assign Task"
+                            >
+                              <AssignIcon />
+                            </IconButton>
+                          )}
+                          <IconButton
+                            size="small"
+                            onClick={() => handleOpenDialog(task)}
+                            sx={{ color: 'primary.main' }}
+                          >
+                            <EditIcon />
+                          </IconButton>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleDeleteTask(task.id)}
+                            sx={{ color: 'error.main' }}
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </Box>
+                      </Box>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -1220,6 +1340,7 @@ const TaskManagement = () => {
       </Dialog>
 
       <TaskReportDialog />
+      <ReassignmentDialog />
     </Box>
   );
 };

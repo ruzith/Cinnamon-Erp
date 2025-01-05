@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import {
   Box,
   Typography,
@@ -59,7 +59,7 @@ import {
   updateDesignation,
   deleteDesignation
 } from '../features/designations/designationSlice';
-import { updateEmployee } from '../features/employees/employeeSlice';
+import { updateEmployee, getEmployees } from '../features/employees/employeeSlice';
 import { useCurrencyFormatter } from '../utils/currencyUtils';
 import SummaryCard from '../components/common/SummaryCard';
 import EmployeeForm from '../components/employees/EmployeeForm';
@@ -73,7 +73,7 @@ const SALARY_TYPES = {
 
 const EmployeeManagement = () => {
   const dispatch = useDispatch();
-  const [employees, setEmployees] = useState([]);
+  const { employees } = useSelector((state) => state.employees);
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [formData, setFormData] = useState({
@@ -122,9 +122,10 @@ const EmployeeManagement = () => {
   const [taskReport, setTaskReport] = useState(null);
 
   useEffect(() => {
-    fetchEmployees();
+    dispatch(getEmployees());
+    dispatch(getDesignations());
     fetchEmployeeGroups();
-  }, []);
+  }, [dispatch]);
 
   useEffect(() => {
     const fetchSalaryStructures = async () => {
@@ -152,28 +153,10 @@ const EmployeeManagement = () => {
     fetchDesignations();
   }, []);
 
-  const fetchEmployees = async () => {
-    try {
-      const response = await axios.get('/api/employees');
-      setEmployees(response.data);
-    } catch (error) {
-      console.error('Error fetching employees:', error);
-    }
-  };
-
   const fetchEmployeeGroups = async () => {
     try {
-      const response = await axios.get('/api/employee-groups');
-      const groupsWithMembers = await Promise.all(
-        response.data.map(async (group) => {
-          const memberResponse = await axios.get(`/api/employee-groups/${group.id}`);
-          return {
-            ...group,
-            members: memberResponse.data.members || []
-          };
-        })
-      );
-      setEmployeeGroups(groupsWithMembers);
+      const response = await axios.get('/api/employee-groups?include=members');
+      setEmployeeGroups(response.data);
     } catch (error) {
       console.error('Error fetching employee groups:', error);
     }
@@ -238,7 +221,7 @@ const EmployeeManagement = () => {
       } else {
         await axios.post('/api/employees', formData);
       }
-      await fetchEmployees();
+      await dispatch(getEmployees());
       const designationsResponse = await axios.get('/api/designations');
       setDesignations(designationsResponse.data);
       handleCloseDialog();
@@ -251,7 +234,7 @@ const EmployeeManagement = () => {
     if (window.confirm('Are you sure you want to delete this employee?')) {
       try {
         await axios.delete(`/api/employees/${employeeId}`);
-        await fetchEmployees();
+        await dispatch(getEmployees());
         const designationsResponse = await axios.get('/api/designations');
         setDesignations(designationsResponse.data);
       } catch (error) {
@@ -263,9 +246,8 @@ const EmployeeManagement = () => {
   // Calculate summary statistics
   const summaryStats = {
     totalEmployees: employees.length,
-    activeEmployees: employees.filter(emp => emp.status === 'active').length,
+    activeEmployees: employees.length,
     totalMonthlyCost: employees
-      .filter(emp => emp.status === 'active')
       .reduce((total, emp) => {
         const salary = Number(emp.basic_salary) || 0;
         switch(emp.salary_type) {
@@ -351,8 +333,8 @@ const EmployeeManagement = () => {
         setDesignations(response.data);
       }
     } catch (error) {
-      // If there are assigned employees, show reassignment dialog
-      if (error?.employees) {
+      // Check if the error contains employees data
+      if (error.employees) {
         setReassignmentData({
           oldDesignationId: id,
           newDesignationId: '',
@@ -381,124 +363,25 @@ const EmployeeManagement = () => {
     }
 
     try {
-      await dispatch(deleteDesignation({
-        id: reassignmentData.oldDesignationId,
-        options: {
-          forceDelete: true,
-          newDesignationId: reassignmentData.newDesignationId,
-        },
-      }));
+      // Single API call to reassign employees and delete designation
+      await axios.post(`/api/designations/${reassignmentData.oldDesignationId}/reassign`, {
+        newDesignationId: reassignmentData.newDesignationId
+      });
 
-      // Refresh designations list
+      // Refresh the lists
+      await dispatch(getEmployees()).unwrap();
       const response = await axios.get('/api/designations');
       setDesignations(response.data);
 
       handleReassignmentClose();
     } catch (error) {
       console.error('Error in reassignment:', error);
+      alert(error?.response?.data?.message || 'Error during reassignment process');
     }
   };
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
-  };
-
-  const ReassignmentDialog = () => (
-    <Dialog
-      open={reassignDialog}
-      onClose={handleReassignmentClose}
-      maxWidth="sm"
-      fullWidth
-    >
-      <DialogTitle>Reassign Employees</DialogTitle>
-      <DialogContent>
-        <Box sx={{ mt: 2 }}>
-          <Alert severity="info" sx={{ mb: 2 }}>
-            This designation has employees assigned to it. Please select a new designation for these employees before deleting.
-          </Alert>
-
-          <FormControl fullWidth sx={{ mb: 2 }}>
-            <InputLabel>New Designation</InputLabel>
-            <Select
-              value={reassignmentData.newDesignationId}
-              onChange={(e) => setReassignmentData(prev => ({
-                ...prev,
-                newDesignationId: e.target.value
-              }))}
-              label="New Designation"
-            >
-              {designations
-                .filter(d => d.id !== reassignmentData.oldDesignationId)
-                .map((designation) => (
-                  <MenuItem key={designation.id} value={designation.id}>
-                    {designation.title}
-                  </MenuItem>
-                ))}
-            </Select>
-          </FormControl>
-
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>
-            Affected Employees ({reassignmentData.affectedEmployees.length}):
-          </Typography>
-          <List dense>
-            {reassignmentData.affectedEmployees.map((employee) => (
-              <ListItem key={employee.id}>
-                <ListItemText primary={employee.name} />
-              </ListItem>
-            ))}
-          </List>
-        </Box>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={handleReassignmentClose}>Cancel</Button>
-        <Button
-          onClick={handleReassignmentSubmit}
-          color="primary"
-          disabled={!reassignmentData.newDesignationId}
-        >
-          Reassign and Delete
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-
-  const handleToggleStatus = async (employee) => {
-    try {
-      const newStatus = employee.status === 'active' ? 'inactive' : 'active';
-      const {
-        id,
-        created_at,
-        updated_at,
-        designation_title,
-        salary_structure_name,
-        department,
-        group_names,
-        ...employeeData
-      } = employee;
-
-      if (employeeData.birthday) {
-        employeeData.birthday = employeeData.birthday.split('T')[0];
-      }
-
-      // Convert group_ids to array if it's a string
-      if (typeof employeeData.group_ids === 'string') {
-        employeeData.group_ids = employeeData.group_ids.split(',').filter(id => id).map(id => parseInt(id));
-      } else if (!Array.isArray(employeeData.group_ids)) {
-        employeeData.group_ids = [];
-      }
-
-      await dispatch(updateEmployee({
-        id: employee.id,
-        employeeData: {
-          ...employeeData,
-          status: newStatus
-        }
-      })).unwrap();
-
-      await fetchEmployees();
-    } catch (error) {
-      console.error('Error updating employee status:', error);
-    }
   };
 
   const handleOpenGroupDialog = (group = null) => {
@@ -782,8 +665,67 @@ const EmployeeManagement = () => {
     </Dialog>
   );
 
+  const ReassignmentDialog = () => (
+    <Dialog
+      open={reassignDialog}
+      onClose={handleReassignmentClose}
+      maxWidth="sm"
+      fullWidth
+    >
+      <DialogTitle>Reassign Employees</DialogTitle>
+      <DialogContent>
+        <Box sx={{ mt: 2 }}>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            This designation has employees assigned to it. Please select a new designation for these employees before deleting.
+          </Alert>
+
+          <FormControl fullWidth sx={{ mb: 2 }}>
+            <InputLabel>New Designation</InputLabel>
+            <Select
+              value={reassignmentData.newDesignationId}
+              onChange={(e) => setReassignmentData(prev => ({
+                ...prev,
+                newDesignationId: e.target.value
+              }))}
+              label="New Designation"
+            >
+              {designations
+                .filter(d => d.id !== reassignmentData.oldDesignationId)
+                .map((designation) => (
+                  <MenuItem key={designation.id} value={designation.id}>
+                    {designation.title}
+                  </MenuItem>
+                ))}
+            </Select>
+          </FormControl>
+
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>
+            Affected Employees ({reassignmentData.affectedEmployees.length}):
+          </Typography>
+          <List dense>
+            {reassignmentData.affectedEmployees.map((employee) => (
+              <ListItem key={employee.id}>
+                <ListItemText primary={employee.name} />
+              </ListItem>
+            ))}
+          </List>
+        </Box>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={handleReassignmentClose}>Cancel</Button>
+        <Button
+          onClick={handleReassignmentSubmit}
+          color="primary"
+          disabled={!reassignmentData.newDesignationId}
+        >
+          Reassign and Delete
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+
   return (
-    <Box sx={{ flexGrow: 1, p: 3 }}>
+    <Box sx={{ p: 3 }}>
       {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
         <Typography variant="h4" sx={{ fontWeight: 600 }}>
@@ -916,20 +858,12 @@ const EmployeeManagement = () => {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Stack direction="row" spacing={1} alignItems="center">
-                        <Chip
-                          label={employee.status}
-                          color={getStatusColor(employee.status)}
-                          size="small"
-                          sx={{ textTransform: 'capitalize' }}
-                        />
-                        <Switch
-                          checked={employee.status === 'active'}
-                          onChange={() => handleToggleStatus(employee)}
-                          color="success"
-                          size="small"
-                        />
-                      </Stack>
+                      <Chip
+                        label={employee.status}
+                        color={getStatusColor(employee.status)}
+                        size="small"
+                        sx={{ textTransform: 'capitalize' }}
+                      />
                     </TableCell>
                     <TableCell align="right">
                       <IconButton
@@ -942,7 +876,7 @@ const EmployeeManagement = () => {
                       <IconButton
                         size="small"
                         onClick={() => handleDeleteEmployee(employee.id)}
-                        sx={{ color: 'error.main' }}
+                        sx={{ color: 'error.main', ml: 1 }}
                       >
                         <DeleteIcon />
                       </IconButton>
@@ -1135,7 +1069,7 @@ const EmployeeManagement = () => {
         fullWidth
       >
         <DialogTitle>
-          {selectedDesignation ? 'Edit Designation' : 'New Designation'}
+          {selectedDesignation ? 'Edit Designation' : 'Create Designation'}
         </DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -1180,19 +1114,15 @@ const EmployeeManagement = () => {
         </DialogActions>
       </Dialog>
 
-      <Dialog
-        open={openDialog}
-        onClose={handleCloseDialog}
-        maxWidth="md"
-        fullWidth
-      >
+      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="md" fullWidth>
         <DialogTitle>
           {selectedEmployee ? 'Edit Employee' : 'Add New Employee'}
         </DialogTitle>
         <DialogContent>
           <EmployeeForm
             employee={selectedEmployee}
-            setIsEditing={() => handleCloseDialog()}
+            setIsEditing={setSelectedEmployee}
+            onClose={handleCloseDialog}
           />
         </DialogContent>
       </Dialog>
@@ -1246,11 +1176,11 @@ const EmployeeManagement = () => {
       <Dialog
         open={groupMembersDialog}
         onClose={handleCloseGroupMembersDialog}
-        maxWidth="md"
+        maxWidth="sm"
         fullWidth
       >
         <DialogTitle>
-          Manage Group Members - {selectedGroup?.name}
+          Manage {selectedGroup?.name} Members
         </DialogTitle>
         <DialogContent>
           <List>
@@ -1258,7 +1188,6 @@ const EmployeeManagement = () => {
               <ListItem key={employee.id}>
                 <ListItemIcon>
                   <Checkbox
-                    edge="start"
                     checked={selectedEmployees.includes(employee.id)}
                     onChange={() => handleEmployeeSelection(employee.id)}
                   />

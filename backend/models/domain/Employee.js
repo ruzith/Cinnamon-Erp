@@ -84,9 +84,13 @@ class Employee extends BaseModel {
       await connection.beginTransaction();
 
       const { group_ids, ...employeeData } = data;
+      const columns = Object.keys(employeeData);
+      const values = Object.values(employeeData);
+      const placeholders = Array(values.length).fill('?').join(', ');
+
       const [result] = await connection.execute(
-        'INSERT INTO employees SET ?',
-        employeeData
+        `INSERT INTO employees (${columns.join(', ')}) VALUES (${placeholders})`,
+        values
       );
 
       if (group_ids && group_ids.length > 0) {

@@ -116,7 +116,7 @@ exports.deleteContractor = async (req, res) => {
 
     // Check for pending payments
     const [payments] = await connection.execute(
-      'SELECT COUNT(*) as count FROM advance_payments WHERE contractor_id = ?',
+      'SELECT COUNT(*) as count FROM manufacturing_advance_payments WHERE contractor_id = ?',
       [req.params.id]
     );
 
@@ -125,7 +125,7 @@ exports.deleteContractor = async (req, res) => {
       await connection.rollback();
       connection.release();
       return res.status(400).json({
-        message: 'Cannot delete contractor with pending payments or active assignments',
+        message: 'Cannot delete contractor with pending payments',
         pendingPayments: payments[0].count,
         assignmentCount: assignments.length
       });
@@ -153,7 +153,7 @@ exports.deleteContractor = async (req, res) => {
 
         // Update all payments if forceDelete is true
         await connection.execute(
-          'UPDATE advance_payments SET contractor_id = ? WHERE contractor_id = ?',
+          'UPDATE manufacturing_advance_payments SET contractor_id = ? WHERE contractor_id = ?',
           [newContractorId, req.params.id]
         );
 
@@ -185,7 +185,7 @@ exports.deleteContractor = async (req, res) => {
     if (payments[0].count > 0 && forceDelete === 'true' && newContractorId) {
       // Update all payments to new contractor
       await connection.execute(
-        'UPDATE advance_payments SET contractor_id = ? WHERE contractor_id = ?',
+        'UPDATE manufacturing_advance_payments SET contractor_id = ? WHERE contractor_id = ?',
         [newContractorId, req.params.id]
       );
     }
@@ -482,12 +482,12 @@ exports.createAdvancePayment = async (req, res) => {
     const date = new Date(payment_date);
     const year = date.getFullYear().toString().substr(-2);
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const [countResult] = await pool.execute('SELECT COUNT(*) as count FROM advance_payments');
+    const [countResult] = await pool.execute('SELECT COUNT(*) as count FROM manufacturing_advance_payments');
     const count = countResult[0].count + 1;
     const receipt_number = `ADV${year}${month}${count.toString().padStart(4, '0')}`;
 
     const [result] = await pool.execute(
-      `INSERT INTO advance_payments
+      `INSERT INTO manufacturing_advance_payments
        (contractor_id, amount, payment_date, receipt_number, notes)
        VALUES (?, ?, ?, ?, ?)`,
       [contractor_id, amount, payment_date, receipt_number, notes]
@@ -495,27 +495,16 @@ exports.createAdvancePayment = async (req, res) => {
 
     const [payment] = await pool.execute(
       `SELECT ap.*, mc.name as contractor_name, mc.contractor_id as contractor_id
-       FROM advance_payments ap
+       FROM manufacturing_advance_payments ap
        JOIN manufacturing_contractors mc ON ap.contractor_id = mc.id
        WHERE ap.id = ?`,
       [result.insertId]
     );
 
-    // Get company settings
-    const [settingsResult] = await pool.execute(
-      'SELECT * FROM settings WHERE id = 1'
-    );
-    const settings = settingsResult[0] || {};
-
-    // Generate receipt HTML
-    const receiptHtml = generateAdvancePaymentReceipt(payment[0], settings);
-
-    res.status(201).json({
-      ...payment[0],
-      receiptHtml
-    });
+    res.status(201).json(payment[0]);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    console.error('Error creating advance payment:', error);
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -850,7 +839,10 @@ exports.markOrderAsPaid = async (req, res) => {
 
     // Check if order exists and is completed
     const [orders] = await connection.execute(
-      'SELECT * FROM manufacturing_orders WHERE id = ?',
+      `SELECT mo.*, p.name as product_name
+       FROM manufacturing_orders mo
+       JOIN products p ON mo.product_id = p.id
+       WHERE mo.id = ?`,
       [id]
     );
 
@@ -882,7 +874,7 @@ exports.markOrderAsPaid = async (req, res) => {
       await Inventory.addFinishedGood(connection, {
         product_id: order.product_id,
         quantity: order.quantity,
-        manufacturing_order_id: id,
+        manufacturing_order_id: order.id,
         notes: `Production completed from MO-${order.order_number}`
       });
 
@@ -894,7 +886,7 @@ exports.markOrderAsPaid = async (req, res) => {
     }
 
     await connection.commit();
-    res.json({ message: 'Order marked as paid and inventory updated' });
+    res.json({ message: 'Order marked as paid successfully' });
   } catch (error) {
     await connection.rollback();
     console.error('Error marking order as paid:', error);
@@ -1388,5 +1380,62 @@ exports.getManufacturingInvoices = async (req, res) => {
       message: 'Error fetching manufacturing invoices',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
+  }
+};
+
+// @desc    Delete assignment
+// @route   DELETE /api/manufacturing/assignments/:id
+// @access  Private/Admin
+exports.deleteAssignment = async (req, res) => {
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    // Get the existing assignment
+    const [existingAssignment] = await connection.execute(
+      'SELECT * FROM cinnamon_assignments WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (!existingAssignment[0]) {
+      await connection.rollback();
+      return res.status(404).json({ message: 'Assignment not found' });
+    }
+
+    // If assignment has raw materials allocated, return them to inventory
+    if (existingAssignment[0].raw_material_id && existingAssignment[0].raw_material_quantity) {
+      // Return raw materials to inventory
+      await connection.execute(
+        'UPDATE inventory SET quantity = quantity + ? WHERE id = ?',
+        [existingAssignment[0].raw_material_quantity, existingAssignment[0].raw_material_id]
+      );
+
+      // Record return transaction
+      await connection.execute(
+        'INSERT INTO inventory_transactions (item_id, type, quantity, reference, notes) VALUES (?, ?, ?, ?, ?)',
+        [
+          existingAssignment[0].raw_material_id,
+          'IN',
+          existingAssignment[0].raw_material_quantity,
+          `CA-${req.params.id}`,
+          'Returned from deleted assignment'
+        ]
+      );
+    }
+
+    // Delete the assignment
+    await connection.execute(
+      'DELETE FROM cinnamon_assignments WHERE id = ?',
+      [req.params.id]
+    );
+
+    await connection.commit();
+    res.status(200).json({ message: 'Assignment deleted successfully' });
+  } catch (error) {
+    await connection.rollback();
+    res.status(500).json({ message: error.message });
+  } finally {
+    connection.release();
   }
 };

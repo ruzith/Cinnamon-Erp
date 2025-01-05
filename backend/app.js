@@ -27,6 +27,7 @@ const purchaseRoutes = require('./routes/purchaseRoutes');
 const currencyRoutes = require('./routes/currencyRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const hrRoutes = require('./routes/hrRoutes');
+const landCategoryRoutes = require('./routes/landCategoryRoutes');
 
 const app = express();
 
@@ -61,6 +62,7 @@ app.use(`${API_PREFIX}/purchases`, purchaseRoutes);
 app.use(`${API_PREFIX}/currencies`, currencyRoutes);
 app.use(`${API_PREFIX}/dashboard`, dashboardRoutes);
 app.use(`${API_PREFIX}/hr`, hrRoutes);
+app.use('/api/land-categories', landCategoryRoutes);
 
 // Error handling middleware
 app.use(notFound);

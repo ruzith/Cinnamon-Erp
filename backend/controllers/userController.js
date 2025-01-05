@@ -155,8 +155,7 @@ const createUser = asyncHandler(async (req, res) => {
     email,
     password,
     role: validRoles.includes(role) ? role : 'staff',
-    status: validStatuses.includes(status) ? status : 'active',
-    department: department || null
+    status: validStatuses.includes(status) ? status : 'active'
   });
 
   if (user) {
@@ -165,8 +164,7 @@ const createUser = asyncHandler(async (req, res) => {
       name: user.name,
       email: user.email,
       role: user.role,
-      status: user.status,
-      department: user.department
+      status: user.status
     });
   } else {
     res.status(400);

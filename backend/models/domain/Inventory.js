@@ -154,27 +154,51 @@ class Inventory extends BaseModel {
 
   async addFinishedGood(connection, data) {
     try {
+      // Get product details
+      const [product] = await connection.execute(
+        'SELECT * FROM products WHERE id = ?',
+        [data.product_id]
+      );
+
+      if (!product[0]) {
+        throw new Error('Product not found');
+      }
+
       // Check if product exists in inventory
       const [existingProduct] = await connection.execute(
-        'SELECT * FROM inventory WHERE product_id = ? AND product_type = "finished_good"',
-        [data.product_id]
+        'SELECT * FROM inventory WHERE product_name = ? AND product_type = "finished_good"',
+        [product[0].name]
       );
 
       if (existingProduct[0]) {
         // Update existing inventory
         await connection.execute(
-          'UPDATE inventory SET quantity = quantity + ? WHERE product_id = ? AND product_type = "finished_good"',
-          [data.quantity, data.product_id]
+          'UPDATE inventory SET quantity = quantity + ? WHERE product_name = ? AND product_type = "finished_good"',
+          [data.quantity, product[0].name]
         );
       } else {
         // Create new inventory entry
         await connection.execute(
           `INSERT INTO inventory
-           (product_id, product_type, quantity, min_stock, max_stock, notes)
-           VALUES (?, "finished_good", ?, 0, 0, ?)`,
-          [data.product_id, data.quantity, data.notes || '']
+           (product_name, category, product_type, quantity, unit, min_stock_level, max_stock_level,
+            purchase_price, selling_price, description, status)
+           VALUES (?, ?, "finished_good", ?, "kg", 0, 1000, ?, ?, ?, "active")`,
+          [
+            product[0].name,
+            'finished_goods',
+            data.quantity,
+            product[0].unit_price,
+            product[0].unit_price * 1.2, // 20% markup for selling price
+            `Manufactured product from ${product[0].name}`
+          ]
         );
       }
+
+      // Get the inventory item for transaction record
+      const [inventoryItem] = await connection.execute(
+        'SELECT id FROM inventory WHERE product_name = ? AND product_type = "finished_good"',
+        [product[0].name]
+      );
 
       // Create inventory transaction record
       await connection.execute(
@@ -182,7 +206,7 @@ class Inventory extends BaseModel {
          (item_id, type, quantity, reference, notes)
          VALUES (?, "IN", ?, ?, ?)`,
         [
-          data.product_id,
+          inventoryItem[0].id,
           data.quantity,
           `MO-${data.manufacturing_order_id}`,
           data.notes || 'Manufacturing production'

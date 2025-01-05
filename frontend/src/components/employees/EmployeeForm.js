@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { createEmployee, updateEmployee } from '../../features/employees/employeeSlice';
+import { createEmployee, updateEmployee, getEmployees } from '../../features/employees/employeeSlice';
 import { getDesignations } from '../../features/designations/designationSlice';
 import { getEmployeeGroups } from '../../features/employeeGroups/employeeGroupSlice';
 import {
@@ -22,7 +22,7 @@ const SALARY_TYPES = {
   MONTHLY: 'monthly'
 };
 
-const EmployeeForm = ({ employee, setIsEditing }) => {
+const EmployeeForm = ({ employee, setIsEditing, onClose }) => {
   const dispatch = useDispatch();
   const { designations } = useSelector((state) => state.designations);
   const { employeeGroups } = useSelector((state) => state.employeeGroups);
@@ -70,14 +70,23 @@ const EmployeeForm = ({ employee, setIsEditing }) => {
     }));
   };
 
-  const onSubmit = (e) => {
+  const onSubmit = async (e) => {
     e.preventDefault();
 
-    if (employee) {
-      dispatch(updateEmployee({ id: employee.id, employeeData: formData }));
-      setIsEditing(false);
-    } else {
-      dispatch(createEmployee(formData));
+    try {
+      if (employee) {
+        await dispatch(updateEmployee({ id: employee.id, employeeData: formData })).unwrap();
+        await dispatch(getEmployees()).unwrap();
+        onClose && onClose();
+      } else {
+        await dispatch(createEmployee(formData)).unwrap();
+        await dispatch(getEmployees()).unwrap();
+        onClose && onClose();
+      }
+      // Refresh employee groups using the proper thunk
+      await dispatch(getEmployeeGroups()).unwrap();
+    } catch (error) {
+      console.error('Error saving employee:', error);
     }
   };
 
@@ -260,7 +269,7 @@ const EmployeeForm = ({ employee, setIsEditing }) => {
           />
         </Grid>
         <Grid item xs={12} sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-          <Button onClick={() => setIsEditing(false)}>
+          <Button onClick={onClose}>
             Cancel
           </Button>
           <Button type="submit" variant="contained" color="primary">

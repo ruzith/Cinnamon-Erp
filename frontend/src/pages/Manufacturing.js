@@ -255,37 +255,43 @@ const Manufacturing = () => {
   };
 
   const handleDeleteContractor = async (contractorId) => {
-    if (window.confirm('Are you sure you want to delete this contractor? This action cannot be undone.')) {
-      try {
-        await axios.delete(`/api/manufacturing/contractors/${contractorId}`);
-        fetchContractors();
-      } catch (error) {
-        if (error.response?.data?.activeAssignments || error.response?.data?.pendingPayments) {
-          const shouldReassign = window.confirm(
-            `This contractor has ${error.response.data.assignmentCount || 0} active assignments and ${error.response.data.pendingPayments || 0} pending payments. Would you like to reassign them to another contractor?`
-          );
-
-          if (shouldReassign) {
-            setOpenReassignDialog(true);
-            setContractorToDelete(contractorId);
-          }
-        } else {
-          console.error('Error deleting contractor:', error);
-          alert(error.response?.data?.message || 'Error deleting contractor');
-        }
+    try {
+      await axios.delete(`/api/manufacturing/contractors/${contractorId}`);
+      fetchContractors();
+    } catch (error) {
+      if (error.response?.data?.assignmentCount > 0) {
+        setContractorToDelete(contractorId);
+        setOpenReassignDialog(true);
+      } else {
+        console.error('Error deleting contractor:', error);
+        alert(error.response?.data?.message || 'Error deleting contractor');
       }
     }
   };
 
   const handleDeleteOrder = async (orderId) => {
-    if (window.confirm('Are you sure you want to delete this order? This action cannot be undone.')) {
-      try {
-        await axios.delete(`/api/manufacturing/orders/${orderId}`);
-        fetchManufacturingOrders();
-      } catch (error) {
+    try {
+      await axios.delete(`/api/manufacturing/orders/${orderId}`);
+      fetchManufacturingOrders();
+    } catch (error) {
+      if (error.response?.status === 400 && error.response?.data?.message?.includes('Cannot delete orders')) {
+        if (window.confirm('This order is in progress or completed. Would you like to force delete it?')) {
+          handleForceDeleteOrder(orderId);
+        }
+      } else {
         console.error('Error deleting order:', error);
         alert(error.response?.data?.message || 'Error deleting order');
       }
+    }
+  };
+
+  const handleForceDeleteOrder = async (orderId) => {
+    try {
+      await axios.delete(`/api/manufacturing/orders/${orderId}?forceDelete=true`);
+      fetchManufacturingOrders();
+    } catch (error) {
+      console.error('Error force deleting order:', error);
+      alert(error.response?.data?.message || 'Error force deleting order');
     }
   };
 
@@ -367,10 +373,9 @@ const Manufacturing = () => {
         raw_material_quantity: assignment.raw_material_quantity,
         notes: assignment.notes || ''
       });
-    } else {
+    } else if (contractor) {
       setAssignmentFormData({
-        id: null,
-        contractor_id: contractor ? contractor.id : '',
+        contractor_id: contractor.id,
         quantity: '',
         duration: 1,
         duration_type: 'day',
@@ -493,63 +498,56 @@ const Manufacturing = () => {
   };
 
   const renderContractorActions = (contractor) => (
-    <>
-      <IconButton
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
+      <Button
         size="small"
+        color="success"
         onClick={() => handleOpenAssignmentDialog(null, contractor)}
-        sx={{ color: 'info.main' }}
       >
-        <AddIcon />
-      </IconButton>
-      <IconButton
-        size="small"
-        onClick={() => handleOpenPaymentDialog(contractor)}
-        sx={{ color: 'warning.main', ml: 1 }}
-      >
-        <PaymentIcon />
-      </IconButton>
-      <IconButton
-        size="small"
-        onClick={() => {
-          setSelectedContractor(contractor);
-          setOpenPurchaseDialog(true);
-        }}
-        sx={{ color: 'success.main', ml: 1 }}
-      >
-        <ShoppingCartIcon />
-      </IconButton>
-      <IconButton
-        size="small"
-        onClick={() => handleOpenDialog(contractor)}
-        sx={{ color: 'primary.main', ml: 1 }}
-      >
-        <EditIcon />
-      </IconButton>
-      <IconButton
-        size="small"
-        onClick={() => handleDeleteContractor(contractor.id)}
-        sx={{ color: 'error.main', ml: 1 }}
-      >
-        <DeleteIcon />
-      </IconButton>
-    </>
+        Assign
+      </Button>
+      <Box sx={{ display: 'flex', gap: 0.5 }}>
+        <IconButton
+          size="small"
+          onClick={() => handleOpenPaymentDialog(contractor)}
+          sx={{ color: 'warning.main', ml: 1 }}
+        >
+          <PaymentIcon />
+        </IconButton>
+        <IconButton
+          size="small"
+          onClick={() => handleOpenDialog(contractor)}
+          sx={{ color: 'primary.main', ml: 1 }}
+        >
+          <EditIcon />
+        </IconButton>
+        <IconButton
+          size="small"
+          onClick={() => handleDeleteContractor(contractor.id)}
+          sx={{ color: 'error.main', ml: 1 }}
+        >
+          <DeleteIcon />
+        </IconButton>
+      </Box>
+    </Box>
   );
 
   const handleReassignAndDelete = async () => {
-    try {
-      if (!newContractorId) {
-        alert('Please select a new contractor');
-        return;
-      }
+    if (!newContractorId) {
+      alert('Please select a new contractor');
+      return;
+    }
 
+    try {
       await axios.delete(`/api/manufacturing/contractors/${contractorToDelete}?forceDelete=true&newContractorId=${newContractorId}`);
       setOpenReassignDialog(false);
       setContractorToDelete(null);
       setNewContractorId('');
       fetchContractors();
+      fetchAssignments();
     } catch (error) {
-      console.error('Error reassigning and deleting contractor:', error);
-      alert(error.response?.data?.message || 'Error reassigning and deleting contractor');
+      console.error('Error in reassignment:', error);
+      alert('Failed to reassign tasks and delete contractor');
     }
   };
 
@@ -800,14 +798,39 @@ const Manufacturing = () => {
     fetchAssignments();
   }, [assignmentFilters]);
 
+  const handleDeleteAssignment = async (assignmentId) => {
+    if (!window.confirm('Are you sure you want to delete this assignment?')) return;
+
+    try {
+      await axios.delete(`/api/manufacturing/assignments/${assignmentId}`);
+      await Promise.all([
+        fetchAssignments(),
+        fetchContractors(),
+        fetchRawMaterials()
+      ]);
+    } catch (error) {
+      console.error('Error deleting assignment:', error);
+      alert(error.response?.data?.message || 'Error deleting assignment');
+    }
+  };
+
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
-      {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
         <Typography variant="h4" sx={{ fontWeight: 600 }}>
           Manufacturing Management
         </Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="outlined"
+            startIcon={<AddIcon />}
+            onClick={() => {
+              setSelectedContractor(null);
+              setOpenPurchaseDialog(true);
+            }}
+          >
+            New Purchase
+          </Button>
           <Button
             variant="outlined"
             startIcon={<AddIcon />}
@@ -825,7 +848,6 @@ const Manufacturing = () => {
         </Box>
       </Box>
 
-      {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
           <SummaryCard
@@ -884,7 +906,6 @@ const Manufacturing = () => {
         </Grid>
       </Grid>
 
-      {/* Tabs Navigation - Moved inside Paper component */}
       <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
         <Tabs
           value={currentTab}
@@ -897,7 +918,6 @@ const Manufacturing = () => {
           <Tab label="Reports" />
         </Tabs>
 
-        {/* Manufacturing Orders Tab */}
         {currentTab === 0 && (
           <TableContainer>
             <Table>
@@ -909,6 +929,7 @@ const Manufacturing = () => {
                   <TableCell>Start Date</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell>Payment Status</TableCell>
+                  <TableCell></TableCell>
                   <TableCell align="right">Actions</TableCell>
                 </TableRow>
               </TableHead>
@@ -933,37 +954,41 @@ const Manufacturing = () => {
                         size="small"
                       />
                     </TableCell>
-                    <TableCell align="right">
+                    <TableCell>
                       {order.status === 'completed' && order.payment_status !== 'paid' && (
+                        <Button
+                          size="small"
+                          color="success"
+                          onClick={() => handleMarkAsPaid(order)}
+                        >
+                          Paid
+                        </Button>
+                      )}
+                    </TableCell>
+                    <TableCell align="right">
+                      <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
                         <IconButton
                           size="small"
-                          onClick={() => handleMarkAsPaid(order)}
-                          sx={{ color: 'success.main', ml: 1 }}
+                          onClick={() => handlePrintManufacturingReceipt(order)}
+                          sx={{ color: 'info.main' }}
                         >
-                          <PaymentIcon />
+                          <PrintIcon />
                         </IconButton>
-                      )}
-                      <IconButton
-                        size="small"
-                        onClick={() => handlePrintManufacturingReceipt(order)}
-                        sx={{ color: 'info.main', ml: 1 }}
-                      >
-                        <PrintIcon />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleOpenOrderDialog(order)}
-                        sx={{ color: 'primary.main', ml: 1 }}
-                      >
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDeleteOrder(order.id)}
-                        sx={{ color: 'error.main', ml: 1 }}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleOpenOrderDialog(order)}
+                          sx={{ color: 'primary.main' }}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleDeleteOrder(order.id)}
+                          sx={{ color: 'error.main' }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Box>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -972,7 +997,6 @@ const Manufacturing = () => {
           </TableContainer>
         )}
 
-        {/* Contractors Tab */}
         {currentTab === 1 && (
           <TableContainer>
             <Table>
@@ -1010,7 +1034,6 @@ const Manufacturing = () => {
           </TableContainer>
         )}
 
-        {/* Assignments Tab */}
         {currentTab === 2 && (
           <>
             <Paper sx={{ p: 2, mb: 3 }}>
@@ -1156,7 +1179,7 @@ const Manufacturing = () => {
                         </IconButton>
                         <IconButton
                           size="small"
-                          onClick={() => handleDeleteOrder(assignment.id)}
+                          onClick={() => handleDeleteAssignment(assignment.id)}
                           sx={{ color: 'error.main', ml: 1 }}
                         >
                           <DeleteIcon />
@@ -1170,7 +1193,6 @@ const Manufacturing = () => {
           </>
         )}
 
-        {/* Reports Tab */}
         {currentTab === 3 && (
           <Box>
             <Paper sx={{ p: 2, mb: 3 }}>
@@ -1279,7 +1301,6 @@ const Manufacturing = () => {
               </Alert>
             )}
 
-            {/* Reports Grid */}
             <Grid container spacing={3}>
               {reportData.map((assignment) => (
                 <Grid item xs={12} md={6} lg={4} key={assignment.id}>
@@ -1362,7 +1383,6 @@ const Manufacturing = () => {
         )}
       </Paper>
 
-      {/* Add the Manufacturing Order Dialog */}
       <Dialog open={openOrderDialog} onClose={handleCloseOrderDialog}>
         <DialogTitle>
           {selectedOrder ? 'Edit Manufacturing Order' : 'New Manufacturing Order'}
@@ -1495,29 +1515,10 @@ const Manufacturing = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Assign Cinnamon to Contractor Dialog */}
       <Dialog open={openAssignmentDialog} onClose={() => setOpenAssignmentDialog(false)}>
         <DialogTitle>Assign Cinnamon to Contractor</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12}>
-              <FormControl fullWidth>
-                <InputLabel>Contractor</InputLabel>
-                <Select
-                  value={assignmentFormData.contractor_id}
-                  onChange={(e) => setAssignmentFormData(prev => ({
-                    ...prev,
-                    contractor_id: e.target.value
-                  }))}
-                >
-                  {contractors.map(contractor => (
-                    <MenuItem key={contractor.id} value={contractor.id}>
-                      {contractor.name} ({contractor.contractor_id})
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
             <Grid item xs={12}>
               <FormControl fullWidth>
                 <InputLabel>Raw Material</InputLabel>
@@ -1626,36 +1627,17 @@ const Manufacturing = () => {
           <Button
             variant="contained"
             onClick={handleAssignmentSubmit}
-            disabled={!assignmentFormData.contractor_id || !assignmentFormData.quantity || !assignmentFormData.raw_material_id || !assignmentFormData.raw_material_quantity}
+            disabled={!assignmentFormData.quantity || !assignmentFormData.raw_material_id || !assignmentFormData.raw_material_quantity}
           >
             Assign
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Advance Payment Dialog */}
       <Dialog open={openPaymentDialog} onClose={() => setOpenPaymentDialog(false)}>
         <DialogTitle>Process Advance Payment</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12}>
-              <FormControl fullWidth>
-                <InputLabel>Contractor</InputLabel>
-                <Select
-                  value={advancePaymentData.contractor_id}
-                  onChange={(e) => setAdvancePaymentData(prev => ({
-                    ...prev,
-                    contractor_id: e.target.value
-                  }))}
-                >
-                  {contractors.map(contractor => (
-                    <MenuItem key={contractor.id} value={contractor.id}>
-                      {contractor.name} ({contractor.contractor_id})
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
             <Grid item xs={12}>
               <TextField
                 fullWidth
@@ -1666,20 +1648,6 @@ const Manufacturing = () => {
                   ...prev,
                   amount: e.target.value
                 }))}
-                required
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Payment Date"
-                type="date"
-                value={advancePaymentData.payment_date}
-                onChange={(e) => setAdvancePaymentData(prev => ({
-                  ...prev,
-                  payment_date: e.target.value
-                }))}
-                InputLabelProps={{ shrink: true }}
                 required
               />
             </Grid>
@@ -1706,7 +1674,6 @@ const Manufacturing = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Contractor Dialog */}
       <Dialog open={openDialog} onClose={handleCloseDialog}>
         <DialogTitle>
           {selectedContractor ? 'Edit Contractor' : 'New Contractor'}
@@ -1788,33 +1755,56 @@ const Manufacturing = () => {
         selectedContractor={selectedContractor}
       />
 
-      {/* Reassign Dialog */}
-      <Dialog open={openReassignDialog} onClose={() => setOpenReassignDialog(false)}>
-        <DialogTitle>Reassign Assignments</DialogTitle>
+      <Dialog
+        open={openReassignDialog}
+        onClose={() => {
+          setOpenReassignDialog(false);
+          setContractorToDelete(null);
+          setNewContractorId('');
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Reassign Contractor Work</DialogTitle>
         <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12}>
-              <FormControl fullWidth>
-                <InputLabel>New Contractor</InputLabel>
-                <Select
-                  value={newContractorId}
-                  onChange={(e) => setNewContractorId(e.target.value)}
-                >
-                  {contractors
-                    .filter(c => c.id !== contractorToDelete)
-                    .map(contractor => (
-                      <MenuItem key={contractor.id} value={contractor.id}>
-                        {contractor.name} ({contractor.contractor_id})
-                      </MenuItem>
-                    ))}
-                </Select>
-              </FormControl>
-            </Grid>
-          </Grid>
+          <Box sx={{ mt: 2 }}>
+            <Alert severity="info" sx={{ mb: 2 }}>
+              This contractor has active assignments. Please select a new contractor to take over these assignments before deleting.
+            </Alert>
+
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel>New Contractor</InputLabel>
+              <Select
+                value={newContractorId}
+                onChange={(e) => setNewContractorId(e.target.value)}
+                label="New Contractor"
+              >
+                {contractors
+                  .filter(c => c.id !== contractorToDelete && c.status === 'active')
+                  .map((contractor) => (
+                    <MenuItem key={contractor.id} value={contractor.id}>
+                      {contractor.name} ({contractor.contractor_id})
+                    </MenuItem>
+                  ))}
+              </Select>
+            </FormControl>
+          </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenReassignDialog(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleReassignAndDelete}>
+          <Button
+            onClick={() => {
+              setOpenReassignDialog(false);
+              setContractorToDelete(null);
+              setNewContractorId('');
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleReassignAndDelete}
+            color="primary"
+            disabled={!newContractorId}
+          >
             Reassign and Delete
           </Button>
         </DialogActions>

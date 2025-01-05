@@ -135,7 +135,7 @@ export default function HRManagement() {
       await axios.post('/api/hr/salary-advances', {
         employee_id: selectedEmployee,
         amount: parseFloat(advanceAmount),
-        request_date: new Date(),
+        request_date: new Date().toISOString().split('T')[0],
       });
       setOpenAdvanceDialog(false);
       fetchAdvances();

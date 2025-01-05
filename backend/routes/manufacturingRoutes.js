@@ -10,6 +10,7 @@ const {
   getAssignments,
   createAssignment,
   updateAssignment,
+  deleteAssignment,
   getAdvancePayments,
   createAdvancePayment,
   getContractorAdvancePayments,
@@ -107,6 +108,7 @@ router.delete('/contractors/:id', protect, authorize('admin'), deleteContractor)
 router.get('/assignments', protect, getAssignments);
 router.post('/assignments', protect, authorize('admin', 'manager'), createAssignment);
 router.put('/assignments/:id', protect, authorize('admin', 'manager'), updateAssignment);
+router.delete('/assignments/:id', protect, authorize('admin', 'manager'), deleteAssignment);
 router.get('/assignments/:id/report', protect, printAssignmentReport);
 router.get('/reports/assignments', protect, getAssignmentReports);
 

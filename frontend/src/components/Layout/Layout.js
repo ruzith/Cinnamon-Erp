@@ -30,7 +30,10 @@ const styles = {
     borderBottom: '1px solid',
     borderColor: 'divider',
     transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-    boxShadow: '0 2px 12px rgba(0, 0, 0, 0.05)',
+    boxShadow: (theme) =>
+      theme.palette.mode === 'light'
+        ? '0 4px 20px rgba(0, 0, 0, 0.08)'
+        : '0 4px 20px rgba(0, 0, 0, 0.3)',
   },
   logo: {
     fontSize: '2.5rem',
@@ -44,7 +47,7 @@ const styles = {
     },
   },
   brandText: {
-    fontWeight: 700,
+    fontWeight: 800,
     background: 'linear-gradient(45deg, #8B4513 30%, #D2691E 90%)',
     WebkitBackgroundClip: 'text',
     WebkitTextFillColor: 'transparent',
@@ -75,6 +78,7 @@ const styles = {
       ? 'rgba(139, 69, 19, 0.12)'
       : 'rgba(210, 105, 30, 0.12)',
     transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+    backdropFilter: 'blur(10px)',
     '&:hover': {
       bgcolor: (theme) => theme.palette.mode === 'light'
         ? 'rgba(139, 69, 19, 0.06)'
@@ -92,6 +96,11 @@ const styles = {
     borderRadius: '16px',
     p: 1.2,
     color: '#8B4513',
+    backdropFilter: 'blur(10px)',
+    border: '1px solid',
+    borderColor: (theme) => theme.palette.mode === 'light'
+      ? 'rgba(139, 69, 19, 0.12)'
+      : 'rgba(210, 105, 30, 0.12)',
     '&:hover': {
       transform: 'rotate(45deg) scale(1.15)',
       backgroundColor: (theme) =>
@@ -110,6 +119,11 @@ const styles = {
     gap: 1,
     color: '#8B4513',
     transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+    border: '1px solid',
+    borderColor: (theme) => theme.palette.mode === 'light'
+      ? 'rgba(139, 69, 19, 0.12)'
+      : 'rgba(210, 105, 30, 0.12)',
+    backdropFilter: 'blur(10px)',
     '&:hover': {
       backgroundColor: (theme) =>
         theme.palette.mode === 'light'

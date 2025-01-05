@@ -100,9 +100,56 @@ const generateEmployees = async (connection, count = 10) => {
   });
 };
 
-// Add these new generator functions
+// Add this new function before generateLands
+const generateLandCategories = async (connection) => {
+  const [users] = await connection.query('SELECT id FROM users WHERE role = "admin"');
+
+  const categories = [
+    {
+      name: 'Agricultural',
+      description: 'Agricultural land used for farming and cultivation',
+      status: 'active',
+      created_by: users[0].id
+    },
+    {
+      name: 'Residential',
+      description: 'Land designated for residential properties',
+      status: 'active',
+      created_by: users[0].id
+    },
+    {
+      name: 'Commercial',
+      description: 'Land for commercial and business purposes',
+      status: 'active',
+      created_by: users[0].id
+    },
+    {
+      name: 'Forest',
+      description: 'Forest and woodland areas',
+      status: 'active',
+      created_by: users[0].id
+    },
+    {
+      name: 'Other',
+      description: 'Other land types',
+      status: 'active',
+      created_by: users[0].id
+    }
+  ];
+
+  const insertedCategories = [];
+  for (const category of categories) {
+    const [result] = await connection.query('INSERT INTO land_categories SET ?', category);
+    insertedCategories.push({ ...category, id: result.insertId });
+  }
+
+  return insertedCategories;
+};
+
+// Modify the existing generateLands function
 const generateLands = async (connection, count = 10) => {
   const [users] = await connection.query('SELECT id FROM users WHERE role = "admin"');
+  const [categories] = await connection.query('SELECT id FROM land_categories');
 
   return Array.from({ length: count }, () => {
     const isRented = faker.datatype.boolean();
@@ -119,13 +166,13 @@ const generateLands = async (connection, count = 10) => {
       name: `Land ${faker.string.alphanumeric(6).toUpperCase()}`,
       land_number: `LAND-${faker.string.alphanumeric(8).toUpperCase()}`,
       size: faker.number.float({ min: 1, max: 100, multipleOf: 0.01 }),
-      category: faker.helpers.arrayElement(['agricultural', 'residential', 'commercial', 'forest', 'other']),
+      category_id: faker.helpers.arrayElement(categories).id,
       ownership_status: isRented ? 'rent' : 'owned',
       location: faker.location.streetAddress(),
       acquisition_date: faker.date.past({ years: 5 }).toISOString().split('T')[0],
       status: faker.helpers.arrayElement(['active', 'inactive', 'under_maintenance']),
       description: faker.lorem.paragraph(),
-      rent_details: rentDetails,  // Now properly stringified
+      rent_details: rentDetails,
       created_by: users[0].id
     };
   });
@@ -1574,7 +1621,7 @@ const seedData = async () => {
       'sales_items', 'sales_invoices', 'inventory_transactions',
       'inventory', 'manufacturing_orders', 'cinnamon_assignments',
       'land_assignments', 'cutting_contractors', 'manufacturing_contractors',
-      'wells', 'leases', 'lands', 'employee_group_members', 'employee_groups',
+      'wells', 'leases', 'lands', 'land_categories', 'employee_group_members', 'employee_groups',
       'employees', 'designations', 'products', 'product_categories', 'tasks',
       'customers', 'accounts', 'monthly_targets', 'settings', 'users'
     ];
@@ -1697,6 +1744,10 @@ const seedData = async () => {
     for (const employee of employees) {
       await connection.query('INSERT INTO employees SET ?', employee);
     }
+
+    // Seed land categories before lands
+    console.log('Seeding land categories...');
+    await generateLandCategories(connection);
 
     // Seed lands
     console.log('Seeding lands...');

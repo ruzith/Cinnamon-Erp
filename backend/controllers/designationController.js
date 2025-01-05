@@ -81,15 +81,17 @@ exports.updateDesignation = async (req, res) => {
   }
 };
 
-// @desc    Reassign employees to new designation
-// @route   PUT /api/designations/:id/reassign
+// @desc    Reassign employees to new designation and delete old designation
+// @route   POST /api/designations/:id/reassign
 // @access  Private/Admin
 exports.reassignEmployees = async (req, res) => {
+  const connection = await Designation.pool.getConnection();
+  await connection.beginTransaction();
+
   try {
     const { newDesignationId } = req.body;
     const oldDesignationId = req.params.id;
 
-    // Validate input
     if (!newDesignationId) {
       return res.status(400).json({ message: 'New designation ID is required' });
     }
@@ -107,7 +109,7 @@ exports.reassignEmployees = async (req, res) => {
     }
 
     // Get employees using the old designation
-    const [employees] = await Designation.pool.execute(
+    const [employees] = await connection.execute(
       'SELECT id, name FROM employees WHERE designation_id = ?',
       [oldDesignationId]
     );
@@ -117,18 +119,31 @@ exports.reassignEmployees = async (req, res) => {
     }
 
     // Update all employees to new designation
-    await Designation.pool.execute(
+    await connection.execute(
       'UPDATE employees SET designation_id = ? WHERE designation_id = ?',
       [newDesignationId, oldDesignationId]
     );
 
+    // Delete the old designation
+    await connection.execute(
+      'DELETE FROM designations WHERE id = ?',
+      [oldDesignationId]
+    );
+
+    // Commit the transaction
+    await connection.commit();
+
     res.status(200).json({
-      message: `Successfully reassigned ${employees.length} employees to ${newDesignation.title}`,
+      message: `Successfully reassigned ${employees.length} employees and deleted the designation`,
       reassignedEmployees: employees,
       newDesignation: newDesignation
     });
   } catch (error) {
+    // Rollback the transaction if anything fails
+    await connection.rollback();
     res.status(500).json({ message: error.message });
+  } finally {
+    connection.release();
   }
 };
 
@@ -139,7 +154,7 @@ exports.deleteDesignation = async (req, res) => {
   try {
     const { forceDelete, newDesignationId } = req.query;
     const designation = await Designation.findById(req.params.id);
-    
+
     if (!designation) {
       return res.status(404).json({ message: 'Designation not found' });
     }
@@ -174,11 +189,11 @@ exports.deleteDesignation = async (req, res) => {
     }
 
     await Designation.delete(req.params.id);
-    res.status(200).json({ 
+    res.status(200).json({
       message: 'Designation deleted successfully',
       reassignedEmployees: employees.length > 0 ? employees : undefined
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
-}; 
+};

@@ -28,9 +28,16 @@ export const updateDesignation = createAsyncThunk(
 
 export const deleteDesignation = createAsyncThunk(
   'designations/deleteDesignation',
-  async (id) => {
-    await axios.delete(`/api/designations/${id}`);
-    return id;
+  async (id, { rejectWithValue }) => {
+    try {
+      await axios.delete(`/api/designations/${id}`);
+      return id;
+    } catch (error) {
+      if (error.response) {
+        return rejectWithValue(error.response.data);
+      }
+      throw error;
+    }
   }
 );
 

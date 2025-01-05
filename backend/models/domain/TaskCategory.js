@@ -44,6 +44,20 @@ class TaskCategory extends BaseModel {
   }
 
   async delete(id) {
+    // Check if there are any tasks using this category
+    const [tasks] = await this.pool.execute(`
+      SELECT t.*
+      FROM tasks t
+      WHERE t.category_id = ?
+    `, [id]);
+
+    if (tasks.length > 0) {
+      const error = new Error('Cannot delete category that has tasks assigned to it');
+      error.hasTasks = true;
+      error.tasks = tasks;
+      throw error;
+    }
+
     await this.pool.execute(
       'DELETE FROM task_categories WHERE id = ?',
       [id]

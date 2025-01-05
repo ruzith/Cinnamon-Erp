@@ -6,7 +6,8 @@ const { validateEmployeeGroup, validateGroupMembers } = require('../validators/e
 // @access  Private
 exports.getEmployeeGroups = async (req, res) => {
   try {
-    const groups = await EmployeeGroup.getWithMembers();
+    const includeMembers = req.query.include === 'members';
+    const groups = await EmployeeGroup.getWithMembers(includeMembers);
     res.status(200).json(groups);
   } catch (error) {
     console.error('Error fetching employee groups:', error);

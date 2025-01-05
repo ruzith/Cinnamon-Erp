@@ -40,7 +40,9 @@ const protect = asyncHandler(async (req, res, next) => {
 
 const authorize = (...roles) => {
   return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
+    // Flatten roles array in case of nested arrays
+    const allowedRoles = roles.flat();
+    if (!allowedRoles.includes(req.user.role)) {
       res.status(403);
       throw new Error(`User role ${req.user.role} is not authorized to access this route`);
     }

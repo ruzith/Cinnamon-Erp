@@ -6,28 +6,21 @@ const { validateLand } = require('../validators/landValidator');
 // @access  Private
 exports.getLands = async (req, res) => {
   try {
-    const { status, unassigned } = req.query;
-    let query = 'SELECT l.* FROM lands l';
+    let query = `
+      SELECT l.*, lc.name as category_name
+      FROM lands l
+      LEFT JOIN land_categories lc ON l.category_id = lc.id
+      WHERE 1=1
+    `;
     const params = [];
 
-    if (status || unassigned === 'true') {
-      query += ' WHERE 1=1';
-
-      if (status) {
-        query += ' AND l.status = ?';
-        params.push(status);
-      }
-
-      if (unassigned === 'true') {
-        query += ` AND NOT EXISTS (
-          SELECT 1 FROM land_assignments la
-          WHERE la.land_id = l.id
-          AND la.status = 'active'
-        )`;
-      }
+    // Add category filter if provided
+    if (req.query.category_id) {
+      query += ' AND l.category_id = ?';
+      params.push(req.query.category_id);
     }
 
-    query += ' ORDER BY l.created_at DESC';
+    query += ' ORDER BY l.name ASC';
 
     const [lands] = await Land.pool.execute(query, params);
     res.status(200).json(lands);

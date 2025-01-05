@@ -13,11 +13,11 @@ const initialState = {
 export const getLands = createAsyncThunk('lands/getAll', async (_, thunkAPI) => {
   try {
     const token = thunkAPI.getState().auth.user?.token;
-    
+
     if (!token) {
       throw new Error('No token found - user not authenticated');
     }
-    
+
     return await landService.getLands(token);
   } catch (error) {
     const message = error.response?.data?.message || error.message;
@@ -29,11 +29,11 @@ export const getLands = createAsyncThunk('lands/getAll', async (_, thunkAPI) => 
 export const createLand = createAsyncThunk('lands/create', async (landData, thunkAPI) => {
   try {
     const token = thunkAPI.getState().auth.user?.token;
-    
+
     if (!token) {
       throw new Error('No token found - user not authenticated');
     }
-    
+
     return await landService.createLand(landData, token);
   } catch (error) {
     const message = error.response?.data?.message || error.message;
@@ -45,7 +45,9 @@ export const createLand = createAsyncThunk('lands/create', async (landData, thun
 export const updateLand = createAsyncThunk('lands/update', async ({ id, landData }, thunkAPI) => {
   try {
     const token = thunkAPI.getState().auth.user.token;
-    return await landService.updateLand({ id, landData }, token);
+    await landService.updateLand({ id, landData }, token);
+    // Fetch fresh data after update
+    return await landService.getLands(token);
   } catch (error) {
     return thunkAPI.rejectWithValue(error.response?.data?.message || error.message);
   }
@@ -104,9 +106,7 @@ export const landSlice = createSlice({
       .addCase(updateLand.fulfilled, (state, action) => {
         state.isLoading = false;
         state.isSuccess = true;
-        state.lands = state.lands.map(land => 
-          land.id === action.payload.id ? action.payload : land
-        );
+        state.lands = action.payload;
       })
       .addCase(updateLand.rejected, (state, action) => {
         state.isLoading = false;
@@ -131,4 +131,4 @@ export const landSlice = createSlice({
 });
 
 export const { reset } = landSlice.actions;
-export default landSlice.reducer; 
+export default landSlice.reducer;

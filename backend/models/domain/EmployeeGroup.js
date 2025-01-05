@@ -5,15 +5,37 @@ class EmployeeGroup extends BaseModel {
     super('employee_groups');
   }
 
-  async getWithMembers() {
-    const [groups] = await this.pool.execute(`
+  async getWithMembers(includeMembers = false) {
+    let query = `
       SELECT g.*,
              COUNT(DISTINCT m.employee_id) as member_count
+             ${includeMembers ? `,
+             GROUP_CONCAT(DISTINCT e.id) as member_ids,
+             GROUP_CONCAT(DISTINCT e.name) as member_names,
+             GROUP_CONCAT(DISTINCT e.designation_id) as member_designation_ids,
+             GROUP_CONCAT(DISTINCT d.title) as member_designation_titles` : ''}
       FROM employee_groups g
       LEFT JOIN employee_group_members m ON g.id = m.group_id
+      ${includeMembers ? `
+      LEFT JOIN employees e ON m.employee_id = e.id
+      LEFT JOIN designations d ON e.designation_id = d.id` : ''}
       GROUP BY g.id
       ORDER BY g.name ASC
-    `);
+    `;
+
+    const [groups] = await this.pool.execute(query);
+
+    if (includeMembers) {
+      return groups.map(group => ({
+        ...group,
+        members: group.member_ids ? group.member_ids.split(',').map((id, index) => ({
+          id: parseInt(id),
+          name: group.member_names.split(',')[index],
+          designation_id: group.member_designation_ids ? parseInt(group.member_designation_ids.split(',')[index]) : null,
+          designation_title: group.member_designation_titles ? group.member_designation_titles.split(',')[index] : null
+        })) : []
+      }));
+    }
 
     return groups;
   }

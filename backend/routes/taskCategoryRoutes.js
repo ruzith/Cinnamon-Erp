@@ -47,7 +47,57 @@ router.delete('/:id', protect, authorize('admin', 'manager'), async (req, res) =
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting task category:', error);
+    if (error.hasTasks) {
+      return res.status(400).json({
+        message: 'Cannot delete category that has tasks assigned to it',
+        hasTasks: true
+      });
+    }
     res.status(500).json({ message: 'Error deleting task category' });
+  }
+});
+
+// Reassign tasks and delete category
+router.post('/:id/reassign', protect, authorize('admin', 'manager'), async (req, res) => {
+  const { newCategoryId } = req.body;
+  const oldCategoryId = req.params.id;
+  let connection;
+
+  try {
+    // Get a connection from the pool
+    connection = await TaskCategory.pool.getConnection();
+
+    // Start a transaction
+    await connection.beginTransaction();
+
+    // Update all tasks with the old category to use the new category
+    await connection.execute(
+      'UPDATE tasks SET category_id = ? WHERE category_id = ?',
+      [newCategoryId, oldCategoryId]
+    );
+
+    // Delete the old category
+    await connection.execute(
+      'DELETE FROM task_categories WHERE id = ?',
+      [oldCategoryId]
+    );
+
+    // Commit the transaction
+    await connection.commit();
+
+    res.status(200).json({ message: 'Tasks reassigned and category deleted successfully' });
+  } catch (error) {
+    // Rollback in case of error
+    if (connection) {
+      await connection.rollback();
+    }
+    console.error('Error in category reassignment:', error);
+    res.status(500).json({ message: 'Error reassigning tasks and deleting category' });
+  } finally {
+    // Release the connection back to the pool
+    if (connection) {
+      connection.release();
+    }
   }
 });
 

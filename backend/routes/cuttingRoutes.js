@@ -7,17 +7,19 @@ const {
   createContractor,
   updateContractor,
   deleteContractor,
+  reassignContractor,
+  getAssignments,
   createAssignment,
   updateAssignment,
-  getAssignments,
+  deleteAssignment,
   getTasks,
-  createTask,
   getTask,
+  createTask,
   updateTask,
   deleteTask,
-  deleteAssignment,
-  createPayment,
   getPayments,
+  getPayment,
+  createPayment,
   getPaymentsByContractor,
   completeAssignment,
   createAdvancePayment,
@@ -26,67 +28,74 @@ const {
   deletePayment,
   deleteAdvancePayment,
   updateAdvancePayment,
-  updatePayment
+  updatePayment,
+  generateReceipt
 } = require('../controllers/cuttingController');
 
+router.use(protect);
+
 // Contractor routes
-router.get('/contractors', protect, getContractors);
-router.get('/contractors/:id', protect, getContractor);
-router.post('/contractors', protect, authorize('admin', 'manager'), createContractor);
-router.put('/contractors/:id', protect, authorize('admin', 'manager'), updateContractor);
-router.delete('/contractors/:id', protect, authorize('admin'), deleteContractor);
+router.route('/contractors')
+  .get(getContractors)
+  .post(authorize('admin'), createContractor);
+
+router.route('/contractors/:id')
+  .get(getContractor)
+  .put(authorize('admin'), updateContractor)
+  .delete(authorize('admin'), deleteContractor);
+
+// Add new reassignment route
+router.route('/contractors/:id/reassign')
+  .post(authorize('admin'), reassignContractor);
 
 // Assignment routes
-router.get('/assignments', protect, getAssignments);
-router.post('/assignments', protect, authorize('admin', 'manager'), createAssignment);
-router.put('/assignments/:id', protect, authorize('admin', 'manager'), updateAssignment);
-router.delete('/assignments/:id', protect, authorize('admin'), deleteAssignment);
+router.route('/assignments')
+  .get(getAssignments)
+  .post(authorize('admin'), createAssignment);
+
+router.route('/assignments/:id')
+  .put(authorize('admin'), updateAssignment)
+  .delete(authorize('admin'), deleteAssignment);
+
+router.route('/assignments/complete')
+  .post(authorize('admin'), completeAssignment);
 
 // Task routes
-router.get('/tasks', protect, getTasks);
-router.post('/tasks', protect, createTask);
-router.get('/tasks/:id', protect, getTask);
-router.put('/tasks/:id', protect, updateTask);
-router.delete('/tasks/:id', protect, authorize('admin'), deleteTask);
+router.route('/tasks')
+  .get(getTasks)
+  .post(createTask);
+
+router.route('/tasks/:id')
+  .get(getTask)
+  .put(updateTask)
+  .delete(authorize('admin'), deleteTask);
 
 // Payment routes
-router.post('/payments', protect, authorize('admin', 'accountant'), createPayment);
-router.get('/payments', protect, getPayments);
-router.get('/payments/contractor/:id', protect, getPaymentsByContractor);
-router.get('/payments/:id', protect, async (req, res) => {
-  try {
-    const payment = await require('../models/domain/CuttingPayment').getWithDetails(req.params.id);
-    if (!payment) {
-      return res.status(404).json({ message: 'Payment not found' });
-    }
-    res.json(payment);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-router.put('/payments/:id', protect, authorize('admin', 'accountant'), updatePayment);
-router.delete('/payments/:id', protect, authorize('admin', 'accountant'), deletePayment);
+router.route('/payments')
+  .get(getPayments)
+  .post(authorize(['admin', 'accountant']), createPayment);
+
+router.route('/payments/receipt')
+  .post(generateReceipt);
+
+router.route('/payments/:id')
+  .get(getPayment)
+  .put(authorize(['admin', 'accountant']), updatePayment)
+  .delete(authorize(['admin', 'accountant']), deletePayment);
+
+router.route('/payments/contractor/:id')
+  .get(getPaymentsByContractor);
 
 // Advance Payment routes
-router.post('/advance-payments', protect, authorize('admin', 'accountant'), createAdvancePayment);
-router.get('/advance-payments', protect, getAdvancePayments);
-router.get('/advance-payments/contractor/:id', protect, getAdvancePaymentsByContractor);
-router.put('/advance-payments/:id', protect, authorize('admin', 'accountant'), updateAdvancePayment);
-router.delete('/advance-payments/:id', protect, authorize('admin', 'accountant'), deleteAdvancePayment);
+router.route('/advance-payments')
+  .get(getAdvancePayments)
+  .post(authorize(['admin', 'accountant']), createAdvancePayment);
 
-// @route   POST /api/cutting/assignments/complete
-router.post('/assignments/complete', completeAssignment);
+router.route('/advance-payments/:id')
+  .put(authorize(['admin', 'accountant']), updateAdvancePayment)
+  .delete(authorize(['admin', 'accountant']), deleteAdvancePayment);
 
-// Add this route after other payment routes
-router.post('/payments/receipt', protect, async (req, res) => {
-  try {
-    const { payment, settings } = req.body;
-    const { generateCuttingPaymentReceipt } = require('../utils/receiptTemplates');
-    const receiptHtml = generateCuttingPaymentReceipt(payment, settings);
-    res.json({ receiptHtml });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
+router.route('/advance-payments/contractor/:id')
+  .get(getAdvancePaymentsByContractor);
 
 module.exports = router;

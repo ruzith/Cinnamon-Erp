@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch } from 'react-redux';
-import { createLand, updateLand } from '../../features/lands/landSlice';
 import {
   Grid,
   TextField,
@@ -8,17 +7,20 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  FormHelperText,
-  Button
+  Button,
+  Box,
 } from '@mui/material';
+import { createLand, updateLand } from '../../features/lands/landSlice';
+import axios from 'axios';
 
 const LandForm = ({ land, onClose }) => {
   const dispatch = useDispatch();
+  const [categories, setCategories] = useState([]);
   const [formData, setFormData] = useState({
     name: land?.name || '',
     land_number: land?.land_number || '',
     size: land?.size || '',
-    category: land?.category || '',
+    category_id: land?.category_id || '',
     ownership_status: land?.ownership_status || 'owned',
     location: land?.location || '',
     acquisition_date: land?.acquisition_date?.split('T')[0] || '',
@@ -32,6 +34,19 @@ const LandForm = ({ land, onClose }) => {
       lessor_contact: ''
     }
   });
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  const fetchCategories = async () => {
+    try {
+      const response = await axios.get('/api/land-categories/active');
+      setCategories(response.data);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -52,19 +67,23 @@ const LandForm = ({ land, onClose }) => {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const landData = {
       ...formData,
       rent_details: formData.ownership_status === 'rent' ? formData.rent_details : null
     };
 
-    if (land) {
-      dispatch(updateLand({ id: land.id, landData }));
-    } else {
-      dispatch(createLand(landData));
+    try {
+      if (land) {
+        await dispatch(updateLand({ id: land.id, landData })).unwrap();
+      } else {
+        await dispatch(createLand(landData)).unwrap();
+      }
+      onClose();
+    } catch (error) {
+      console.error('Error saving land:', error);
     }
-    onClose();
   };
 
   return (
@@ -73,7 +92,7 @@ const LandForm = ({ land, onClose }) => {
         <Grid item xs={12} sm={6}>
           <TextField
             fullWidth
-            label="Land Name"
+            label="Name"
             name="name"
             value={formData.name}
             onChange={handleChange}
@@ -105,15 +124,16 @@ const LandForm = ({ land, onClose }) => {
           <FormControl fullWidth required>
             <InputLabel>Category</InputLabel>
             <Select
-              name="category"
-              value={formData.category}
+              name="category_id"
+              value={formData.category_id}
               onChange={handleChange}
+              label="Category"
             >
-              <MenuItem value="agricultural">Agricultural</MenuItem>
-              <MenuItem value="residential">Residential</MenuItem>
-              <MenuItem value="commercial">Commercial</MenuItem>
-              <MenuItem value="forest">Forest</MenuItem>
-              <MenuItem value="other">Other</MenuItem>
+              {categories.map((category) => (
+                <MenuItem key={category.id} value={category.id}>
+                  {category.name}
+                </MenuItem>
+              ))}
             </Select>
           </FormControl>
         </Grid>
@@ -124,15 +144,71 @@ const LandForm = ({ land, onClose }) => {
               name="ownership_status"
               value={formData.ownership_status}
               onChange={handleChange}
+              label="Ownership Status"
             >
               <MenuItem value="owned">Owned</MenuItem>
               <MenuItem value="rent">Rent</MenuItem>
             </Select>
           </FormControl>
         </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth
+            label="Location"
+            name="location"
+            value={formData.location}
+            onChange={handleChange}
+            required
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth
+            label="Acquisition Date"
+            name="acquisition_date"
+            type="date"
+            value={formData.acquisition_date}
+            onChange={handleChange}
+            required
+            InputLabelProps={{
+              shrink: true,
+            }}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <FormControl fullWidth required>
+            <InputLabel>Status</InputLabel>
+            <Select
+              name="status"
+              value={formData.status}
+              onChange={handleChange}
+              label="Status"
+            >
+              <MenuItem value="active">Active</MenuItem>
+              <MenuItem value="inactive">Inactive</MenuItem>
+              <MenuItem value="under_maintenance">Under Maintenance</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+        <Grid item xs={12}>
+          <TextField
+            fullWidth
+            label="Description"
+            name="description"
+            value={formData.description}
+            onChange={handleChange}
+            multiline
+            rows={3}
+          />
+        </Grid>
 
         {formData.ownership_status === 'rent' && (
           <>
+            <Grid item xs={12}>
+              <Box sx={{ my: 2 }}>
+                <strong>Rent Details</strong>
+              </Box>
+            </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
@@ -150,10 +226,12 @@ const LandForm = ({ land, onClose }) => {
                 label="Lease Start Date"
                 name="lease_start_date"
                 type="date"
-                InputLabelProps={{ shrink: true }}
                 value={formData.rent_details.lease_start_date}
                 onChange={handleRentDetailsChange}
                 required
+                InputLabelProps={{
+                  shrink: true,
+                }}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -162,10 +240,12 @@ const LandForm = ({ land, onClose }) => {
                 label="Lease End Date"
                 name="lease_end_date"
                 type="date"
-                InputLabelProps={{ shrink: true }}
                 value={formData.rent_details.lease_end_date}
                 onChange={handleRentDetailsChange}
                 required
+                InputLabelProps={{
+                  shrink: true,
+                }}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -190,49 +270,14 @@ const LandForm = ({ land, onClose }) => {
             </Grid>
           </>
         )}
-
-        <Grid item xs={12}>
-          <TextField
-            fullWidth
-            label="Location"
-            name="location"
-            value={formData.location}
-            onChange={handleChange}
-            required
-          />
-        </Grid>
-        <Grid item xs={12}>
-          <TextField
-            fullWidth
-            label="Description"
-            name="description"
-            multiline
-            rows={3}
-            value={formData.description}
-            onChange={handleChange}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <TextField
-            fullWidth
-            label="Acquisition Date"
-            name="acquisition_date"
-            type="date"
-            InputLabelProps={{ shrink: true }}
-            value={formData.acquisition_date}
-            onChange={handleChange}
-            required
-          />
-        </Grid>
-        <Grid item xs={12}>
-          <Button type="submit" variant="contained" color="primary">
-            {land ? 'Update Land' : 'Add Land'}
-          </Button>
-          <Button onClick={onClose} variant="outlined" sx={{ ml: 1 }}>
-            Cancel
-          </Button>
-        </Grid>
       </Grid>
+
+      <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button type="submit" variant="contained">
+          {land ? 'Update' : 'Create'}
+        </Button>
+      </Box>
     </form>
   );
 };

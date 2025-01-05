@@ -28,9 +28,11 @@ import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { useDispatch } from 'react-redux';
 import { createInvoice } from '../features/purchases/purchaseSlice';
 import axios from 'axios';
+import { useCurrencyFormatter } from '../utils/currencyUtils';
 
 const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
   const dispatch = useDispatch();
+  const { formatCurrency } = useCurrencyFormatter();
   const [finishedGoods, setFinishedGoods] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [contractors, setContractors] = useState([]);
@@ -205,7 +207,7 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
                       >
                         {contractors.map(contractor => (
                           <MenuItem key={contractor.id} value={contractor.id}>
-                            {contractor.name} ({contractor.contractor_id}) - ₹{contractor.cutting_rate}/kg
+                            {contractor.name} ({contractor.contractor_id}) - {formatCurrency(contractor.cutting_rate)}/kg
                           </MenuItem>
                         ))}
                       </Select>
@@ -215,7 +217,7 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
                     <TextField
                       fullWidth
                       size="small"
-                      label="Cutting Rate (₹/kg)"
+                      label={`Cutting Rate (${formatCurrency(0).split(' ')[0]}/kg)`}
                       type="number"
                       value={formData.cuttingRate}
                       onChange={(e) => setFormData(prev => ({
@@ -254,10 +256,10 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
                         <TableCell sx={{ width: '10%', bgcolor: 'grey.50' }}>Deduct 1 (kg)</TableCell>
                         <TableCell sx={{ width: '10%', bgcolor: 'grey.50' }}>Deduct 2 (kg)</TableCell>
                         <TableCell sx={{ width: '10%', bgcolor: 'grey.50' }}>Net (kg)</TableCell>
-                        <TableCell sx={{ width: '12%', bgcolor: 'grey.50' }}>Rate (₹)</TableCell>
-                        <TableCell sx={{ width: '10%', bgcolor: 'grey.50' }}>Amount (₹)</TableCell>
+                        <TableCell sx={{ width: '12%', bgcolor: 'grey.50' }}>Rate ({formatCurrency(0).split(' ')[0]})</TableCell>
+                        <TableCell sx={{ width: '10%', bgcolor: 'grey.50' }}>Amount ({formatCurrency(0).split(' ')[0]})</TableCell>
                         <TableCell sx={{ width: '8%', bgcolor: 'grey.50' }}>Cal</TableCell>
-                        <TableCell sx={{ width: '10%', bgcolor: 'grey.50' }}>Net (₹)</TableCell>
+                        <TableCell sx={{ width: '10%', bgcolor: 'grey.50' }}>Net ({formatCurrency(0).split(' ')[0]})</TableCell>
                         <TableCell padding="none" sx={{ bgcolor: 'grey.50' }} />
                       </TableRow>
                     </TableHead>
@@ -315,9 +317,9 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
                               onChange={(e) => handleItemChange(index, 'rate', Number(e.target.value))}
                             />
                           </TableCell>
-                          <TableCell>₹{item.amount.toFixed(2)}</TableCell>
+                          <TableCell>{formatCurrency(item.amount)}</TableCell>
                           <TableCell>{item.default_cal}</TableCell>
-                          <TableCell>₹{item.net_total.toFixed(2)}</TableCell>
+                          <TableCell>{formatCurrency(item.net_total)}</TableCell>
                           <TableCell padding="none">
                             <IconButton
                               size="small"
@@ -336,13 +338,13 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
                           <Typography variant="body2" sx={{ fontWeight: 600 }}>Totals:</Typography>
                         </TableCell>
                         <TableCell sx={{ bgcolor: 'grey.50' }}>
-                          <Typography variant="body2" sx={{ fontWeight: 600 }}>{calculateTotals().totalNetWeight} kg</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 600 }}>{formatCurrency(calculateTotals().totalNetWeight)} kg</Typography>
                         </TableCell>
                         <TableCell sx={{ bgcolor: 'grey.50' }} />
                         <TableCell sx={{ bgcolor: 'grey.50' }} />
                         <TableCell sx={{ bgcolor: 'grey.50' }} />
                         <TableCell sx={{ bgcolor: 'grey.50' }}>
-                          <Typography variant="body2" sx={{ fontWeight: 600 }}>₹{calculateTotals().totalAmount}</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 600 }}>{formatCurrency(calculateTotals().totalAmount)}</Typography>
                         </TableCell>
                         <TableCell padding="none" sx={{ bgcolor: 'grey.50' }} />
                       </TableRow>
@@ -367,7 +369,7 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
                       }}>
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>Total Amount:</Typography>
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                          ₹{calculateTotals().totalAmount}
+                          {formatCurrency(calculateTotals().totalAmount)}
                         </Typography>
                       </Box>
                       <Divider />
@@ -378,10 +380,10 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
                         px: 1
                       }}>
                         <Typography variant="body2">
-                          Cutting (₹{formData.cuttingRate}/kg):
+                          Cutting ({formatCurrency(formData.cuttingRate)}/kg):
                         </Typography>
                         <Typography variant="body2" color="error.main">
-                          - ₹{calculateTotals().cuttingCharges}
+                          - {formatCurrency(calculateTotals().cuttingCharges)}
                         </Typography>
                       </Box>
                       <Divider />
@@ -395,7 +397,7 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
                           Advance ({advancePayments.payments.length}):
                         </Typography>
                         <Typography variant="body2" color="error.main">
-                          - ₹{advancePayments.totalUnusedAdvance.toFixed(2)}
+                          - {formatCurrency(advancePayments.totalUnusedAdvance)}
                         </Typography>
                       </Box>
                       <Divider />
@@ -410,7 +412,7 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
                       }}>
                         <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Final Amount</Typography>
                         <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                          ₹{calculateTotals().finalAmount}
+                          {formatCurrency(calculateTotals().finalAmount)}
                         </Typography>
                       </Box>
                     </Box>
@@ -429,7 +431,7 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
                           <TableHead>
                             <TableRow>
                               <TableCell sx={{ bgcolor: 'grey.50' }}>Date</TableCell>
-                              <TableCell sx={{ bgcolor: 'grey.50' }}>Amount (₹)</TableCell>
+                              <TableCell sx={{ bgcolor: 'grey.50' }}>Amount ({formatCurrency(0).split(' ')[0]})</TableCell>
                               <TableCell sx={{ bgcolor: 'grey.50' }}>Reference</TableCell>
                               <TableCell sx={{ bgcolor: 'grey.50' }}>Status</TableCell>
                             </TableRow>
@@ -438,7 +440,7 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
                             {advancePayments.payments.map((payment, index) => (
                               <TableRow key={index} hover>
                                 <TableCell>{new Date(payment.payment_date).toLocaleDateString()}</TableCell>
-                                <TableCell>₹{parseFloat(payment.amount).toFixed(2)}</TableCell>
+                                <TableCell>{formatCurrency(parseFloat(payment.amount))}</TableCell>
                                 <TableCell>{payment.receipt_number}</TableCell>
                                 <TableCell>
                                   <Typography variant="body2" color="success.main">

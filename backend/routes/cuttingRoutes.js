@@ -18,7 +18,15 @@ const {
   deleteAssignment,
   createPayment,
   getPayments,
-  getPaymentsByContractor
+  getPaymentsByContractor,
+  completeAssignment,
+  createAdvancePayment,
+  getAdvancePayments,
+  getAdvancePaymentsByContractor,
+  deletePayment,
+  deleteAdvancePayment,
+  updateAdvancePayment,
+  updatePayment
 } = require('../controllers/cuttingController');
 
 // Contractor routes
@@ -45,5 +53,40 @@ router.delete('/tasks/:id', protect, authorize('admin'), deleteTask);
 router.post('/payments', protect, authorize('admin', 'accountant'), createPayment);
 router.get('/payments', protect, getPayments);
 router.get('/payments/contractor/:id', protect, getPaymentsByContractor);
+router.get('/payments/:id', protect, async (req, res) => {
+  try {
+    const payment = await require('../models/domain/CuttingPayment').getWithDetails(req.params.id);
+    if (!payment) {
+      return res.status(404).json({ message: 'Payment not found' });
+    }
+    res.json(payment);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+router.put('/payments/:id', protect, authorize('admin', 'accountant'), updatePayment);
+router.delete('/payments/:id', protect, authorize('admin', 'accountant'), deletePayment);
 
-module.exports = router; 
+// Advance Payment routes
+router.post('/advance-payments', protect, authorize('admin', 'accountant'), createAdvancePayment);
+router.get('/advance-payments', protect, getAdvancePayments);
+router.get('/advance-payments/contractor/:id', protect, getAdvancePaymentsByContractor);
+router.put('/advance-payments/:id', protect, authorize('admin', 'accountant'), updateAdvancePayment);
+router.delete('/advance-payments/:id', protect, authorize('admin', 'accountant'), deleteAdvancePayment);
+
+// @route   POST /api/cutting/assignments/complete
+router.post('/assignments/complete', completeAssignment);
+
+// Add this route after other payment routes
+router.post('/payments/receipt', protect, async (req, res) => {
+  try {
+    const { payment, settings } = req.body;
+    const { generateCuttingPaymentReceipt } = require('../utils/receiptTemplates');
+    const receiptHtml = generateCuttingPaymentReceipt(payment, settings);
+    res.json({ receiptHtml });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+module.exports = router;

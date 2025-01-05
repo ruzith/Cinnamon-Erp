@@ -9,12 +9,12 @@ class PurchaseInvoice extends BaseModel {
     const date = new Date();
     const year = date.getFullYear().toString().substr(-2);
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    
+
     const [result] = await this.pool.execute(
       'SELECT COUNT(*) as count FROM purchase_invoices WHERE YEAR(created_at) = YEAR(CURRENT_DATE)'
     );
     const count = result[0].count + 1;
-    
+
     return `PUR${year}${month}${count.toString().padStart(4, '0')}`;
   }
 
@@ -26,36 +26,50 @@ class PurchaseInvoice extends BaseModel {
       // Generate invoice number
       const invoiceNumber = await this.generateInvoiceNumber();
 
-      // Calculate totals
-      const subTotal = items.reduce((sum, item) => sum + item.total_amount, 0);
-      const total = subTotal + (invoiceData.tax_amount || 0);
+      // Calculate totals from the frontend data
+      const totalAmount = invoiceData.totalAmount || 0;
 
-      // Create invoice
+      // Create invoice with fields matching the database schema
       const [result] = await connection.execute(
-        'INSERT INTO purchase_invoices SET ?',
-        {
-          ...invoiceData,
-          invoice_number: invoiceNumber,
-          subtotal: subTotal,
-          total_amount: total
-        }
+        `INSERT INTO purchase_invoices (
+          invoice_number, supplier_id, invoice_date, due_date,
+          subtotal, tax_amount, total_amount, paid_amount,
+          status, notes, created_by, created_at
+        ) VALUES (?, ?, CURRENT_DATE, DATE_ADD(CURRENT_DATE, INTERVAL 30 DAY),
+          ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        [
+          invoiceNumber,
+          invoiceData.supplier_id || 1, // Default supplier if not provided
+          totalAmount, // subtotal
+          0, // tax_amount
+          totalAmount, // total_amount
+          0, // paid_amount
+          invoiceData.status || 'draft',
+          invoiceData.notes || '',
+          1 // created_by (default to 1 for now)
+        ]
       );
       const invoiceId = result.insertId;
 
-      // Create items
+      // Create items with fields matching the database schema
       for (const item of items) {
         await connection.execute(
-          'INSERT INTO purchase_items SET ?',
-          { ...item, invoice_id: invoiceId }
+          `INSERT INTO purchase_items (
+            invoice_id, grade_id, total_weight,
+            deduct_weight1, deduct_weight2, net_weight,
+            rate, amount
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            invoiceId,
+            item.grade, // grade is now the inventory item id
+            item.totalWeight || 0,
+            item.deductWeight1 || 0,
+            item.deductWeight2 || 0,
+            item.netWeight || 0,
+            item.rate || 0,
+            item.amount || 0
+          ]
         );
-
-        if (invoiceData.status === 'confirmed') {
-          // Update product stock
-          await connection.execute(
-            'UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ?',
-            [item.quantity, item.product_id]
-          );
-        }
       }
 
       await connection.commit();
@@ -82,9 +96,9 @@ class PurchaseInvoice extends BaseModel {
     if (!invoice[0]) return null;
 
     const [items] = await this.pool.execute(`
-      SELECT pi.*, p.name as product_name
+      SELECT pi.*, i.product_name as grade_name
       FROM purchase_items pi
-      JOIN products p ON pi.product_id = p.id
+      JOIN inventory i ON pi.grade_id = i.id
       WHERE pi.invoice_id = ?
     `, [id]);
 
@@ -95,4 +109,4 @@ class PurchaseInvoice extends BaseModel {
   }
 }
 
-module.exports = new PurchaseInvoice(); 
+module.exports = PurchaseInvoice;

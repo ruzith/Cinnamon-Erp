@@ -117,7 +117,7 @@ class Inventory extends BaseModel {
 
       if (existing[0]) {
         await connection.execute(
-          `UPDATE inventory 
+          `UPDATE inventory
            SET quantity = quantity + ?,
                purchase_price = (purchase_price * quantity + ? * ?) / (quantity + ?),
                selling_price = ?
@@ -151,6 +151,49 @@ class Inventory extends BaseModel {
       connection.release();
     }
   }
+
+  async addFinishedGood(connection, data) {
+    try {
+      // Check if product exists in inventory
+      const [existingProduct] = await connection.execute(
+        'SELECT * FROM inventory WHERE product_id = ? AND product_type = "finished_good"',
+        [data.product_id]
+      );
+
+      if (existingProduct[0]) {
+        // Update existing inventory
+        await connection.execute(
+          'UPDATE inventory SET quantity = quantity + ? WHERE product_id = ? AND product_type = "finished_good"',
+          [data.quantity, data.product_id]
+        );
+      } else {
+        // Create new inventory entry
+        await connection.execute(
+          `INSERT INTO inventory
+           (product_id, product_type, quantity, min_stock, max_stock, notes)
+           VALUES (?, "finished_good", ?, 0, 0, ?)`,
+          [data.product_id, data.quantity, data.notes || '']
+        );
+      }
+
+      // Create inventory transaction record
+      await connection.execute(
+        `INSERT INTO inventory_transactions
+         (item_id, type, quantity, reference, notes)
+         VALUES (?, "IN", ?, ?, ?)`,
+        [
+          data.product_id,
+          data.quantity,
+          `MO-${data.manufacturing_order_id}`,
+          data.notes || 'Manufacturing production'
+        ]
+      );
+
+      return true;
+    } catch (error) {
+      throw error;
+    }
+  }
 }
 
-module.exports = new Inventory(); 
+module.exports = new Inventory();

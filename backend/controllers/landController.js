@@ -6,9 +6,30 @@ const { validateLand } = require('../validators/landValidator');
 // @access  Private
 exports.getLands = async (req, res) => {
   try {
-    const lands = await Land.findAll({
-      orderBy: 'created_at DESC'
-    });
+    const { status, unassigned } = req.query;
+    let query = 'SELECT l.* FROM lands l';
+    const params = [];
+
+    if (status || unassigned === 'true') {
+      query += ' WHERE 1=1';
+
+      if (status) {
+        query += ' AND l.status = ?';
+        params.push(status);
+      }
+
+      if (unassigned === 'true') {
+        query += ` AND NOT EXISTS (
+          SELECT 1 FROM land_assignments la
+          WHERE la.land_id = l.id
+          AND la.status = 'active'
+        )`;
+      }
+    }
+
+    query += ' ORDER BY l.created_at DESC';
+
+    const [lands] = await Land.pool.execute(query, params);
     res.status(200).json(lands);
   } catch (error) {
     res.status(500).json({ message: error.message });

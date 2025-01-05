@@ -12,23 +12,29 @@ import {
   Button,
   TextField,
   CircularProgress,
-  Alert
+  Alert,
+  IconButton,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Chip
 } from '@mui/material';
-import { DatePicker } from '@mui/x-date-pickers';
-import { LocalizationProvider } from '@mui/x-date-pickers';
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { getReportTemplates, generateReport } from '../features/reports/reportSlice';
+import { getReportTemplates, generateReport, getReportPreview } from '../features/reports/reportSlice';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import ClearIcon from '@mui/icons-material/Clear';
 
 const Reports = () => {
   const dispatch = useDispatch();
   const { user } = useSelector(state => state.auth);
-  const { templates = [], currentReport = null, isLoading = false, isError = false, message = '' } = useSelector(state => state.reports || {});
-  
+  const { templates = [], currentReport = null, previewData = null, isLoading = false, isError = false, message = '' } = useSelector(state => state.reports || {});
+
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [filters, setFilters] = useState({});
   const [language, setLanguage] = useState('en');
-  const [exportFormat, setExportFormat] = useState('json');
+  const [exportFormat, setExportFormat] = useState('pdf');
   const [filterOptions, setFilterOptions] = useState({});
 
   useEffect(() => {
@@ -62,6 +68,18 @@ const Reports = () => {
     }
   }, [templates, selectedTemplate, user?.token]);
 
+  useEffect(() => {
+    if (selectedTemplate && user?.token) {
+      dispatch(getReportPreview({
+        code: selectedTemplate,
+        params: {
+          filters,
+          language
+        }
+      }));
+    }
+  }, [selectedTemplate, filters, language, dispatch, user?.token]);
+
   const handleTemplateChange = (event) => {
     const value = event.target.value;
     setSelectedTemplate(value);
@@ -90,23 +108,64 @@ const Reports = () => {
     switch (filter.type) {
       case 'date':
         return (
-          <LocalizationProvider dateAdapter={AdapterDateFns}>
-            <DatePicker
-              label={filter.label[language]}
-              value={filters[filter.field] || null}
-              onChange={(date) => handleFilterChange(filter.field, date)}
-              renderInput={(params) => <TextField {...params} fullWidth />}
-            />
-          </LocalizationProvider>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                type="date"
+                label={`Start ${filter.label.en}`}
+                value={filters[`${filter.field}Start`] || ''}
+                onChange={(e) => handleFilterChange(`${filter.field}Start`, e.target.value)}
+                InputLabelProps={{
+                  shrink: true,
+                }}
+                InputProps={{
+                  endAdornment: filters[`${filter.field}Start`] && (
+                    <IconButton
+                      size="small"
+                      onClick={() => handleFilterChange(`${filter.field}Start`, '')}
+                    >
+                      <ClearIcon fontSize="small" />
+                    </IconButton>
+                  )
+                }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label={`End ${filter.label.en}`}
+                type="date"
+                value={filters[`${filter.field}End`] || ''}
+                onChange={(e) => handleFilterChange(`${filter.field}End`, e.target.value)}
+                InputLabelProps={{
+                  shrink: true,
+                }}
+                InputProps={{
+                  endAdornment: filters[`${filter.field}End`] && (
+                    <IconButton
+                      size="small"
+                      onClick={() => handleFilterChange(`${filter.field}End`, '')}
+                    >
+                      <ClearIcon fontSize="small" />
+                    </IconButton>
+                  ),
+                  inputProps: {
+                    min: filters[`${filter.field}Start`] || undefined
+                  }
+                }}
+              />
+            </Grid>
+          </Grid>
         );
       case 'select':
-        const options = filter.optionsUrl 
-          ? (filterOptions[filter.field] || []) 
+        const options = filter.optionsUrl
+          ? (filterOptions[filter.field] || [])
           : (filter.options || []);
 
         return (
           <FormControl fullWidth>
-            <InputLabel>{filter.label[language]}</InputLabel>
+            <InputLabel>{filter.label.en}</InputLabel>
             <Select
               value={filters[filter.field] || ''}
               onChange={(e) => handleFilterChange(filter.field, e.target.value)}
@@ -114,7 +173,7 @@ const Reports = () => {
               <MenuItem value="">All</MenuItem>
               {options.map(option => (
                 <MenuItem key={option.value} value={option.value}>
-                  {option.label[language]}
+                  {option.label?.en || option.value}
                 </MenuItem>
               ))}
             </Select>
@@ -123,6 +182,102 @@ const Reports = () => {
       default:
         return null;
     }
+  };
+
+  const formatValue = (value, column) => {
+    if (value === null || value === undefined) return '-';
+
+    if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+
+    if (value instanceof Date || (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}/))) {
+      return new Date(value).toLocaleDateString();
+    }
+
+    if (typeof value === 'number') {
+      if (Number.isInteger(value)) return value.toString();
+      return value.toFixed(2);
+    }
+
+    if (typeof value === 'string') {
+      if (column === 'description') return value.substring(0, 30) + '...';
+      if (value.length > 100) return value.substring(0, 100) + '...';
+      return value;
+    }
+
+    return JSON.stringify(value);
+  };
+
+  const getStatusColor = (status) => {
+    const statusColors = {
+      active: 'success',
+      completed: 'success',
+      in_progress: 'warning',
+      pending: 'warning',
+      cancelled: 'error',
+      inactive: 'error',
+      high: 'error',
+      medium: 'warning',
+      low: 'info'
+    };
+    return statusColors[status] || 'default';
+  };
+
+  const renderPreviewTable = (data) => {
+    if (!data || data.length === 0) return null;
+
+    const columns = Object.keys(data[0]).filter(column => column !== 'description');
+
+    return (
+      <TableContainer>
+        <Table stickyHeader={false} size="small">
+          <TableHead>
+            <TableRow>
+              {columns.map((column) => (
+                <TableCell
+                  key={column}
+                  sx={{
+                    fontWeight: 'bold',
+                    textTransform: 'capitalize',
+                    whiteSpace: 'nowrap',
+                    backgroundColor: 'background.paper'
+                  }}
+                >
+                  {column.replace(/([A-Z])/g, ' $1').replace(/([a-z])([A-Z])/g, '$1 $2')}
+                </TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {data.map((row, index) => (
+              <TableRow key={index} hover>
+                {columns.map((column) => (
+                  <TableCell
+                    key={column}
+                    sx={{
+                      maxWidth: 200,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {['status', 'priority'].includes(column) ? (
+                      <Chip
+                        label={formatValue(row[column], column)}
+                        size="small"
+                        color={getStatusColor(row[column])}
+                        variant="outlined"
+                      />
+                    ) : (
+                      formatValue(row[column], column)
+                    )}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    );
   };
 
   return (
@@ -154,7 +309,7 @@ const Reports = () => {
                     </MenuItem>
                     {templates?.map(template => (
                       <MenuItem key={template.code} value={template.code}>
-                        {template.name?.[language] || template.code || 'Unnamed Template'}
+                        {template.name?.en || template.code || 'Unnamed Template'}
                       </MenuItem>
                     ))}
                   </Select>
@@ -163,7 +318,7 @@ const Reports = () => {
 
               <Grid item xs={12} md={4}>
                 <FormControl fullWidth sx={{ mb: 3 }}>
-                  <InputLabel>Language</InputLabel>
+                  <InputLabel>Report Language</InputLabel>
                   <Select
                     value={language}
                     onChange={(e) => setLanguage(e.target.value)}
@@ -181,7 +336,6 @@ const Reports = () => {
                     value={exportFormat}
                     onChange={(e) => setExportFormat(e.target.value)}
                   >
-                    <MenuItem value="json">JSON</MenuItem>
                     <MenuItem value="pdf">PDF</MenuItem>
                     <MenuItem value="excel">Excel</MenuItem>
                   </Select>
@@ -199,7 +353,7 @@ const Reports = () => {
               fullWidth
               variant="contained"
               onClick={handleGenerateReport}
-              disabled={isLoading}
+              disabled={isLoading || !selectedTemplate}
               startIcon={isLoading ? <CircularProgress size={20} /> : <FileDownloadIcon />}
             >
               Generate Report
@@ -208,30 +362,43 @@ const Reports = () => {
         </Grid>
 
         {/* Report Preview */}
-        <Grid item xs={12}>
-          <Paper sx={{ p: 3, minHeight: 400 }}>
-            <Typography variant="h6" sx={{ mb: 3 }}>
-              Report Preview
-            </Typography>
+        {selectedTemplate && (
+          <Grid item xs={12}>
+            <Paper sx={{ p: 3 }}>
+              <Typography variant="h6" sx={{ mb: 3 }}>
+                Preview
+              </Typography>
 
-            {isError && (
-              <Alert severity="error" sx={{ mb: 3 }}>
-                Error generating report. Please try again.
-              </Alert>
-            )}
+              {isError && (
+                <Alert severity="error" sx={{ mb: 3 }}>
+                  Error generating preview: {message}
+                </Alert>
+              )}
 
-            {currentReport && (
-              <Box>
-                {/* Render report data based on template and format */}
-                {/* This would be customized based on your needs */}
-                <pre>{JSON.stringify(currentReport, null, 2)}</pre>
-              </Box>
-            )}
-          </Paper>
-        </Grid>
+              {isLoading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                  <CircularProgress />
+                </Box>
+              ) : previewData ? (
+                <Box>
+                  {previewData.isPartial && (
+                    <Alert severity="info" sx={{ mb: 2 }}>
+                      Showing first 10 records. Generate the full report to see all data.
+                    </Alert>
+                  )}
+                  {renderPreviewTable(previewData.data)}
+                </Box>
+              ) : (
+                <Alert severity="info">
+                  Select a template and configure filters to see preview
+                </Alert>
+              )}
+            </Paper>
+          </Grid>
+        )}
       </Grid>
     </Box>
   );
 };
 
-export default Reports; 
+export default Reports;

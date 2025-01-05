@@ -40,7 +40,7 @@ exports.updateSettings = async (req, res) => {
       retention_period: req.body.retentionPeriod,
       backup_location: req.body.backupLocation
     };
-    
+
     // Handle file upload if present
     if (req.file) {
       settingsData.logo_url = `/uploads/${req.file.filename}`;
@@ -63,7 +63,7 @@ exports.updateSettings = async (req, res) => {
       }
     });
 
-    Object.keys(settingsData).forEach(key => 
+    Object.keys(settingsData).forEach(key =>
       settingsData[key] === undefined && delete settingsData[key]
     );
 
@@ -132,4 +132,4 @@ exports.updateSetting = async (req, res) => {
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
-}; 
+};

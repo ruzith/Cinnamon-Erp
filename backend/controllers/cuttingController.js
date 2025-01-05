@@ -636,3 +636,285 @@ exports.getPaymentsByContractor = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+// @desc    Complete cutting assignment and update inventory
+// @route   POST /api/cutting/assignments/complete
+// @access  Private
+exports.completeAssignment = async (req, res) => {
+  const connection = await CuttingContractor.pool.getConnection();
+
+  try {
+    const { assignment_id, raw_item_id, quantity_received } = req.body;
+
+    // Start transaction
+    await connection.beginTransaction();
+
+    try {
+      // Update assignment status
+      const updateAssignmentQuery = `
+        UPDATE land_assignments
+        SET status = 'completed',
+            completed_at = NOW(),
+            raw_item_id = ?,
+            quantity_received = ?
+        WHERE id = ?
+      `;
+      await connection.execute(updateAssignmentQuery, [raw_item_id, quantity_received, assignment_id]);
+
+      // Add to inventory
+      const updateInventoryQuery = `
+        UPDATE inventory
+        SET quantity = quantity + ?
+        WHERE id = ?
+      `;
+      await connection.execute(updateInventoryQuery, [quantity_received, raw_item_id]);
+
+      // Commit transaction
+      await connection.commit();
+
+      res.status(200).json({ message: 'Assignment completed and inventory updated successfully' });
+    } catch (error) {
+      // Rollback in case of error
+      await connection.rollback();
+      throw error;
+    }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  } finally {
+    connection.release(); // Release the connection back to the pool
+  }
+};
+
+// @desc    Create advance payment
+// @route   POST /api/cutting/advance-payments
+// @access  Private/Admin/Accountant
+exports.createAdvancePayment = async (req, res) => {
+  const connection = await CuttingContractor.pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const { contractor_id, amount, notes, status = 'pending' } = req.body;
+
+    // Validate required fields
+    if (!contractor_id || !amount) {
+      await connection.rollback();
+      connection.release();
+      return res.status(400).json({ message: 'Contractor ID and amount are required' });
+    }
+
+    // Check if contractor exists and is active
+    const [contractor] = await connection.execute(
+      'SELECT * FROM cutting_contractors WHERE id = ? AND status = "active"',
+      [contractor_id]
+    );
+
+    if (!contractor[0]) {
+      await connection.rollback();
+      connection.release();
+      return res.status(400).json({ message: 'Invalid or inactive contractor' });
+    }
+
+    // Insert advance payment
+    const [result] = await connection.execute(
+      `INSERT INTO cutting_advance_payments
+       (contractor_id, amount, notes, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, NOW(), NOW())`,
+      [contractor_id, amount, notes, status]
+    );
+
+    await connection.commit();
+    connection.release();
+
+    res.status(201).json({
+      id: result.insertId,
+      contractor_id,
+      amount,
+      notes,
+      status,
+      created_at: new Date()
+    });
+  } catch (error) {
+    await connection.rollback();
+    connection.release();
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get all advance payments
+// @route   GET /api/cutting/advance-payments
+// @access  Private
+exports.getAdvancePayments = async (req, res) => {
+  try {
+    const [rows] = await CuttingContractor.pool.execute(`
+      SELECT cap.*,
+             cc.name as contractor_name,
+             cc.contractor_id as contractor_number
+      FROM cutting_advance_payments cap
+      JOIN cutting_contractors cc ON cap.contractor_id = cc.id
+      ORDER BY cap.created_at DESC
+    `);
+    res.status(200).json(rows);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get advance payments by contractor
+// @route   GET /api/cutting/advance-payments/contractor/:id
+// @access  Private
+exports.getAdvancePaymentsByContractor = async (req, res) => {
+  try {
+    const [rows] = await CuttingContractor.pool.execute(`
+      SELECT cap.*,
+             cc.name as contractor_name,
+             cc.contractor_id as contractor_number
+      FROM cutting_advance_payments cap
+      JOIN cutting_contractors cc ON cap.contractor_id = cc.id
+      WHERE cap.contractor_id = ?
+      ORDER BY cap.created_at DESC
+    `, [req.params.id]);
+    res.status(200).json(rows);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Delete payment
+// @route   DELETE /api/cutting/payments/:id
+// @access  Private/Admin/Accountant
+exports.deletePayment = async (req, res) => {
+  try {
+    const [result] = await CuttingPayment.pool.execute(
+      'DELETE FROM cutting_payments WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Payment not found' });
+    }
+
+    res.status(200).json({ message: 'Payment deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Delete advance payment
+// @route   DELETE /api/cutting/advance-payments/:id
+// @access  Private/Admin/Accountant
+exports.deleteAdvancePayment = async (req, res) => {
+  try {
+    const [result] = await CuttingPayment.pool.execute(
+      'DELETE FROM cutting_advance_payments WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Advance payment not found' });
+    }
+
+    res.status(200).json({ message: 'Advance payment deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Update advance payment
+// @route   PUT /api/cutting/advance-payments/:id
+// @access  Private/Admin/Accountant
+exports.updateAdvancePayment = async (req, res) => {
+  try {
+    const { amount, notes, status } = req.body;
+
+    // Check if advance payment exists
+    const [existingPayment] = await CuttingPayment.pool.execute(
+      'SELECT * FROM cutting_advance_payments WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (!existingPayment[0]) {
+      return res.status(404).json({ message: 'Advance payment not found' });
+    }
+
+    // Update the advance payment
+    const [result] = await CuttingPayment.pool.execute(
+      `UPDATE cutting_advance_payments
+       SET amount = ?, notes = ?, status = ?, updated_at = NOW()
+       WHERE id = ?`,
+      [amount, notes, status, req.params.id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Advance payment not found' });
+    }
+
+    // Fetch and return the updated payment
+    const [updatedPayment] = await CuttingPayment.pool.execute(`
+      SELECT cap.*,
+             cc.name as contractor_name,
+             cc.contractor_id as contractor_number
+      FROM cutting_advance_payments cap
+      JOIN cutting_contractors cc ON cap.contractor_id = cc.id
+      WHERE cap.id = ?
+    `, [req.params.id]);
+
+    res.status(200).json(updatedPayment[0]);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Update payment
+// @route   PUT /api/cutting/payments/:id
+// @access  Private/Admin/Accountant
+exports.updatePayment = async (req, res) => {
+  try {
+    const { amount, companyContribution, manufacturingContribution, notes, status } = req.body;
+
+    // Check if payment exists
+    const [existingPayment] = await CuttingPayment.pool.execute(
+      'SELECT * FROM cutting_payments WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (!existingPayment[0]) {
+      return res.status(404).json({ message: 'Payment not found' });
+    }
+
+    // Update the payment
+    const [result] = await CuttingPayment.pool.execute(
+      `UPDATE cutting_payments
+       SET total_amount = ?,
+           company_contribution = ?,
+           manufacturing_contribution = ?,
+           notes = ?,
+           status = ?
+       WHERE id = ?`,
+      [amount, companyContribution, manufacturingContribution, notes, status, req.params.id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Payment not found' });
+    }
+
+    // Fetch and return the updated payment
+    const [updatedPayment] = await CuttingPayment.pool.execute(`
+      SELECT cp.*,
+             cc.name as contractor_name,
+             l.land_number,
+             l.location,
+             u.name as created_by_name
+      FROM cutting_payments cp
+      LEFT JOIN cutting_contractors cc ON cp.contractor_id = cc.id
+      LEFT JOIN land_assignments la ON cp.assignment_id = la.id
+      LEFT JOIN lands l ON la.land_id = l.id
+      LEFT JOIN users u ON cp.created_by = u.id
+      WHERE cp.id = ?
+    `, [req.params.id]);
+
+    res.status(200).json(updatedPayment[0]);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};

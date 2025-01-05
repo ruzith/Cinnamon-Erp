@@ -182,6 +182,7 @@ const generateManufacturingContractors = async (count = 10) => {
     contractor_id: `MC${faker.string.numeric(4)}`,
     phone: `077${faker.string.numeric(7)}`,
     address: faker.location.streetAddress(),
+    cutting_rate: faker.number.float({ min: 200, max: 300, multipleOf: 0.01 }),
     status: faker.helpers.arrayElement(['active', 'inactive'])
   }));
 };
@@ -192,51 +193,65 @@ const generateCuttingContractors = async (count = 8) => {
     name: faker.company.name(),
     contractor_id: `CC-${faker.string.alphanumeric(6).toUpperCase()}`,
     phone: `077${faker.string.numeric(7)}`,
+    address: faker.location.streetAddress(),
     status: faker.helpers.arrayElement(['active', 'inactive'])
   }));
 };
 
-// Helper function to generate manufacturing orders
+// Add manufacturing orders generator function
 const generateManufacturingOrders = async (connection, count = 15) => {
   const [products] = await connection.query(
-    'SELECT id FROM products WHERE category_id IN (SELECT id FROM product_categories WHERE name LIKE "%Cinnamon%")'
+    'SELECT id FROM products WHERE status = "active"'
   );
-  const [users] = await connection.query('SELECT id FROM users');
-  const [managers] = await connection.query('SELECT id FROM users WHERE role IN ("admin", "manager")');
+  const [users] = await connection.query(
+    'SELECT id FROM users WHERE status = "active"'
+  );
 
-  if (!products.length || !users.length || !managers.length) {
-    console.warn('Warning: Missing required data for manufacturing orders. Skipping...');
+  if (!products.length || !users.length) {
+    console.warn('No active products or users found. Skipping manufacturing orders...');
     return [];
   }
 
-  return Array.from({ length: count }, () => {
-    const startDate = faker.date.past({ years: 1 });
-    const endDate = faker.date.future({ years: 1, refDate: startDate });
-    const status = faker.helpers.arrayElement(['planned', 'in_progress', 'completed', 'cancelled']);
+  let orderCounter = 1;
+  const currentDate = new Date();
+  const statuses = ['planned', 'in_progress', 'completed', 'cancelled'];
+  const priorities = ['low', 'normal', 'high', 'urgent'];
 
-    // Only generate production metrics for completed orders
-    const isCompleted = status === 'completed';
+  return Array.from({ length: count }, () => {
+    const year = currentDate.getFullYear().toString().substr(-2);
+    const month = (currentDate.getMonth() + 1).toString().padStart(2, '0');
+    const orderNumber = `MO${year}${month}${orderCounter.toString().padStart(4, '0')}`;
+    orderCounter++;
+
+    const status = faker.helpers.arrayElement(statuses);
+    const startDate = faker.date.recent({ days: 30 });
+    const endDate = status === 'completed' ? faker.date.between({ from: startDate, to: currentDate }) : null;
+    const productionDate = status === 'completed' ? endDate : null;
+
+    // For completed orders, randomly set payment status and date
+    const paymentStatus = status === 'completed' ? faker.helpers.arrayElement(['pending', 'paid']) : 'pending';
+    const paymentDate = paymentStatus === 'paid' ? faker.date.between({ from: endDate || startDate, to: currentDate }) : null;
+    const inventoryUpdated = status === 'completed' && paymentStatus === 'paid';
 
     return {
-      order_number: `MO-${faker.string.alphanumeric(8).toUpperCase()}`,
+      order_number: orderNumber,
       product_id: faker.helpers.arrayElement(products).id,
-      quantity: faker.number.int({ min: 100, max: 5000 }),
-      start_date: startDate.toISOString().split('T')[0],
-      end_date: endDate.toISOString().split('T')[0],
+      quantity: faker.number.int({ min: 100, max: 1000 }),
+      start_date: startDate,
+      end_date: endDate,
       status: status,
-      priority: faker.helpers.arrayElement(['low', 'normal', 'high', 'urgent']),
+      priority: faker.helpers.arrayElement(priorities),
       notes: faker.lorem.sentence(),
-      assigned_to: faker.helpers.arrayElement(managers).id,
-      created_by: managers[0].id,
-      // Add new fields with realistic values for completed orders
-      defect_rate: isCompleted ? faker.number.float({ min: 0, max: 15, multipleOf: 0.01 }) : 0,
-      efficiency: isCompleted ? faker.number.float({ min: 0.5, max: 1, multipleOf: 0.01 }) : 0,
-      downtime_hours: isCompleted ? faker.number.float({ min: 0, max: 24, multipleOf: 0.5 }) : 0,
-      cost_per_unit: isCompleted ? faker.number.float({ min: 50, max: 200, multipleOf: 0.01 }) : 0,
-      production_date: isCompleted ? faker.date.between({
-        from: startDate,
-        to: endDate
-      }).toISOString().split('T')[0] : null
+      assigned_to: faker.helpers.arrayElement(users).id,
+      created_by: faker.helpers.arrayElement(users).id,
+      defect_rate: status === 'completed' ? faker.number.float({ min: 0, max: 5, multipleOf: 0.1 }) : 0,
+      efficiency: status === 'completed' ? faker.number.float({ min: 70, max: 98, multipleOf: 0.1 }) : 0,
+      downtime_hours: status === 'completed' ? faker.number.float({ min: 0, max: 24, multipleOf: 0.1 }) : 0,
+      cost_per_unit: status === 'completed' ? faker.number.float({ min: 50, max: 200, multipleOf: 0.01 }) : 0,
+      production_date: productionDate,
+      payment_status: paymentStatus,
+      payment_date: paymentDate ? paymentDate.toISOString().split('T')[0] : null,
+      inventory_updated: inventoryUpdated
     };
   });
 };
@@ -250,7 +265,7 @@ const generateManufacturingMaterials = async (connection, orderId) => {
 
   // Get raw materials from inventory
   const [rawMaterials] = await connection.query(
-    'SELECT id FROM inventory WHERE product_type = "raw_material"'
+    'SELECT id, product_name, purchase_price, unit FROM inventory WHERE product_type = "raw_material" AND status = "active"'
   );
 
   if (!rawMaterials.length) {
@@ -260,13 +275,13 @@ const generateManufacturingMaterials = async (connection, orderId) => {
 
   // Generate 2-5 materials per order
   const numberOfMaterials = faker.number.int({ min: 2, max: 5 });
-  const selectedMaterials = faker.helpers.arrayElements(rawMaterials, numberOfMaterials);
+  const selectedMaterials = faker.helpers.arrayElements(rawMaterials, Math.min(numberOfMaterials, rawMaterials.length));
 
   return selectedMaterials.map(material => ({
     order_id: orderId,
     material_id: material.id,
     quantity_used: faker.number.float({ min: 10, max: 100, multipleOf: 0.01 }),
-    unit_cost: faker.number.float({ min: 100, max: 1000, multipleOf: 0.01 })
+    unit_cost: material.purchase_price || faker.number.float({ min: 100, max: 1000, multipleOf: 0.01 })
   }));
 };
 
@@ -756,6 +771,9 @@ const generateLoanPayments = async (connection, loan, scheduleItems, paymentProb
 const generateLandAssignments = async (connection) => {
   const [contractors] = await connection.query('SELECT id FROM cutting_contractors WHERE status = "active"');
   const [lands] = await connection.query('SELECT id FROM lands WHERE status = "active"');
+  const [rawMaterials] = await connection.query(
+    'SELECT id FROM inventory WHERE product_type = "raw_material" AND status = "active"'
+  );
 
   const assignments = [];
 
@@ -772,13 +790,45 @@ const generateLandAssignments = async (connection) => {
       const endDate = new Date(startDate);
       endDate.setDate(endDate.getDate() + faker.number.int({ min: 30, max: 90 }));
 
-      assignments.push({
+      const status = faker.helpers.arrayElement(['active', 'completed', 'cancelled']);
+      const assignment = {
         contractor_id: contractor.id,
         land_id: land.id,
         start_date: startDate.toISOString().split('T')[0],
         end_date: endDate.toISOString().split('T')[0],
-        status: faker.helpers.arrayElement(['active', 'completed', 'cancelled'])
-      });
+        status: status,
+        raw_item_id: null,
+        quantity_received: null,
+        completed_at: null
+      };
+
+      // If the assignment is completed and we have raw materials, add completion details
+      if (status === 'completed' && rawMaterials.length > 0) {
+        const completedDate = faker.date.between({ from: startDate, to: endDate });
+        assignment.raw_item_id = faker.helpers.arrayElement(rawMaterials).id;
+        assignment.quantity_received = faker.number.float({ min: 100, max: 1000, multipleOf: 0.1 });
+        assignment.completed_at = completedDate;
+
+        // Update inventory for completed assignments
+        await connection.query(
+          'UPDATE inventory SET quantity = quantity + ? WHERE id = ?',
+          [assignment.quantity_received, assignment.raw_item_id]
+        );
+
+        // Create inventory transaction record
+        await connection.query(
+          'INSERT INTO inventory_transactions (item_id, type, quantity, reference, notes) VALUES (?, ?, ?, ?, ?)',
+          [
+            assignment.raw_item_id,
+            'IN',
+            assignment.quantity_received,
+            `LA-${land.id}`,
+            'Land assignment completion'
+          ]
+        );
+      }
+
+      assignments.push(assignment);
     }
   }
 
@@ -827,8 +877,6 @@ const generateCuttingTasks = async (connection) => {
 };
 
 // Add this helper function after generateCuttingTasks
-
-// Helper function to generate cutting payments
 const generateCuttingPayments = async (connection) => {
   const [assignments] = await connection.query(
     'SELECT la.id, la.contractor_id FROM land_assignments la WHERE la.status = "completed"'
@@ -876,78 +924,105 @@ const generateCuttingPayments = async (connection) => {
   return payments;
 };
 
-// Helper function to generate cinnamon assignments
-const generateCinnamonAssignments = async (connection, count = 15) => {
+// Add this helper function after generateCuttingPayments
+const generateCuttingAdvancePayments = async (connection, count = 15) => {
   const [contractors] = await connection.query(
-    'SELECT id FROM manufacturing_contractors WHERE status = "active"'
+    'SELECT id FROM cutting_contractors WHERE status = "active"'
   );
 
   if (!contractors.length) {
-    console.warn('No active manufacturing contractors found. Skipping cinnamon assignments...');
-    return [];
-  }
-
-  return Array.from({ length: count }, () => {
-    const startDate = faker.date.recent({ days: 30 });
-    const durationType = faker.helpers.arrayElement(['day', 'week', 'month']);
-    const duration = faker.number.int({
-      min: 1,
-      max: durationType === 'day' ? 30 : durationType === 'week' ? 8 : 3
-    });
-
-    const endDate = new Date(startDate);
-    switch (durationType) {
-      case 'day':
-        endDate.setDate(endDate.getDate() + duration);
-        break;
-      case 'week':
-        endDate.setDate(endDate.getDate() + (duration * 7));
-        break;
-      case 'month':
-        endDate.setMonth(endDate.getMonth() + duration);
-        break;
-    }
-
-    return {
-      contractor_id: faker.helpers.arrayElement(contractors).id,
-      quantity: faker.number.float({ min: 50, max: 500, multipleOf: 0.1 }),
-      duration: duration,
-      duration_type: durationType,
-      start_date: startDate.toISOString().split('T')[0],
-      end_date: endDate.toISOString().split('T')[0],
-      status: faker.helpers.arrayElement(['active', 'completed', 'cancelled']),
-      notes: faker.lorem.sentence()
-    };
-  });
-};
-
-// Helper function to generate advance payments
-const generateAdvancePayments = async (connection, count = 20) => {
-  const [contractors] = await connection.query(
-    'SELECT id FROM manufacturing_contractors WHERE status = "active"'
-  );
-
-  if (!contractors.length) {
-    console.warn('No active manufacturing contractors found. Skipping advance payments...');
+    console.warn('No active cutting contractors found. Skipping cutting advance payments...');
     return [];
   }
 
   let paymentCounter = 1;
   return Array.from({ length: count }, () => {
     const paymentDate = faker.date.recent({ days: 60 });
-    const year = paymentDate.getFullYear().toString().substr(-2);
-    const month = (paymentDate.getMonth() + 1).toString().padStart(2, '0');
-    const receiptNumber = `ADV${year}${month}${paymentCounter.toString().padStart(4, '0')}`;
-    paymentCounter++;
+    const status = faker.helpers.arrayElement(['pending', 'approved', 'paid', 'cancelled']);
 
     return {
       contractor_id: faker.helpers.arrayElement(contractors).id,
-      amount: faker.number.float({ min: 5000, max: 50000, multipleOf: 0.01 }),
-      payment_date: paymentDate.toISOString().split('T')[0],
-      receipt_number: receiptNumber,
-      notes: faker.lorem.sentence()
+      amount: faker.number.float({ min: 5000, max: 50000, multipleOf: 100 }),
+      notes: faker.helpers.arrayElement([
+        'Emergency advance',
+        'Tool purchase advance',
+        'Transportation advance',
+        'Equipment repair advance',
+        null
+      ]),
+      status: status,
+      created_at: paymentDate,
+      updated_at: paymentDate
     };
   });
+};
+
+// Helper function to generate cinnamon assignments
+async function generateCinnamonAssignments(connection) {
+  const assignments = [];
+  const [contractors] = await connection.query('SELECT id FROM manufacturing_contractors WHERE status = "active"');
+  const [rawMaterials] = await connection.query('SELECT id, quantity FROM inventory WHERE product_type = "raw_material" AND status = "active"');
+
+  if (contractors.length === 0 || rawMaterials.length === 0) {
+    return assignments;
+  }
+
+  const numAssignments = Math.floor(Math.random() * 10) + 5; // Generate 5-15 assignments
+  const statuses = ['active', 'completed', 'cancelled'];
+  const currentDate = new Date();
+
+  for (let i = 0; i < numAssignments; i++) {
+    const contractor = contractors[Math.floor(Math.random() * contractors.length)];
+    const rawMaterial = rawMaterials[Math.floor(Math.random() * rawMaterials.length)];
+    const status = statuses[Math.floor(Math.random() * statuses.length)];
+
+    // Calculate raw material quantity (between 10-50 kg)
+    const rawMaterialQuantity = Math.floor(Math.random() * 41) + 10;
+
+    // Expected output quantity is roughly 80% of input
+    const quantity = Math.floor(rawMaterialQuantity * 0.8);
+
+    const startDate = new Date(currentDate);
+    startDate.setDate(startDate.getDate() - Math.floor(Math.random() * 30));
+
+    const duration = Math.floor(Math.random() * 7) + 3; // 3-10 days
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + duration);
+
+    assignments.push({
+      contractor_id: contractor.id,
+      quantity: quantity,
+      duration: duration,
+      duration_type: 'day',
+      start_date: startDate,
+      end_date: endDate,
+      raw_material_id: rawMaterial.id,
+      raw_material_quantity: rawMaterialQuantity,
+      status: status,
+      notes: `Sample assignment with ${rawMaterialQuantity}kg of raw material`
+    });
+  }
+
+  return assignments;
+}
+
+// Helper function to generate advance payments
+const generateAdvancePayments = (count = 5) => {
+  const payments = [];
+  for (let i = 0; i < count; i++) {
+    const date = new Date();
+    date.setDate(date.getDate() - Math.floor(Math.random() * 30));
+
+    payments.push({
+      contractor_id: Math.floor(Math.random() * 5) + 1,
+      amount: (Math.random() * 10000 + 5000).toFixed(2),
+      payment_date: date.toISOString().split('T')[0],
+      receipt_number: `ADV${date.getFullYear().toString().substr(-2)}${(date.getMonth() + 1).toString().padStart(2, '0')}${(i + 1).toString().padStart(4, '0')}`,
+      notes: 'Advance payment for manufacturing',
+      status: 'unused'
+    });
+  }
+  return payments;
 };
 
 // Add this helper function with the other generator functions
@@ -1133,46 +1208,63 @@ const generateMonthlyTargets = async (connection) => {
 
 // Add this helper function to generate purchase invoices
 const generatePurchaseInvoices = async (connection, count = 15) => {
-  const [suppliers] = await connection.query('SELECT id FROM customers');
+  const [contractors] = await connection.query('SELECT id FROM manufacturing_contractors');
   const [users] = await connection.query('SELECT id FROM users WHERE role = "admin"');
 
-  return Array.from({ length: count }, () => {
+  const invoices = [];
+  for (let i = 0; i < count; i++) {
     const invoiceDate = faker.date.recent({ days: 90 });
     const dueDate = new Date(invoiceDate);
     dueDate.setDate(dueDate.getDate() + faker.number.int({ min: 15, max: 45 }));
 
-    return {
+    invoices.push({
       invoice_number: `PUR${faker.string.numeric(8)}`,
-      supplier_id: faker.helpers.arrayElement(suppliers).id,
+      supplier_id: faker.helpers.arrayElement(contractors).id,
       invoice_date: invoiceDate.toISOString().split('T')[0],
       due_date: dueDate.toISOString().split('T')[0],
       subtotal: 0, // Will be calculated after adding items
-      tax_amount: faker.number.float({ min: 0, max: 15, multipleOf: 0.01 }),
+      tax_amount: 0,
       total_amount: 0, // Will be calculated after adding items
       paid_amount: 0,
       status: faker.helpers.arrayElement(['draft', 'confirmed', 'paid', 'cancelled']),
       notes: faker.lorem.sentence(),
       created_by: users[0].id
-    };
-  });
+    });
+  }
+
+  return invoices;
 };
 
 // Add this helper function to generate purchase items
 const generatePurchaseItems = async (connection, invoiceId) => {
-  const [products] = await connection.query('SELECT id FROM products');
+  const [finishedGoods] = await connection.query(
+    'SELECT id, selling_price FROM inventory WHERE product_type = "finished_good" AND status = "active"'
+  );
+
+  if (!finishedGoods.length) {
+    console.warn('No active finished goods found for purchase items. Skipping...');
+    return [];
+  }
 
   const numberOfItems = faker.number.int({ min: 1, max: 5 });
 
   return Array.from({ length: numberOfItems }, () => {
-    const quantity = faker.number.int({ min: 1, max: 100 });
-    const unitPrice = faker.number.float({ min: 100, max: 5000, multipleOf: 0.01 });
+    const finishedGood = faker.helpers.arrayElement(finishedGoods);
+    const totalWeight = faker.number.float({ min: 100, max: 1000, multipleOf: 0.1 });
+    const deductWeight1 = faker.number.float({ min: 0, max: totalWeight * 0.1, multipleOf: 0.1 }); // Max 10% deduction
+    const deductWeight2 = faker.number.float({ min: 0, max: totalWeight * 0.05, multipleOf: 0.1 }); // Max 5% deduction
+    const netWeight = totalWeight - deductWeight1 - deductWeight2;
+    const rate = finishedGood.selling_price || faker.number.float({ min: 500, max: 1500, multipleOf: 0.01 });
 
     return {
       invoice_id: invoiceId,
-      product_id: faker.helpers.arrayElement(products).id,
-      quantity: quantity,
-      unit_price: unitPrice,
-      total_amount: quantity * unitPrice
+      grade_id: finishedGood.id,
+      total_weight: totalWeight,
+      deduct_weight1: deductWeight1,
+      deduct_weight2: deductWeight2,
+      net_weight: netWeight,
+      rate: rate,
+      amount: netWeight * rate
     };
   });
 };
@@ -1641,20 +1733,50 @@ const seedData = async () => {
       await connection.query('INSERT INTO cutting_contractors SET ?', contractor);
     }
 
-    // Add manufacturing orders
-    console.log('Seeding manufacturing orders...');
-    const manufacturingOrders = await generateManufacturingOrders(connection);
-    if (manufacturingOrders.length > 0) {
-      for (const order of manufacturingOrders) {
-        await connection.query('INSERT INTO manufacturing_orders SET ?', order);
-      }
+    // Add manufacturing contractors
+    console.log('Seeding manufacturing contractors...');
+    const manufacturingContractors = await generateManufacturingContractors();
+    for (const contractor of manufacturingContractors) {
+      await connection.query('INSERT INTO manufacturing_contractors SET ?', contractor);
     }
 
-    // Seed inventory
+    // Add cinnamon assignments
+    console.log('Seeding cinnamon assignments...');
+
+    // First seed inventory items to ensure we have raw materials
     console.log('Seeding inventory...');
     const inventoryItems = await generateInventoryItems(connection);
     for (const item of inventoryItems) {
       await connection.query('INSERT INTO inventory SET ?', item);
+    }
+
+    // Add cinnamon assignments after inventory is seeded
+    console.log('Seeding cinnamon assignments...');
+    const cinnamonAssignments = await generateCinnamonAssignments(connection);
+    for (const assignment of cinnamonAssignments) {
+      // Insert the assignment
+      const [result] = await connection.query('INSERT INTO cinnamon_assignments SET ?', assignment);
+
+      // If assignment is active or completed, deduct raw materials from inventory
+      if (assignment.status !== 'cancelled') {
+        // Update inventory quantity
+        await connection.query(
+          'UPDATE inventory SET quantity = quantity - ? WHERE id = ?',
+          [assignment.raw_material_quantity, assignment.raw_material_id]
+        );
+
+        // Create inventory transaction record
+        await connection.query(
+          'INSERT INTO inventory_transactions (item_id, type, quantity, reference, notes) VALUES (?, ?, ?, ?, ?)',
+          [
+            assignment.raw_material_id,
+            'OUT',
+            assignment.raw_material_quantity,
+            `CA-${result.insertId}`,
+            'Initial assignment allocation'
+          ]
+        );
+      }
     }
 
     // Seed inventory transactions
@@ -1849,13 +1971,18 @@ const seedData = async () => {
       await connection.query('INSERT INTO cutting_payments SET ?', payment);
     }
 
-    // After seeding manufacturing orders
-    console.log('Seeding manufacturing materials...');
-    const [orders] = await connection.query(
-      'SELECT id FROM manufacturing_orders WHERE status != "planned"'
-    );
+    // Add manufacturing orders after products are seeded
+    console.log('Seeding manufacturing orders...');
+    const manufacturingOrders = await generateManufacturingOrders(connection);
+    const insertedOrders = [];
+    for (const order of manufacturingOrders) {
+      const [result] = await connection.query('INSERT INTO manufacturing_orders SET ?', order);
+      insertedOrders.push({ ...order, id: result.insertId });
+    }
 
-    for (const order of orders) {
+    // After seeding manufacturing orders, seed their materials
+    console.log('Seeding manufacturing materials...');
+    for (const order of insertedOrders) {
       const materials = await generateManufacturingMaterials(connection, order.id);
       for (const material of materials) {
         await connection.query('INSERT INTO manufacturing_materials SET ?', material);
@@ -1873,7 +2000,7 @@ const seedData = async () => {
             item_id: material.material_id,
             type: 'OUT',
             quantity: material.quantity_used,
-            reference: `MO-${order.id}`,
+            reference: `MO-${order.order_number}`,
             notes: 'Used in manufacturing'
           }
         );
@@ -1944,6 +2071,55 @@ const seedData = async () => {
     const workHours = await generateEmployeeWorkHours(connection);
     for (const workHour of workHours) {
       await connection.query('INSERT INTO employee_work_hours SET ?', workHour);
+    }
+
+    // Add this inside the seedData function, after seeding cutting payments
+    console.log('Seeding cutting advance payments...');
+    const cuttingAdvancePayments = await generateCuttingAdvancePayments(connection);
+    for (const payment of cuttingAdvancePayments) {
+      await connection.query('INSERT INTO cutting_advance_payments SET ?', payment);
+    }
+
+    // Update the seedData function to use the new purchase items generation
+    console.log('Seeding purchase invoices and items...');
+    const purchaseInvoices = await generatePurchaseInvoices(connection);
+    for (const invoice of purchaseInvoices) {
+      // Insert the invoice first with temporary totals
+      const [result] = await connection.query('INSERT INTO purchase_invoices SET ?', invoice);
+      const invoiceId = result.insertId;
+
+      // Generate and insert purchase items
+      const purchaseItems = await generatePurchaseItems(connection, invoiceId);
+      for (const item of purchaseItems) {
+        await connection.query('INSERT INTO purchase_items SET ?', item);
+      }
+
+      // Calculate and update invoice totals
+      const [itemTotals] = await connection.query(
+        'SELECT SUM(amount) as total_amount FROM purchase_items WHERE invoice_id = ?',
+        [invoiceId]
+      );
+
+      const totalAmount = itemTotals[0].total_amount || 0;
+
+      await connection.query(
+        'UPDATE purchase_invoices SET subtotal = ?, total_amount = ? WHERE id = ?',
+        [totalAmount, totalAmount, invoiceId]
+      );
+    }
+
+    // Inside the seedData function, add this after seeding manufacturing contractors:
+    console.log('Seeding advance payments...');
+    const advancePayments = await generateAdvancePayments(connection);
+    for (const payment of advancePayments) {
+      await connection.query('INSERT INTO advance_payments SET ?', payment);
+    }
+
+    // Inside the seedData function, add this after seeding manufacturing contractors:
+    console.log('Seeding manufacturing advance payments...');
+    const manufacturingAdvancePayments = generateAdvancePayments();
+    for (const payment of manufacturingAdvancePayments) {
+      await connection.query('INSERT INTO manufacturing_advance_payments SET ?', payment);
     }
 
     await connection.commit();

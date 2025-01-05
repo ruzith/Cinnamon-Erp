@@ -4,7 +4,7 @@ const contractorSchema = Joi.object({
   name: Joi.string().required().trim(),
   contractor_id: Joi.string().required().trim(),
   phone: Joi.string().required().trim(),
-  status: Joi.string().valid('active', 'inactive').default('active')
+  address: Joi.string().required().trim()
 });
 
 const assignmentSchema = Joi.object({
@@ -16,4 +16,4 @@ const assignmentSchema = Joi.object({
 });
 
 exports.validateContractor = (data) => contractorSchema.validate(data);
-exports.validateAssignment = (data) => assignmentSchema.validate(data); 
+exports.validateAssignment = (data) => assignmentSchema.validate(data);

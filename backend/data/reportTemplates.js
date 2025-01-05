@@ -19,18 +19,6 @@ const reportTemplates = [
           en: 'Date Range',
           si: 'කාල සීමාව'
         }
-      },
-      {
-        field: 'status',
-        type: 'select',
-        label: {
-          en: 'Status',
-          si: 'තත්වය'
-        },
-        options: [
-          { value: 'completed', label: { en: 'Completed', si: 'සම්පූර්ණයි' } },
-          { value: 'pending', label: { en: 'Pending', si: 'අපේක්ෂිතයි' } }
-        ]
       }
     ],
     columns: [
@@ -48,6 +36,26 @@ const reportTemplates = [
         field: 'itemCount',
         header: { en: 'Items Sold', si: 'විකුණන ලද අයිතම' },
         format: 'number'
+      },
+      {
+        field: 'transactionCount',
+        header: { en: 'Transaction Count', si: 'ගනුදෙනු ගණන' },
+        format: 'number'
+      },
+      {
+        field: 'averageSale',
+        header: { en: 'Average Sale', si: 'සාමාන්‍ය විකුණුම්' },
+        format: 'currency'
+      },
+      {
+        field: 'maxSale',
+        header: { en: 'Highest Sale', si: 'උපරිම විකුණුම' },
+        format: 'currency'
+      },
+      {
+        field: 'minSale',
+        header: { en: 'Lowest Sale', si: 'අවම විකුණුම' },
+        format: 'currency'
       }
     ]
   },
@@ -118,7 +126,8 @@ const reportTemplates = [
       {
         field: 'contractor',
         type: 'select',
-        label: { en: 'Contractor', si: 'කොන්ත්‍රාත්කරු' }
+        label: { en: 'Contractor', si: 'කොන්ත්‍රාත්කරු' },
+        optionsUrl: '/api/reports/cutting-contractors'
       }
     ],
     columns: [
@@ -311,13 +320,17 @@ const reportTemplates = [
         header: { en: 'Material Name', si: 'ද්‍රව්‍ය නාමය' }
       },
       {
+        field: 'materialCategory',
+        header: { en: 'Category', si: 'වර්ගය' }
+      },
+      {
         field: 'quantity',
-        header: { en: 'Quantity', si: 'ප්‍රමාණය' },
+        header: { en: 'Total Quantity', si: 'මුළු ප්‍රමාණය' },
         format: 'number'
       },
       {
         field: 'unitPrice',
-        header: { en: 'Unit Price', si: 'ඒකක මිල' },
+        header: { en: 'Average Unit Price', si: 'සාමාන්‍ය ඒකක මිල' },
         format: 'currency'
       },
       {
@@ -327,11 +340,31 @@ const reportTemplates = [
       },
       {
         field: 'deliveryTime',
-        header: { en: 'Delivery Time (Days)', si: 'බෙදාහැරීමේ කාලය (දින)' },
+        header: { en: 'Avg. Delivery Time (Days)', si: 'සාමාන්‍ය බෙදාහැරීමේ කාලය (දින)' },
         format: 'number'
+      },
+      {
+        field: 'orderCount',
+        header: { en: 'Number of Orders', si: 'ඇණවුම් ගණන' },
+        format: 'number'
+      },
+      {
+        field: 'minPrice',
+        header: { en: 'Lowest Price', si: 'අවම මිල' },
+        format: 'currency'
+      },
+      {
+        field: 'maxPrice',
+        header: { en: 'Highest Price', si: 'උපරිම මිල' },
+        format: 'currency'
+      },
+      {
+        field: 'averageOrderValue',
+        header: { en: 'Average Order Value', si: 'සාමාන්‍ය ඇණවුම් වටිනාකම' },
+        format: 'currency'
       }
     ]
   }
 ];
 
-module.exports = reportTemplates; 
+module.exports = reportTemplates;

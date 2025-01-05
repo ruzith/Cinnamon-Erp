@@ -778,13 +778,6 @@ export default function HRManagement() {
         </Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Button
-            variant="outlined"
-            startIcon={<AddIcon />}
-            onClick={() => setOpenPayrollDialog(true)}
-          >
-            Generate Payroll
-          </Button>
-          <Button
             variant="contained"
             startIcon={<AddIcon />}
             onClick={() => setOpenAdvanceDialog(true)}
@@ -932,7 +925,7 @@ export default function HRManagement() {
                       <IconButton
                         size="small"
                         onClick={() => handlePrintPayroll(payroll)}
-                        sx={{ color: 'primary.main' }}
+                        sx={{ color: 'success.main' }}
                       >
                         <PrintIcon />
                       </IconButton>

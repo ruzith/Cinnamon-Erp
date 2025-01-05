@@ -5,6 +5,7 @@ import reportTemplates from '../../data/reportTemplates';
 const initialState = {
   templates: [],
   currentReport: null,
+  previewData: null,
   isLoading: false,
   isError: false,
   message: ''
@@ -41,6 +42,18 @@ export const generateReport = createAsyncThunk(
       return await reportService.generateReport(code, params, token);
     } catch (error) {
       return thunkAPI.rejectWithValue(error.response.data.message);
+    }
+  }
+);
+
+export const getReportPreview = createAsyncThunk(
+  'reports/preview',
+  async ({ code, params }, thunkAPI) => {
+    try {
+      const token = thunkAPI.getState().auth.user.token;
+      return await reportService.getReportPreview(code, params, token);
+    } catch (error) {
+      return thunkAPI.rejectWithValue(error.response?.data?.message || error.message);
     }
   }
 );
@@ -88,9 +101,25 @@ export const reportSlice = createSlice({
         state.isLoading = false;
         state.isError = true;
         state.message = action.payload;
+      })
+      .addCase(getReportPreview.pending, (state) => {
+        state.isLoading = true;
+        state.isError = false;
+        state.message = '';
+      })
+      .addCase(getReportPreview.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.isSuccess = true;
+        state.previewData = action.payload;
+      })
+      .addCase(getReportPreview.rejected, (state, action) => {
+        state.isLoading = false;
+        state.isError = true;
+        state.message = action.payload;
+        state.previewData = null;
       });
   }
 });
 
 export const { reset, setCurrentReport } = reportSlice.actions;
-export default reportSlice.reducer; 
+export default reportSlice.reducer;

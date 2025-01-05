@@ -64,7 +64,7 @@ const TabPanel = (props) => {
   const { children, value, index, ...other } = props;
   return (
     <div role="tabpanel" hidden={value !== index} {...other}>
-      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+      {value === index && children}
     </div>
   );
 };
@@ -146,8 +146,20 @@ const Accounting = () => {
 
   const { formatCurrency } = useCurrencyFormatter();
 
-  const validCategories = ['production', 'maintenance', 'royalty', 'lease'];
-  const validTypes = ['revenue', 'expense'];
+  const validTypes = ['revenue', 'expense', 'credit_payment', 'manufacturing_payment', 'salary'];
+  const validCategories = [
+    'sales_income',
+    'production_expense',
+    'maintenance_expense',
+    'royalty_payment',
+    'lease_payment',
+    'salary_payment',
+    'credit_contribution',
+    'manufacturing_cost',
+    'raw_material_payment',
+    'utility_expense',
+    'other_expense'
+  ];
 
   useEffect(() => {
     fetchTransactions();
@@ -344,11 +356,14 @@ const Accounting = () => {
 
   const getTransactionTypeColor = (type) => {
     switch (type) {
-      case 'income':
+      case 'revenue':
         return 'success';
       case 'expense':
+      case 'salary':
         return 'error';
-      case 'transfer':
+      case 'credit_payment':
+        return 'warning';
+      case 'manufacturing_payment':
         return 'info';
       default:
         return 'default';
@@ -1323,11 +1338,11 @@ const Accounting = () => {
                     label="Type"
                     onChange={handleTransactionInputChange}
                   >
-                    {validTypes.map(type => (
-                      <MenuItem key={type} value={type}>
-                        {type.charAt(0).toUpperCase() + type.slice(1)}
-                      </MenuItem>
-                    ))}
+                    <MenuItem value="revenue">Revenue</MenuItem>
+                    <MenuItem value="expense">Expense</MenuItem>
+                    <MenuItem value="credit_payment">Credit Payment</MenuItem>
+                    <MenuItem value="manufacturing_payment">Manufacturing Payment</MenuItem>
+                    <MenuItem value="salary">Salary</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>
@@ -1340,11 +1355,29 @@ const Accounting = () => {
                     label="Category"
                     onChange={handleTransactionInputChange}
                   >
-                    {validCategories.map(category => (
-                      <MenuItem key={category} value={category}>
-                        {category.charAt(0).toUpperCase() + category.slice(1)}
-                      </MenuItem>
-                    ))}
+                    {transactionFormData.type === 'revenue' && (
+                      <MenuItem value="sales_income">Sales Income</MenuItem>
+                    )}
+                    {transactionFormData.type === 'expense' && (
+                      <>
+                        <MenuItem value="production_expense">Production Expense</MenuItem>
+                        <MenuItem value="maintenance_expense">Maintenance Expense</MenuItem>
+                        <MenuItem value="utility_expense">Utility Expense</MenuItem>
+                        <MenuItem value="other_expense">Other Expense</MenuItem>
+                      </>
+                    )}
+                    {transactionFormData.type === 'credit_payment' && (
+                      <MenuItem value="credit_contribution">Company Credit Contribution</MenuItem>
+                    )}
+                    {transactionFormData.type === 'manufacturing_payment' && (
+                      <>
+                        <MenuItem value="manufacturing_cost">Manufacturing Cost</MenuItem>
+                        <MenuItem value="raw_material_payment">Raw Material Payment</MenuItem>
+                      </>
+                    )}
+                    {transactionFormData.type === 'salary' && (
+                      <MenuItem value="salary_payment">Salary Payment</MenuItem>
+                    )}
                   </Select>
                 </FormControl>
               </Grid>
@@ -1385,13 +1418,20 @@ const Accounting = () => {
                 />
               </Grid>
               <Grid item xs={6}>
-                <TextField
-                  name="paymentMethod"
-                  label="Payment Method"
-                  fullWidth
-                  value={transactionFormData.paymentMethod}
-                  onChange={handleTransactionInputChange}
-                />
+                <FormControl fullWidth>
+                  <InputLabel>Payment Method</InputLabel>
+                  <Select
+                    name="paymentMethod"
+                    value={transactionFormData.paymentMethod}
+                    label="Payment Method"
+                    onChange={handleTransactionInputChange}
+                  >
+                    <MenuItem value="cash">Cash</MenuItem>
+                    <MenuItem value="bank_transfer">Bank Transfer</MenuItem>
+                    <MenuItem value="check">Check</MenuItem>
+                    <MenuItem value="credit_card">Credit Card</MenuItem>
+                  </Select>
+                </FormControl>
               </Grid>
               <Grid item xs={12}>
                 <TextField
@@ -1415,6 +1455,28 @@ const Accounting = () => {
                   onChange={handleTransactionInputChange}
                 />
               </Grid>
+              {transactionFormData.type === 'salary' && (
+                <Grid item xs={12}>
+                  <TextField
+                    name="employee"
+                    label="Employee Name/ID"
+                    fullWidth
+                    value={transactionFormData.employee}
+                    onChange={handleTransactionInputChange}
+                  />
+                </Grid>
+              )}
+              {transactionFormData.type === 'manufacturing_payment' && (
+                <Grid item xs={12}>
+                  <TextField
+                    name="manufacturingOrder"
+                    label="Manufacturing Order Reference"
+                    fullWidth
+                    value={transactionFormData.manufacturingOrder}
+                    onChange={handleTransactionInputChange}
+                  />
+                </Grid>
+              )}
             </Grid>
           </DialogContent>
           <DialogActions>

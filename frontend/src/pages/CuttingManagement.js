@@ -22,6 +22,8 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -32,11 +34,29 @@ import {
   Assignment as AssignmentIcon,
   Groups as ContractorsIcon,
   Payment as PaymentIcon,
+  Done as DoneIcon,
+  Print as PrintIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 import SummaryCard from '../components/common/SummaryCard';
+import { useSnackbar } from 'notistack';
+import { useCurrencyFormatter } from '../utils/currencyUtils';
+
+const TabPanel = (props) => {
+  const { children, value, index, ...other } = props;
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      {...other}
+    >
+      {value === index && <Box>{children}</Box>}
+    </div>
+  );
+};
 
 const CuttingManagement = () => {
+  const { formatCurrency } = useCurrencyFormatter();
   const [contractors, setContractors] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
@@ -45,7 +65,7 @@ const CuttingManagement = () => {
     name: '',
     contractor_id: '',
     phone: '',
-    status: 'active'
+    address: ''
   });
   const [openAssignmentDialog, setOpenAssignmentDialog] = useState(false);
   const [assignmentFormData, setAssignmentFormData] = useState({
@@ -69,11 +89,45 @@ const CuttingManagement = () => {
   const [openReassignDialog, setOpenReassignDialog] = useState(false);
   const [contractorToDelete, setContractorToDelete] = useState(null);
   const [newContractorId, setNewContractorId] = useState('');
+  const [openCompletionDialog, setOpenCompletionDialog] = useState(false);
+  const [selectedAssignment, setSelectedAssignment] = useState(null);
+  const [inventoryItems, setInventoryItems] = useState([]);
+  const [completionFormData, setCompletionFormData] = useState({
+    assignment_id: '',
+    raw_item_id: '',
+    quantity_received: '',
+  });
+  const [tabValue, setTabValue] = useState(0);
+  const [openAdvancePaymentDialog, setOpenAdvancePaymentDialog] = useState(false);
+  const [advancePaymentFormData, setAdvancePaymentFormData] = useState({
+    contractor_id: '',
+    amount: '',
+    notes: '',
+    status: 'pending'
+  });
+  const [openCuttingPaymentDialog, setOpenCuttingPaymentDialog] = useState(false);
+  const [cuttingPaymentFormData, setCuttingPaymentFormData] = useState({
+    contractor_id: '',
+    assignment_id: '',
+    quantity_kg: '',
+    price_per_kg: 300,
+    total_amount: 0,
+    company_contribution: 180,
+    manufacturing_contribution: 120,
+    notes: '',
+    status: 'pending'
+  });
+  const [payments, setPayments] = useState([]);
+  const [advancePayments, setAdvancePayments] = useState([]);
+  const { enqueueSnackbar } = useSnackbar();
 
   useEffect(() => {
     fetchContractors();
     fetchAssignments();
     fetchLands();
+    fetchInventoryItems();
+    fetchPayments();
+    fetchAdvancePayments();
   }, []);
 
   const fetchContractors = async () => {
@@ -97,10 +151,38 @@ const CuttingManagement = () => {
 
   const fetchLands = async () => {
     try {
-      const response = await axios.get('/api/lands');
+      // Only fetch active lands for the initial load
+      const response = await axios.get('/api/lands?status=active');
       setLands(response.data);
     } catch (error) {
       console.error('Error fetching lands:', error);
+    }
+  };
+
+  const fetchInventoryItems = async () => {
+    try {
+      const response = await axios.get('/api/inventory?type=raw_material');
+      setInventoryItems(response.data);
+    } catch (error) {
+      console.error('Error fetching inventory items:', error);
+    }
+  };
+
+  const fetchPayments = async () => {
+    try {
+      const response = await axios.get('/api/cutting/payments');
+      setPayments(response.data);
+    } catch (error) {
+      console.error('Error fetching payments:', error);
+    }
+  };
+
+  const fetchAdvancePayments = async () => {
+    try {
+      const response = await axios.get('/api/cutting/advance-payments');
+      setAdvancePayments(response.data);
+    } catch (error) {
+      console.error('Error fetching advance payments:', error);
     }
   };
 
@@ -111,7 +193,7 @@ const CuttingManagement = () => {
         name: contractor.name,
         contractor_id: contractor.contractor_id,
         phone: contractor.phone,
-        status: contractor.status
+        address: contractor.address
       });
     } else {
       setSelectedContractor(null);
@@ -119,7 +201,7 @@ const CuttingManagement = () => {
         name: '',
         contractor_id: '',
         phone: '',
-        status: 'active'
+        address: ''
       });
     }
     setOpenDialog(true);
@@ -141,15 +223,23 @@ const CuttingManagement = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      const submissionData = {
+        name: formData.name,
+        contractor_id: formData.contractor_id,
+        phone: formData.phone,
+        address: formData.address
+      };
+
       if (selectedContractor) {
-        await axios.put(`/api/cutting/contractors/${selectedContractor.id}`, formData);
+        await axios.put(`/api/cutting/contractors/${selectedContractor.id}`, submissionData);
       } else {
-        await axios.post('/api/cutting/contractors', formData);
+        await axios.post('/api/cutting/contractors', submissionData);
       }
       fetchContractors();
       handleCloseDialog();
     } catch (error) {
       console.error('Error saving cutting contractor:', error);
+      alert(error.response?.data?.message || 'Error saving contractor');
     }
   };
 
@@ -211,12 +301,17 @@ const CuttingManagement = () => {
         return;
       }
 
-      await axios.post('/api/cutting/assignments', assignmentFormData);
+      if (assignmentFormData.id) {
+        await axios.put(`/api/cutting/assignments/${assignmentFormData.id}`, assignmentFormData);
+      } else {
+        await axios.post('/api/cutting/assignments', assignmentFormData);
+      }
 
       // Refresh both assignments and contractors data
       await Promise.all([
         fetchAssignments(),
-        fetchContractors()
+        fetchContractors(),
+        fetchLands()
       ]);
 
       setOpenAssignmentDialog(false);
@@ -228,8 +323,8 @@ const CuttingManagement = () => {
         status: 'active'
       });
     } catch (error) {
-      console.error('Error creating assignment:', error);
-      alert(error.response?.data?.message || 'Error creating assignment');
+      console.error('Error saving assignment:', error);
+      alert(error.response?.data?.message || 'Error saving assignment');
     }
   };
 
@@ -267,9 +362,18 @@ const CuttingManagement = () => {
         throw new Error('Please select an assignment for this payment');
       }
 
-      await axios.post('/api/cutting/payments', paymentFormData);
-      fetchContractors();
+      if (paymentFormData.id) {
+        await axios.put(`/api/cutting/payments/${paymentFormData.id}`, paymentFormData);
+      } else {
+        await axios.post('/api/cutting/payments', paymentFormData);
+      }
       setOpenPaymentDialog(false);
+      // Refresh both payment lists and contractors
+      await Promise.all([
+        fetchContractors(),
+        fetchPayments(),
+        fetchAdvancePayments()
+      ]);
       setPaymentFormData({
         contractor_id: '',
         assignment_id: null,
@@ -282,6 +386,44 @@ const CuttingManagement = () => {
     } catch (error) {
       console.error('Error processing payment:', error);
       alert(error.response?.data?.message || error.message || 'Error processing payment');
+    }
+  };
+
+  const handleOpenCompletionDialog = (item, isAssignment = false) => {
+    setSelectedAssignment(item);
+    setCompletionFormData({
+      assignment_id: isAssignment ? item.id : '',
+      raw_item_id: '',
+      quantity_received: '',
+    });
+    setOpenCompletionDialog(true);
+  };
+
+  const handleCloseCompletionDialog = () => {
+    setOpenCompletionDialog(false);
+    setSelectedAssignment(null);
+    setCompletionFormData({
+      assignment_id: '',
+      raw_item_id: '',
+      quantity_received: '',
+    });
+  };
+
+  const handleCompletionSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post('/api/cutting/assignments/complete', completionFormData);
+      handleCloseCompletionDialog();
+      // Refresh all relevant data
+      await Promise.all([
+        fetchAssignments(),
+        fetchContractors(),
+        fetchInventoryItems(),
+        fetchLands()
+      ]);
+    } catch (error) {
+      console.error('Error completing assignment:', error);
+      alert(error.response?.data?.message || 'Error completing assignment');
     }
   };
 
@@ -307,6 +449,273 @@ const CuttingManagement = () => {
     }
   };
 
+  const handleTabChange = (event, newValue) => {
+    setTabValue(newValue);
+  };
+
+  const handleOpenAssignmentDialog = (contractor = null) => {
+    // When creating new assignment, fetch only unassigned lands
+    axios.get('/api/lands?status=active&unassigned=true')
+      .then(response => {
+        setLands(response.data);
+        setAssignmentFormData({
+          contractor_id: contractor ? contractor.id : '',
+          land_id: '',
+          start_date: '',
+          end_date: '',
+          status: 'active'
+        });
+        setOpenAssignmentDialog(true);
+      })
+      .catch(error => {
+        console.error('Error fetching lands:', error);
+        alert('Error loading land data');
+      });
+  };
+
+  const handleCloseAssignmentDialog = () => {
+    setOpenAssignmentDialog(false);
+    setAssignmentFormData({
+      contractor_id: '',
+      land_id: '',
+      start_date: '',
+      end_date: '',
+      status: 'active'
+    });
+  };
+
+  const handleOpenAdvancePaymentDialog = (contractor) => {
+    setAdvancePaymentFormData({
+      contractor_id: contractor.id,
+      amount: '',
+      notes: '',
+      status: 'pending'
+    });
+    setOpenAdvancePaymentDialog(true);
+  };
+
+  const handleCloseAdvancePaymentDialog = () => {
+    setOpenAdvancePaymentDialog(false);
+    setAdvancePaymentFormData({
+      contractor_id: '',
+      amount: '',
+      notes: '',
+      status: 'pending'
+    });
+  };
+
+  const handleAdvancePaymentSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      if (advancePaymentFormData.id) {
+        await axios.put(`/api/cutting/advance-payments/${advancePaymentFormData.id}`, advancePaymentFormData);
+      } else {
+        await axios.post('/api/cutting/advance-payments', advancePaymentFormData);
+      }
+      handleCloseAdvancePaymentDialog();
+      // Refresh both payment lists and contractors
+      await Promise.all([
+        fetchContractors(),
+        fetchPayments(),
+        fetchAdvancePayments()
+      ]);
+    } catch (error) {
+      console.error('Error processing advance payment:', error);
+      alert(error.response?.data?.message || 'Error processing advance payment');
+    }
+  };
+
+  const handleOpenCuttingPaymentDialog = (contractor) => {
+    setCuttingPaymentFormData({
+      contractor_id: contractor.id,
+      assignment_id: '',
+      quantity_kg: '',
+      price_per_kg: 300,
+      total_amount: 0,
+      company_contribution: 180,
+      manufacturing_contribution: 120,
+      notes: '',
+      status: 'pending'
+    });
+    setOpenCuttingPaymentDialog(true);
+  };
+
+  const handleCloseCuttingPaymentDialog = () => {
+    setOpenCuttingPaymentDialog(false);
+    setCuttingPaymentFormData({
+      contractor_id: '',
+      assignment_id: '',
+      quantity_kg: '',
+      price_per_kg: 300,
+      total_amount: 0,
+      company_contribution: 180,
+      manufacturing_contribution: 120,
+      notes: '',
+      status: 'pending'
+    });
+  };
+
+  const handleCuttingPaymentSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const formattedData = {
+        contractor_id: Number(cuttingPaymentFormData.contractor_id),
+        assignment_id: Number(cuttingPaymentFormData.assignment_id),
+        quantity_kg: Number(cuttingPaymentFormData.quantity_kg),
+        price_per_kg: Number(cuttingPaymentFormData.price_per_kg),
+        amount: Number(cuttingPaymentFormData.total_amount),
+        companyContribution: Number(cuttingPaymentFormData.company_contribution),
+        manufacturingContribution: Number(cuttingPaymentFormData.manufacturing_contribution),
+        notes: cuttingPaymentFormData.notes || null,
+        status: cuttingPaymentFormData.status || 'pending'
+      };
+
+      await axios.post('/api/cutting/payments', formattedData);
+      handleCloseCuttingPaymentDialog();
+      // Refresh both payment lists and contractors
+      await Promise.all([
+        fetchContractors(),
+        fetchPayments(),
+        fetchAdvancePayments()
+      ]);
+    } catch (error) {
+      console.error('Error processing cutting payment:', error);
+      alert(error.response?.data?.message || 'Error processing cutting payment');
+    }
+  };
+
+  const calculateContributions = (totalAmount) => {
+    const total = parseFloat(totalAmount) || 0;
+    const manufacturingRatio = 0.4; // 40% for manufacturing
+    const manufacturingContribution = total * manufacturingRatio;
+    const companyContribution = total - manufacturingContribution;
+    return { companyContribution, manufacturingContribution };
+  };
+
+  const handleEditAdvancePayment = (payment) => {
+    setAdvancePaymentFormData({
+      id: payment.id,
+      contractor_id: payment.contractor_id,
+      amount: payment.amount,
+      notes: payment.notes,
+      status: payment.status
+    });
+    setOpenAdvancePaymentDialog(true);
+  };
+
+  const handleEditPayment = (payment) => {
+    setPaymentFormData({
+      id: payment.id,
+      contractor_id: payment.contractor_id,
+      assignment_id: payment.assignment_id,
+      amount: payment.total_amount,
+      companyContribution: payment.company_contribution,
+      manufacturingContribution: payment.manufacturing_contribution,
+      status: payment.status,
+      notes: payment.notes
+    });
+    setOpenPaymentDialog(true);
+  };
+
+  const handleDeletePayment = async (paymentId) => {
+    if (!window.confirm('Are you sure you want to delete this payment?')) return;
+
+    try {
+      await axios.delete(`/api/cutting/payments/${paymentId}`);
+      await Promise.all([
+        fetchContractors(),
+        fetchPayments(),
+        fetchAdvancePayments()
+      ]);
+    } catch (error) {
+      console.error('Error deleting payment:', error);
+      alert(error.response?.data?.message || 'Error deleting payment');
+    }
+  };
+
+  const handleDeleteAdvancePayment = async (paymentId) => {
+    if (!window.confirm('Are you sure you want to delete this advance payment?')) return;
+
+    try {
+      await axios.delete(`/api/cutting/advance-payments/${paymentId}`);
+      await Promise.all([
+        fetchContractors(),
+        fetchPayments(),
+        fetchAdvancePayments()
+      ]);
+    } catch (error) {
+      console.error('Error deleting advance payment:', error);
+      alert(error.response?.data?.message || 'Error deleting advance payment');
+    }
+  };
+
+  const handleEditAssignment = (assignment) => {
+    // Fetch all lands including the currently assigned one
+    axios.get('/api/lands?status=active&includeAssigned=true')
+      .then(response => {
+        setLands(response.data);
+        setAssignmentFormData({
+          id: assignment.id,
+          contractor_id: assignment.contractor_id,
+          land_id: assignment.land_id,
+          start_date: assignment.start_date.split('T')[0],
+          end_date: assignment.end_date.split('T')[0],
+          status: assignment.status
+        });
+        setOpenAssignmentDialog(true);
+      })
+      .catch(error => {
+        console.error('Error fetching lands:', error);
+        alert('Error loading land data');
+      });
+  };
+
+  const handleDeleteAssignment = async (assignmentId) => {
+    if (!window.confirm('Are you sure you want to delete this assignment?')) return;
+
+    try {
+      await axios.delete(`/api/cutting/assignments/${assignmentId}`);
+      await Promise.all([
+        fetchAssignments(),
+        fetchContractors(),
+        fetchLands()
+      ]);
+    } catch (error) {
+      console.error('Error deleting assignment:', error);
+      alert(error.response?.data?.message || 'Error deleting assignment');
+    }
+  };
+
+  const handlePrintPayment = async (payment) => {
+    try {
+      // Get company settings
+      const settingsResponse = await axios.get('/api/settings');
+      const settings = settingsResponse.data;
+
+      // Get payment details with contractor info
+      const paymentResponse = await axios.get(`/api/cutting/payments/${payment.id}`);
+      const paymentDetails = paymentResponse.data;
+
+      // Generate receipt HTML
+      const receiptResponse = await axios.post('/api/cutting/payments/receipt', {
+        payment: paymentDetails,
+        settings: settings
+      });
+
+      // Create a new window and print
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write(receiptResponse.data.receiptHtml);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+      printWindow.close();
+    } catch (error) {
+      console.error('Error printing payment:', error);
+      // Show error notification
+      enqueueSnackbar('Error printing payment receipt', { variant: 'error' });
+    }
+  };
+
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
@@ -316,17 +725,18 @@ const CuttingManagement = () => {
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Button
             variant="outlined"
-            startIcon={<ForestIcon />}
-            onClick={() => setOpenAssignmentDialog(true)}
+            startIcon={<AddIcon />}
+            onClick={() => handleOpenDialog()}
           >
-            Assign Land
+            New Contractor
           </Button>
           <Button
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={() => handleOpenDialog()}
+            onClick={() => setOpenAssignmentDialog(true)}
+            color="primary"
           >
-            New Cutting Operation
+            New Operation
           </Button>
         </Box>
       </Box>
@@ -345,7 +755,7 @@ const CuttingManagement = () => {
         <Grid item xs={12} sm={6} md={3}>
           <SummaryCard
             icon={ForestIcon}
-            title="Active Assignments"
+            title="Active Operations"
             value={summaryStats.active_assignments}
             iconColor="#D32F2F"
             gradientColor="error"
@@ -355,7 +765,7 @@ const CuttingManagement = () => {
         <Grid item xs={12} sm={6} md={3}>
           <SummaryCard
             icon={AssignmentIcon}
-            title="Total Assignments"
+            title="Total Operations"
             value={summaryStats.total_assignments}
             iconColor="#ED6C02"
             gradientColor="warning"
@@ -374,80 +784,302 @@ const CuttingManagement = () => {
       </Grid>
 
       <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Contractor ID</TableCell>
-                <TableCell>Name</TableCell>
-                <TableCell>Phone</TableCell>
-                <TableCell>Active Assignments</TableCell>
-                <TableCell>Assigned Lands</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {contractors.map((contractor) => (
-                <TableRow key={contractor.id} hover>
-                  <TableCell>{contractor.contractor_id}</TableCell>
-                  <TableCell>{contractor.name}</TableCell>
-                  <TableCell>{contractor.phone}</TableCell>
-                  <TableCell>{contractor.active_assignments || 0}</TableCell>
-                  <TableCell>{contractor.assigned_lands || 'None'}</TableCell>
-                  <TableCell>
-                    <Chip
-                      label={contractor.status}
-                      color={contractor.status === 'active' ? 'success' : 'default'}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell align="right">
-                    <IconButton
-                      size="small"
-                      onClick={() => {
-                        setAssignmentFormData(prev => ({
-                          ...prev,
-                          contractor_id: contractor.id
-                        }));
-                        setOpenAssignmentDialog(true);
-                      }}
-                      sx={{ color: 'success.main' }}
-                    >
-                      <ForestIcon />
-                    </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleOpenPaymentDialog(contractor)}
-                      sx={{ color: 'info.main', ml: 1 }}
-                    >
-                      <PaymentIcon />
-                    </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleOpenDialog(contractor)}
-                      sx={{ color: 'primary.main', ml: 1 }}
-                    >
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleDelete(contractor.id)}
-                      sx={{ color: 'error.main', ml: 1 }}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </TableCell>
+        <Tabs
+          value={tabValue}
+          onChange={handleTabChange}
+          sx={{ borderBottom: 1, borderColor: 'divider', px: 2, pt: 2 }}
+        >
+          <Tab label="Operations" />
+          <Tab label="Contractors" />
+          <Tab label="Advanced Payments" />
+          <Tab label="Payments" />
+        </Tabs>
+
+        {/* Operations Tab */}
+        <TabPanel value={tabValue} index={0}>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Land Number</TableCell>
+                  <TableCell>Contractor</TableCell>
+                  <TableCell>Location</TableCell>
+                  <TableCell>Start Date</TableCell>
+                  <TableCell>End Date</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="right">Actions</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+              </TableHead>
+              <TableBody>
+                {assignments.map((assignment) => (
+                  <TableRow key={assignment.id} hover>
+                    <TableCell>{assignment.land_number}</TableCell>
+                    <TableCell>{assignment.contractor_name}</TableCell>
+                    <TableCell>{assignment.location}</TableCell>
+                    <TableCell>{new Date(assignment.start_date).toLocaleDateString()}</TableCell>
+                    <TableCell>{new Date(assignment.end_date).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={assignment.status}
+                        color={getStatusColor(assignment.status)}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpenCompletionDialog(assignment, true)}
+                        sx={{ color: 'success.main' }}
+                        disabled={assignment.status !== 'active'}
+                      >
+                        <DoneIcon />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpenCuttingPaymentDialog(assignment)}
+                        sx={{ color: 'info.main', ml: 1 }}
+                        title="Cutting Payment"
+                      >
+                        <PaymentIcon />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleEditAssignment(assignment)}
+                        sx={{ color: 'primary.main', ml: 1 }}
+                      >
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDeleteAssignment(assignment.id)}
+                        sx={{ color: 'error.main', ml: 1 }}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </TabPanel>
+
+        {/* Contractors Tab */}
+        <TabPanel value={tabValue} index={1}>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Contractor ID</TableCell>
+                  <TableCell>Name</TableCell>
+                  <TableCell>Phone</TableCell>
+                  <TableCell>Active Assignments</TableCell>
+                  <TableCell>Assigned Lands</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {contractors.map((contractor) => (
+                  <TableRow key={contractor.id} hover>
+                    <TableCell>{contractor.contractor_id}</TableCell>
+                    <TableCell>{contractor.name}</TableCell>
+                    <TableCell>{contractor.phone}</TableCell>
+                    <TableCell>{contractor.active_assignments}</TableCell>
+                    <TableCell>
+                      {contractor.assigned_lands ? (
+                        contractor.assigned_lands.split(',').map((land, index) => (
+                          <Chip
+                            key={index}
+                            label={land}
+                            size="small"
+                            sx={{ mr: 0.5, mb: 0.5 }}
+                          />
+                        ))
+                      ) : (
+                        'None'
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={contractor.status}
+                        color={contractor.status === 'active' ? 'success' : 'default'}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpenAssignmentDialog(contractor)}
+                        sx={{ color: 'success.main' }}
+                        title="Assign Land"
+                      >
+                        <ForestIcon />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpenAdvancePaymentDialog(contractor)}
+                        sx={{ color: 'warning.main', ml: 1 }}
+                        title="Advance Payment"
+                      >
+                        <PaymentIcon />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpenCuttingPaymentDialog(contractor)}
+                        sx={{ color: 'info.main', ml: 1 }}
+                        title="Cutting Payment"
+                      >
+                        <PaymentIcon />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpenDialog(contractor)}
+                        sx={{ color: 'primary.main', ml: 1 }}
+                        title="Edit"
+                      >
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDelete(contractor.id)}
+                        sx={{ color: 'error.main', ml: 1 }}
+                        title="Delete"
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </TabPanel>
+
+        {/* Advanced Payments Tab */}
+        <TabPanel value={tabValue} index={2}>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Contractor</TableCell>
+                  <TableCell>Amount</TableCell>
+                  <TableCell>Date</TableCell>
+                  <TableCell>Notes</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {advancePayments.map((payment) => (
+                  <TableRow key={payment.id} hover>
+                    <TableCell>{payment.contractor_name}</TableCell>
+                    <TableCell>{formatCurrency(payment.amount, false)}</TableCell>
+                    <TableCell>{new Date(payment.created_at).toLocaleDateString()}</TableCell>
+                    <TableCell>{payment.notes}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={payment.status}
+                        color={
+                          payment.status === 'paid' ? 'success' :
+                          payment.status === 'approved' ? 'info' :
+                          payment.status === 'pending' ? 'warning' : 'error'
+                        }
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleEditAdvancePayment(payment)}
+                        sx={{ color: 'primary.main' }}
+                      >
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDeleteAdvancePayment(payment.id)}
+                        sx={{ color: 'error.main', ml: 1 }}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </TabPanel>
+
+        {/* Payments Tab */}
+        <TabPanel value={tabValue} index={3}>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Receipt Number</TableCell>
+                  <TableCell>Contractor</TableCell>
+                  <TableCell>Amount</TableCell>
+                  <TableCell>Company Contribution</TableCell>
+                  <TableCell>Manufacturing Contribution</TableCell>
+                  <TableCell>Payment Date</TableCell>
+                  <TableCell>Notes</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {payments.map((payment) => (
+                  <TableRow key={payment.id} hover>
+                    <TableCell>{payment.receipt_number}</TableCell>
+                    <TableCell>{payment.contractor_name}</TableCell>
+                    <TableCell>{formatCurrency(payment.total_amount, false)}</TableCell>
+                    <TableCell>{formatCurrency(payment.company_contribution, false)}</TableCell>
+                    <TableCell>{formatCurrency(payment.manufacturing_contribution, false)}</TableCell>
+                    <TableCell>{new Date(payment.payment_date).toLocaleDateString()}</TableCell>
+                    <TableCell>{payment.notes}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={payment.status}
+                        color={payment.status === 'paid' ? 'success' : payment.status === 'pending' ? 'warning' : 'error'}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <IconButton
+                        size="small"
+                        onClick={() => handlePrintPayment(payment)}
+                        sx={{ color: 'success.main' }}
+                      >
+                        <PrintIcon />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleEditPayment(payment)}
+                        sx={{ color: 'primary.main', ml: 1 }}
+                      >
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDeletePayment(payment.id)}
+                        sx={{ color: 'error.main', ml: 1 }}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </TabPanel>
       </Paper>
 
+      {/* Contractor Dialog */}
       <Dialog open={openDialog} onClose={handleCloseDialog}>
         <DialogTitle>
-          {selectedContractor ? 'Edit Cutting Contractor' : 'New Cutting Contractor'}
+          {selectedContractor ? 'Edit Contractor' : 'New Contractor'}
         </DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -458,6 +1090,7 @@ const CuttingManagement = () => {
                 name="name"
                 value={formData.name}
                 onChange={handleInputChange}
+                required
               />
             </Grid>
             <Grid item xs={12}>
@@ -468,7 +1101,6 @@ const CuttingManagement = () => {
                 value={formData.contractor_id}
                 onChange={handleInputChange}
                 required
-                helperText="Unique identifier for the contractor"
               />
             </Grid>
             <Grid item xs={12}>
@@ -478,21 +1110,20 @@ const CuttingManagement = () => {
                 name="phone"
                 value={formData.phone}
                 onChange={handleInputChange}
+                required
               />
             </Grid>
             <Grid item xs={12}>
-              <FormControl fullWidth>
-                <InputLabel>Status</InputLabel>
-                <Select
-                  name="status"
-                  value={formData.status}
-                  label="Status"
-                  onChange={handleInputChange}
-                >
-                  <MenuItem value="active">Active</MenuItem>
-                  <MenuItem value="inactive">Inactive</MenuItem>
-                </Select>
-              </FormControl>
+              <TextField
+                fullWidth
+                label="Address"
+                name="address"
+                value={formData.address}
+                onChange={handleInputChange}
+                required
+                multiline
+                rows={2}
+              />
             </Grid>
           </Grid>
         </DialogContent>
@@ -504,31 +1135,39 @@ const CuttingManagement = () => {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={openAssignmentDialog} onClose={() => setOpenAssignmentDialog(false)}>
-        <DialogTitle>Assign Land to Contractor</DialogTitle>
+      <Dialog open={openAssignmentDialog} onClose={handleCloseAssignmentDialog}>
+        <DialogTitle>
+          {assignmentFormData.contractor_id
+            ? `Assign Land to ${contractors.find(c => c.id === assignmentFormData.contractor_id)?.name}`
+            : 'Assign Land to Contractor'
+          }
+        </DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12}>
-              <FormControl fullWidth>
-                <InputLabel>Contractor</InputLabel>
-                <Select
-                  name="contractor_id"
-                  value={assignmentFormData.contractor_id}
-                  label="Contractor"
-                  onChange={(e) => setAssignmentFormData(prev => ({
-                    ...prev,
-                    contractor_id: e.target.value
-                  }))}
-                  required
-                >
-                  {contractors.map(contractor => (
-                    <MenuItem key={contractor.id} value={contractor.id}>
-                      {contractor.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
+            {!assignmentFormData.contractor_id && (
+              <Grid item xs={12}>
+                <FormControl fullWidth>
+                  <InputLabel>Contractor</InputLabel>
+                  <Select
+                    name="contractor_id"
+                    value={assignmentFormData.contractor_id}
+                    label="Contractor"
+                    onChange={(e) => setAssignmentFormData(prev => ({
+                      ...prev,
+                      contractor_id: e.target.value
+                    }))}
+                  >
+                    {contractors
+                      .filter(c => c.status === 'active')
+                      .map(contractor => (
+                        <MenuItem key={contractor.id} value={contractor.id}>
+                          {contractor.name}
+                        </MenuItem>
+                      ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+            )}
             <Grid item xs={12}>
               <FormControl fullWidth>
                 <InputLabel>Land</InputLabel>
@@ -540,11 +1179,10 @@ const CuttingManagement = () => {
                     ...prev,
                     land_id: e.target.value
                   }))}
-                  required
                 >
                   {lands.map(land => (
                     <MenuItem key={land.id} value={land.id}>
-                      {land.name} ({land.land_number})
+                      {land.name} ({land.land_number}) - {land.location}
                     </MenuItem>
                   ))}
                 </Select>
@@ -562,7 +1200,6 @@ const CuttingManagement = () => {
                   start_date: e.target.value
                 }))}
                 InputLabelProps={{ shrink: true }}
-                required
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -577,13 +1214,12 @@ const CuttingManagement = () => {
                   end_date: e.target.value
                 }))}
                 InputLabelProps={{ shrink: true }}
-                required
               />
             </Grid>
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenAssignmentDialog(false)}>Cancel</Button>
+          <Button onClick={handleCloseAssignmentDialog}>Cancel</Button>
           <Button variant="contained" onClick={handleAssignmentSubmit}>
             Assign
           </Button>
@@ -608,7 +1244,7 @@ const CuttingManagement = () => {
                   {assignments
                     .filter(a =>
                       a.contractor_id === paymentFormData.contractor_id &&
-                      (a.status === 'active' || a.status === 'in_progress')
+                      ['active', 'in_progress', 'completed'].includes(a.status)
                     )
                     .map(assignment => (
                       <MenuItem key={assignment.id} value={assignment.id}>
@@ -724,6 +1360,278 @@ const CuttingManagement = () => {
           </Button>
           <Button variant="contained" onClick={handleReassignAndDelete}>
             Reassign & Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={openCompletionDialog} onClose={handleCloseCompletionDialog}>
+        <DialogTitle>
+          {selectedAssignment ? (
+            completionFormData.assignment_id
+              ? `Complete Assignment - Land ${selectedAssignment.land_number}`
+              : `Complete Assignment for ${selectedAssignment.name || selectedAssignment.contractor_name}`
+          ) : 'Complete Assignment'
+          }
+        </DialogTitle>
+        <DialogContent>
+          <Box component="form" onSubmit={handleCompletionSubmit} sx={{ mt: 2 }}>
+            {!completionFormData.assignment_id && (
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel>Select Assignment</InputLabel>
+                <Select
+                  value={completionFormData.assignment_id}
+                  onChange={(e) =>
+                    setCompletionFormData({
+                      ...completionFormData,
+                      assignment_id: e.target.value,
+                    })
+                  }
+                >
+                  {assignments
+                    .filter(a =>
+                      a.contractor_id === selectedAssignment?.id &&
+                      a.status === 'active'
+                    )
+                    .map((assignment) => (
+                      <MenuItem key={assignment.id} value={assignment.id}>
+                        Land {assignment.land_number} - {assignment.location}
+                      </MenuItem>
+                    ))}
+                </Select>
+              </FormControl>
+            )}
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel>Raw Material</InputLabel>
+              <Select
+                value={completionFormData.raw_item_id}
+                onChange={(e) =>
+                  setCompletionFormData({
+                    ...completionFormData,
+                    raw_item_id: e.target.value,
+                  })
+                }
+              >
+                {inventoryItems.map((item) => (
+                  <MenuItem key={item.id} value={item.id}>
+                    {item.product_name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <TextField
+              fullWidth
+              label="Quantity Received (kg)"
+              type="number"
+              value={completionFormData.quantity_received}
+              onChange={(e) =>
+                setCompletionFormData({
+                  ...completionFormData,
+                  quantity_received: e.target.value,
+                })
+              }
+              sx={{ mb: 2 }}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseCompletionDialog}>Cancel</Button>
+          <Button
+            onClick={handleCompletionSubmit}
+            variant="contained"
+            disabled={!completionFormData.assignment_id || !completionFormData.raw_item_id || !completionFormData.quantity_received}
+          >
+            Complete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={openAdvancePaymentDialog} onClose={handleCloseAdvancePaymentDialog}>
+        <DialogTitle>Process Advance Payment</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Amount"
+                type="number"
+                value={advancePaymentFormData.amount}
+                onChange={(e) => setAdvancePaymentFormData(prev => ({
+                  ...prev,
+                  amount: e.target.value
+                }))}
+                helperText={`Current: ${formatCurrency(advancePaymentFormData.amount, false)}`}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Notes"
+                multiline
+                rows={2}
+                value={advancePaymentFormData.notes}
+                onChange={(e) => setAdvancePaymentFormData(prev => ({
+                  ...prev,
+                  notes: e.target.value
+                }))}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseAdvancePaymentDialog}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleAdvancePaymentSubmit}
+            disabled={!advancePaymentFormData.amount}
+          >
+            Process Advance
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={openCuttingPaymentDialog} onClose={handleCloseCuttingPaymentDialog}>
+        <DialogTitle>Process Cutting Payment</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <FormControl fullWidth required>
+                <InputLabel>Assignment</InputLabel>
+                <Select
+                  value={cuttingPaymentFormData.assignment_id}
+                  label="Assignment"
+                  onChange={(e) => setCuttingPaymentFormData(prev => ({
+                    ...prev,
+                    assignment_id: e.target.value
+                  }))}
+                >
+                  {assignments
+                    .filter(a =>
+                      a.contractor_id === cuttingPaymentFormData.contractor_id &&
+                      ['active', 'in_progress', 'completed'].includes(a.status)
+                    )
+                    .map(assignment => (
+                      <MenuItem key={assignment.id} value={assignment.id}>
+                        {`Land ${assignment.land_number} - ${assignment.location} (${assignment.status})`}
+                      </MenuItem>
+                    ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Quantity (kg)"
+                type="number"
+                value={cuttingPaymentFormData.quantity_kg}
+                onChange={(e) => {
+                  const quantity = e.target.value;
+                  const total = quantity * cuttingPaymentFormData.price_per_kg;
+                  const { companyContribution, manufacturingContribution } = calculateContributions(total);
+                  setCuttingPaymentFormData(prev => ({
+                    ...prev,
+                    quantity_kg: quantity,
+                    total_amount: total,
+                    company_contribution: companyContribution,
+                    manufacturing_contribution: manufacturingContribution
+                  }));
+                }}
+                required
+                helperText={`Total Value: ${formatCurrency(cuttingPaymentFormData.quantity_kg * cuttingPaymentFormData.price_per_kg, false)}`}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Price per kg"
+                type="number"
+                value={cuttingPaymentFormData.price_per_kg}
+                onChange={(e) => {
+                  const pricePerKg = e.target.value;
+                  const total = cuttingPaymentFormData.quantity_kg * pricePerKg;
+                  const { companyContribution, manufacturingContribution } = calculateContributions(total);
+                  setCuttingPaymentFormData(prev => ({
+                    ...prev,
+                    price_per_kg: pricePerKg,
+                    total_amount: total,
+                    company_contribution: companyContribution,
+                    manufacturing_contribution: manufacturingContribution
+                  }));
+                }}
+                required
+                helperText={`Current: ${formatCurrency(cuttingPaymentFormData.price_per_kg, false)}/kg`}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Total Amount"
+                type="number"
+                value={cuttingPaymentFormData.total_amount}
+                onChange={(e) => {
+                  const total = e.target.value;
+                  const { companyContribution, manufacturingContribution } = calculateContributions(total);
+                  setCuttingPaymentFormData(prev => ({
+                    ...prev,
+                    total_amount: total,
+                    company_contribution: companyContribution,
+                    manufacturing_contribution: manufacturingContribution
+                  }));
+                }}
+                required
+                helperText={`Calculated Amount: ${formatCurrency(cuttingPaymentFormData.total_amount, false)}`}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Company Contribution"
+                type="number"
+                value={cuttingPaymentFormData.company_contribution}
+                onChange={(e) => setCuttingPaymentFormData(prev => ({
+                  ...prev,
+                  company_contribution: e.target.value,
+                  manufacturing_contribution: prev.total_amount - e.target.value
+                }))}
+                helperText={`Current: ${formatCurrency(cuttingPaymentFormData.company_contribution, false)}`}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Manufacturing Contribution"
+                type="number"
+                value={cuttingPaymentFormData.manufacturing_contribution}
+                onChange={(e) => setCuttingPaymentFormData(prev => ({
+                  ...prev,
+                  manufacturing_contribution: e.target.value,
+                  company_contribution: prev.total_amount - e.target.value
+                }))}
+                helperText={`Current: ${formatCurrency(cuttingPaymentFormData.manufacturing_contribution, false)}`}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Notes"
+                multiline
+                rows={2}
+                value={cuttingPaymentFormData.notes}
+                onChange={(e) => setCuttingPaymentFormData(prev => ({
+                  ...prev,
+                  notes: e.target.value
+                }))}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseCuttingPaymentDialog}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleCuttingPaymentSubmit}
+            disabled={!cuttingPaymentFormData.assignment_id || !cuttingPaymentFormData.quantity_kg || !cuttingPaymentFormData.total_amount}
+          >
+            Process Payment
           </Button>
         </DialogActions>
       </Dialog>

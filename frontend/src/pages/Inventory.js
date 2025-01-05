@@ -46,11 +46,7 @@ const TabPanel = (props) => {
       hidden={value !== index}
       {...other}
     >
-      {value === index && (
-        <Box sx={{ p: 3 }}>
-          {children}
-        </Box>
-      )}
+      {value === index && children}
     </div>
   );
 };
@@ -59,6 +55,9 @@ const Inventory = () => {
   const [tabValue, setTabValue] = useState(0);
   const [inventory, setInventory] = useState([]);
   const [transactions, setTransactions] = useState([]);
+  const [cuttingTasks, setCuttingTasks] = useState([]);
+  const [cinnamonAssignments, setCinnamonAssignments] = useState([]);
+  const [manufacturingPurchases, setManufacturingPurchases] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [openTransactionDialog, setOpenTransactionDialog] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
@@ -74,7 +73,10 @@ const Inventory = () => {
     purchase_price: '',
     selling_price: '',
     description: '',
-    status: 'active'
+    status: 'active',
+    cutting_assignment_id: '',
+    purchase_assignment_id: '',
+    manufacturing_id: ''
   });
 
   const [transactionData, setTransactionData] = useState({
@@ -94,6 +96,9 @@ const Inventory = () => {
   useEffect(() => {
     fetchInventory();
     fetchTransactions();
+    fetchCuttingTasks();
+    fetchCinnamonAssignments();
+    fetchManufacturingPurchases();
   }, []);
 
   const fetchInventory = async () => {
@@ -112,6 +117,33 @@ const Inventory = () => {
       setTransactions(response.data);
     } catch (error) {
       console.error('Error fetching transactions:', error);
+    }
+  };
+
+  const fetchCuttingTasks = async () => {
+    try {
+      const response = await axios.get('/api/cutting/tasks');
+      setCuttingTasks(response.data);
+    } catch (error) {
+      console.error('Error fetching cutting tasks:', error);
+    }
+  };
+
+  const fetchCinnamonAssignments = async () => {
+    try {
+      const response = await axios.get('/api/manufacturing/assignments');
+      setCinnamonAssignments(response.data);
+    } catch (error) {
+      console.error('Error fetching cinnamon assignments:', error);
+    }
+  };
+
+  const fetchManufacturingPurchases = async () => {
+    try {
+      const response = await axios.get('/api/manufacturing/invoices');
+      setManufacturingPurchases(response.data);
+    } catch (error) {
+      console.error('Error fetching manufacturing purchases:', error);
     }
   };
 
@@ -134,7 +166,10 @@ const Inventory = () => {
         purchase_price: item.purchase_price,
         selling_price: item.selling_price,
         description: item.description,
-        status: item.status
+        status: item.status,
+        cutting_assignment_id: item.cutting_assignment_id,
+        purchase_assignment_id: item.purchase_assignment_id,
+        manufacturing_id: item.manufacturing_id
       });
     } else {
       setSelectedItem(null);
@@ -150,7 +185,10 @@ const Inventory = () => {
         purchase_price: '',
         selling_price: '',
         description: '',
-        status: 'active'
+        status: 'active',
+        cutting_assignment_id: '',
+        purchase_assignment_id: '',
+        manufacturing_id: ''
       });
     }
     setOpenDialog(true);
@@ -392,7 +430,7 @@ const Inventory = () => {
         <Grid item xs={12} sm={6} md={3}>
           <SummaryCard
             icon={ManufacturingIcon}
-            title="Manufacturing Orders"
+            title="Orders"
             value={new Set(transactions.filter(t => t.reference.startsWith('MO-')).map(t => t.reference)).size}
             iconColor="#ED6C02"
             gradientColor="warning"
@@ -419,6 +457,7 @@ const Inventory = () => {
         >
           <Tab label="Inventory Items" />
           <Tab label="Transactions History" />
+          <Tab label="Stock History" />
         </Tabs>
 
         <TabPanel value={tabValue} index={0}>
@@ -431,8 +470,7 @@ const Inventory = () => {
                   <TableCell>Type</TableCell>
                   <TableCell align="right">Quantity</TableCell>
                   <TableCell>Stock Level</TableCell>
-                  <TableCell align="right">Purchase Price</TableCell>
-                  <TableCell align="right">Selling Price</TableCell>
+                  <TableCell align="right">Price/Assignment</TableCell>
                   <TableCell>Location</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell align="right">Actions</TableCell>
@@ -454,11 +492,25 @@ const Inventory = () => {
                         size="small"
                       />
                     </TableCell>
-                    <TableCell align="right">{formatCurrency(item.purchase_price)}</TableCell>
                     <TableCell align="right">
                       {item.product_type === 'finished_good'
-                        ? formatCurrency(item.selling_price)
-                        : 'N/A'}
+                        ? (
+                            <>
+                              {formatCurrency(item.purchase_price)}
+                              {item.manufacturing_id && manufacturingPurchases.find(p => p.id === item.manufacturing_id) &&
+                                ` (Invoice: ${manufacturingPurchases.find(p => p.id === item.manufacturing_id).invoice_number})`}
+                            </>
+                          )
+                        : (
+                            <>
+                              {item.cutting_assignment_id && cuttingTasks.find(t => t.id === item.cutting_assignment_id) &&
+                                `Cutting: ${cuttingTasks.find(t => t.id === item.cutting_assignment_id).land_number}`}
+                              {item.cutting_assignment_id && item.purchase_assignment_id && ' | '}
+                              {item.purchase_assignment_id && cinnamonAssignments.find(a => a.id === item.purchase_assignment_id) &&
+                                `Purchase: ${cinnamonAssignments.find(a => a.id === item.purchase_assignment_id).raw_material_name}`}
+                            </>
+                          )
+                      }
                     </TableCell>
                     <TableCell>{item.location}</TableCell>
                     <TableCell>
@@ -531,6 +583,50 @@ const Inventory = () => {
                     </TableCell>
                   </TableRow>
                 ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </TabPanel>
+
+        <TabPanel value={tabValue} index={2}>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Date</TableCell>
+                  <TableCell>Product</TableCell>
+                  <TableCell>Type</TableCell>
+                  <TableCell>Quantity</TableCell>
+                  <TableCell>Reference</TableCell>
+                  <TableCell>Notes</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {transactions.map((transaction) => {
+                  const isIncrease = transaction.type === 'IN';
+                  return (
+                    <TableRow key={transaction.id} hover>
+                      <TableCell>{new Date(transaction.created_at).toLocaleDateString()}</TableCell>
+                      <TableCell>{transaction.product_name}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={transaction.type}
+                          color={isIncrease ? 'success' : transaction.type === 'OUT' ? 'error' : 'warning'}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Typography
+                          color={isIncrease ? 'success.main' : 'error.main'}
+                        >
+                          {isIncrease ? '+' : '-'}{Math.abs(transaction.quantity)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>{transaction.reference}</TableCell>
+                      <TableCell>{transaction.notes}</TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </TableContainer>
@@ -640,21 +736,71 @@ const Inventory = () => {
                 type="number"
                 value={formData.purchase_price}
                 onChange={handleInputChange}
-                required
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Selling Price"
-                name="selling_price"
-                type="number"
-                value={formData.selling_price}
-                onChange={handleInputChange}
+                required={formData.product_type === 'finished_good'}
                 disabled={formData.product_type === 'raw_material'}
                 helperText={formData.product_type === 'raw_material' ? 'Not applicable for raw materials' : ''}
               />
             </Grid>
+            {formData.product_type === 'raw_material' && (
+              <>
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel>Cutting Task</InputLabel>
+                    <Select
+                      name="cutting_assignment_id"
+                      value={formData.cutting_assignment_id}
+                      onChange={handleInputChange}
+                      label="Cutting Task"
+                    >
+                      <MenuItem value="">None</MenuItem>
+                      {cuttingTasks.map((task) => (
+                        <MenuItem key={task.id} value={task.id}>
+                          {`Land: ${task.land_number} - ${task.contractor_name} (${new Date(task.date).toLocaleDateString()}) - Progress: ${task.progress}%`}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel>Purchase Assignment</InputLabel>
+                    <Select
+                      name="purchase_assignment_id"
+                      value={formData.purchase_assignment_id}
+                      onChange={handleInputChange}
+                      label="Purchase Assignment"
+                    >
+                      <MenuItem value="">None</MenuItem>
+                      {cinnamonAssignments.map((assignment) => (
+                        <MenuItem key={assignment.id} value={assignment.id}>
+                          {`${assignment.raw_material_name} - ${assignment.raw_material_quantity}kg (${assignment.contractor_name}) - ${assignment.status}`}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+              </>
+            )}
+            {formData.product_type === 'finished_good' && (
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Manufacturing Purchase</InputLabel>
+                  <Select
+                    name="manufacturing_id"
+                    value={formData.manufacturing_id}
+                    onChange={handleInputChange}
+                    label="Manufacturing Purchase"
+                  >
+                    <MenuItem value="">None</MenuItem>
+                    {manufacturingPurchases.map((purchase) => (
+                      <MenuItem key={purchase.id} value={purchase.id}>
+                        {`Invoice: ${purchase.invoice_number} - ${purchase.supplier_name} - ${formatCurrency(purchase.total_amount)}`}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+            )}
             <Grid item xs={12}>
               <TextField
                 fullWidth

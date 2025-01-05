@@ -25,8 +25,8 @@ router.post('/accounts', protect, authorize('admin', 'accountant'), async (req, 
     // Validate account type
     const validTypes = ['asset', 'liability', 'equity', 'revenue', 'expense'];
     if (!validTypes.includes(req.body.type)) {
-      return res.status(400).json({ 
-        message: `Invalid account type. Must be one of: ${validTypes.join(', ')}` 
+      return res.status(400).json({
+        message: `Invalid account type. Must be one of: ${validTypes.join(', ')}`
       });
     }
 
@@ -83,12 +83,12 @@ router.post('/accounts', protect, authorize('admin', 'accountant'), async (req, 
         req.body.status || 'active'
       ]
     );
-    
+
     const [account] = await Account.pool.execute(
       'SELECT * FROM accounts WHERE id = ?',
       [result.insertId]
     );
-    
+
     res.status(201).json(account[0]);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -101,10 +101,10 @@ router.post('/transactions', protect, authorize('admin', 'accountant'), async (r
     // Validate status
     const validStatuses = ['draft', 'posted', 'void'];
     const status = req.body.status || 'draft';
-    
+
     if (!validStatuses.includes(status)) {
-      return res.status(400).json({ 
-        message: `Invalid status. Must be one of: ${validStatuses.join(', ')}` 
+      return res.status(400).json({
+        message: `Invalid status. Must be one of: ${validStatuses.join(', ')}`
       });
     }
 
@@ -173,12 +173,12 @@ router.get('/reports/trial-balance', protect, async (req, res) => {
   try {
     // Get all active accounts with their balances using MySQL syntax
     const [accounts] = await Account.pool.execute(`
-      SELECT 
+      SELECT
         code,
         name,
         type,
         balance
-      FROM accounts 
+      FROM accounts
       WHERE status = 'active'
       ORDER BY code
     `);
@@ -190,7 +190,7 @@ router.get('/reports/trial-balance', protect, async (req, res) => {
         const balance = Number(account.balance);
         const debit = balance > 0 ? balance : 0;
         const credit = balance < 0 ? -balance : 0;
-        
+
         return {
           code: account.code,
           name: account.name,
@@ -216,10 +216,10 @@ router.get('/reports/trial-balance', protect, async (req, res) => {
 router.get('/reports/profit-loss', protect, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    
+
     // Get all transactions with their entries using MySQL syntax
     const [transactions] = await Transaction.pool.execute(`
-      SELECT 
+      SELECT
         t.id,
         t.date,
         te.debit,
@@ -235,7 +235,7 @@ router.get('/reports/profit-loss', protect, async (req, res) => {
         AND a.type IN ('revenue', 'expense')
       ORDER BY t.date, t.id
     `, [startDate, endDate]);
-    
+
     const report = {
       revenue: [],
       expenses: [],
@@ -255,13 +255,13 @@ router.get('/reports/profit-loss', protect, async (req, res) => {
           total: 0
         };
       }
-      
+
       if (trans.account_type === 'revenue') {
         acc[key].total += trans.credit - trans.debit;
       } else if (trans.account_type === 'expense') {
         acc[key].total += trans.debit - trans.credit;
       }
-      
+
       return acc;
     }, {});
 
@@ -289,18 +289,18 @@ router.get('/reports/balance-sheet', protect, async (req, res) => {
   try {
     // Get all active accounts with their balances using MySQL syntax
     const [accounts] = await Account.pool.execute(`
-      SELECT 
+      SELECT
         code,
         name,
         type,
         category,
         balance
-      FROM accounts 
+      FROM accounts
       WHERE status = 'active'
         AND type IN ('asset', 'liability', 'equity')
       ORDER BY code
     `);
-    
+
     const balanceSheet = {
       assets: {
         current: [],
@@ -339,7 +339,7 @@ router.get('/reports/balance-sheet', protect, async (req, res) => {
             balanceSheet.assets.totalFixed += item.balance;
           }
           break;
-          
+
         case 'liability':
           if (account.category === 'current') {
             balanceSheet.liabilities.current.push(item);
@@ -349,7 +349,7 @@ router.get('/reports/balance-sheet', protect, async (req, res) => {
             balanceSheet.liabilities.totalLongTerm += item.balance;
           }
           break;
-          
+
         case 'equity':
           balanceSheet.equity.items.push(item);
           balanceSheet.equity.total += item.balance;
@@ -372,10 +372,10 @@ router.get('/reports/balance-sheet', protect, async (req, res) => {
 router.get('/reports/cash-flow', protect, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    
+
     // Get all cash-related transactions
     const [transactions] = await Transaction.pool.execute(`
-      SELECT 
+      SELECT
         t.id,
         t.date,
         t.type as transaction_type,
@@ -412,7 +412,7 @@ router.get('/reports/cash-flow', protect, async (req, res) => {
 
     transactions.forEach(trans => {
       const amount = trans.debit - trans.credit;
-      
+
       // Categorize cash flows
       if (['revenue', 'expense'].includes(trans.account_type)) {
         if (amount > 0) {
@@ -442,9 +442,9 @@ router.get('/reports/cash-flow', protect, async (req, res) => {
     });
 
     // Calculate net cash flow
-    cashFlow.netCashFlow = 
-      cashFlow.operating.total + 
-      cashFlow.investing.total + 
+    cashFlow.netCashFlow =
+      cashFlow.operating.total +
+      cashFlow.investing.total +
       cashFlow.financing.total;
 
     res.json(cashFlow);
@@ -494,7 +494,7 @@ router.get('/summary', protect, async (req, res) => {
     // Calculate totals
     accounts.forEach(account => {
       const balance = Math.abs(account.balance);
-      
+
       switch(account.type) {
         case 'asset':
           summary.assets.total += balance;
@@ -528,17 +528,17 @@ router.get('/summary', protect, async (req, res) => {
     summary.profitLoss.netProfit = summary.profitLoss.revenue - summary.profitLoss.expenses;
 
     // Calculate financial ratios
-    summary.ratios.currentRatio = summary.liabilities.currentLiabilities !== 0 
-      ? summary.assets.currentAssets / summary.liabilities.currentLiabilities 
+    summary.ratios.currentRatio = summary.liabilities.currentLiabilities !== 0
+      ? summary.assets.currentAssets / summary.liabilities.currentLiabilities
       : 0;
-    
-    summary.ratios.debtToEquity = summary.equity.total !== 0 
-      ? summary.liabilities.total / summary.equity.total 
+
+    summary.ratios.debtToEquity = summary.equity.total !== 0
+      ? summary.liabilities.total / summary.equity.total
       : 0;
-    
+
     const quickAssets = summary.assets.currentAssets; // Simplified - should exclude inventory
-    summary.ratios.quickRatio = summary.liabilities.currentLiabilities !== 0 
-      ? quickAssets / summary.liabilities.currentLiabilities 
+    summary.ratios.quickRatio = summary.liabilities.currentLiabilities !== 0
+      ? quickAssets / summary.liabilities.currentLiabilities
       : 0;
 
     res.json(summary);
@@ -551,22 +551,22 @@ router.get('/summary', protect, async (req, res) => {
 router.get('/transactions', protect, async (req, res) => {
   try {
     const { startDate, endDate, status } = req.query;
-    
+
     // Build query conditions
     let conditions = [];
     let params = [];
-    
+
     if (startDate && endDate) {
       conditions.push('t.date BETWEEN ? AND ?');
       params.push(startDate, endDate);
     }
-    
+
     if (status) {
       conditions.push('t.status = ?');
       params.push(status);
     }
 
-    const whereClause = conditions.length > 0 
+    const whereClause = conditions.length > 0
       ? 'WHERE ' + conditions.join(' AND ')
       : '';
 
@@ -601,7 +601,7 @@ router.get('/transactions', protect, async (req, res) => {
         entries
       };
     }));
-      
+
     res.json(transactions);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -641,16 +641,16 @@ router.get('/cashbook', protect, async (req, res) => {
 router.get('/reports/financial-statements', protect, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    
+
     // Get profit & loss data
     const profitLoss = await Account.getIncomeStatement(startDate, endDate);
-    
+
     // Get balance sheet data
     const balanceSheet = await Account.getBalanceSheet();
-    
+
     // Get trial balance
     const trialBalance = await Account.getTrialBalance();
-    
+
     res.json({
       profitLoss,
       balanceSheet,
@@ -666,10 +666,10 @@ router.post('/reports/:type/export', async (req, res) => {
   try {
     const { type } = req.params;
     const { data, format, dateRange } = req.body;
-    
+
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet(type);
-    
+
     switch (type) {
       case 'trial-balance':
         // Set up trial balance columns
@@ -679,7 +679,7 @@ router.post('/reports/:type/export', async (req, res) => {
           { header: 'Debit', key: 'debit', width: 15 },
           { header: 'Credit', key: 'credit', width: 15 }
         ];
-        
+
         // Add data rows
         data.accounts?.forEach(account => {
           worksheet.addRow({
@@ -689,7 +689,7 @@ router.post('/reports/:type/export', async (req, res) => {
             credit: account.credit || 0
           });
         });
-        
+
         // Add total row
         worksheet.addRow({
           name: 'Total',
@@ -706,16 +706,16 @@ router.post('/reports/:type/export', async (req, res) => {
           worksheet.addRow([item.name, item.total || 0]);
         });
         worksheet.addRow(['Total Revenue', data.totalRevenue || 0]);
-        
+
         worksheet.addRow([]);  // Empty row for spacing
-        
+
         worksheet.addRow(['Expenses']);
         worksheet.addRow(['Category', 'Amount']);
         data.expenses?.forEach(item => {
           worksheet.addRow([item.name, item.total || 0]);
         });
         worksheet.addRow(['Total Expenses', data.totalExpenses || 0]);
-        
+
         worksheet.addRow([]);
         worksheet.addRow(['Net Profit', data.netProfit || 0]);
         break;
@@ -728,7 +728,7 @@ router.post('/reports/:type/export', async (req, res) => {
           worksheet.addRow([item.name, item.total || 0]);
         });
         worksheet.addRow(['Total Current Assets', data.assets?.totalCurrent || 0]);
-        
+
         worksheet.addRow([]);
         worksheet.addRow(['Fixed Assets']);
         // ... similar pattern for other sections
@@ -763,4 +763,4 @@ router.post('/reports/:type/export', async (req, res) => {
   }
 });
 
-module.exports = router; 
+module.exports = router;

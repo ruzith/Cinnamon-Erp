@@ -29,7 +29,7 @@ const generateReport = async (code, params, token) => {
       },
       responseType: params.format === 'json' ? 'json' : 'blob'
     };
-    
+
     const response = await axios.post(
       API_URL + `generate/${code}`,
       params,
@@ -44,7 +44,11 @@ const generateReport = async (code, params, token) => {
     const url = window.URL.createObjectURL(new Blob([response.data]));
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `report_${code}_${new Date().getTime()}.${params.format}`);
+
+    // Use correct file extension based on format
+    const extension = params.format === 'excel' ? 'xlsx' : params.format;
+    link.setAttribute('download', `report_${code}_${Date.now()}.${extension}`);
+
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -54,9 +58,31 @@ const generateReport = async (code, params, token) => {
   }
 };
 
+// Get report preview
+const getReportPreview = async (code, params, token) => {
+  try {
+    const config = {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    };
+
+    const response = await axios.post(
+      API_URL + `preview/${code}`,
+      { ...params, format: 'json' },
+      config
+    );
+
+    return response.data;
+  } catch (error) {
+    throw error.response?.data?.message || 'Failed to get report preview';
+  }
+};
+
 const reportService = {
   getTemplates,
-  generateReport
+  generateReport,
+  getReportPreview
 }
 
-export default reportService 
+export default reportService

@@ -5,17 +5,19 @@ const contractorSchema = Joi.object({
   contractor_id: Joi.string().required().trim(),
   phone: Joi.string().required().trim(),
   address: Joi.string().required().trim(),
+  cutting_rate: Joi.number().positive().required().default(250),
   status: Joi.string().valid('active', 'inactive').default('active')
 });
 
 const assignmentSchema = Joi.object({
   contractor_id: Joi.number().integer().required(),
   quantity: Joi.number().positive().required(),
-  unit_price: Joi.number().positive().required(),
+  duration: Joi.number().integer().positive().required(),
+  duration_type: Joi.string().valid('day', 'week', 'month').required(),
   start_date: Joi.date().required(),
-  end_date: Joi.date().allow(null),
-  status: Joi.string().valid('active', 'completed', 'cancelled').default('active'),
-  notes: Joi.string().allow(null, '')
+  raw_material_id: Joi.number().integer().required(),
+  raw_material_quantity: Joi.number().positive().required(),
+  notes: Joi.string().allow('', null)
 });
 
 const orderSchema = Joi.object({
@@ -40,4 +42,4 @@ const advancePaymentSchema = Joi.object({
 exports.validateContractor = (data) => contractorSchema.validate(data);
 exports.validateAssignment = (data) => assignmentSchema.validate(data);
 exports.validateOrder = (data) => orderSchema.validate(data);
-exports.validateAdvancePayment = (data) => advancePaymentSchema.validate(data); 
+exports.validateAdvancePayment = (data) => advancePaymentSchema.validate(data);

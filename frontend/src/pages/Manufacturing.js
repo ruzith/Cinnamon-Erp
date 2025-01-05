@@ -25,6 +25,8 @@ import {
   MenuItem,
   Tabs,
   Tab,
+  Alert,
+  InputAdornment,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -38,6 +40,12 @@ import {
   ShoppingCart as ShoppingCartIcon,
   Speed as SpeedIcon,
   Grade as GradeIcon,
+  Print as PrintIcon,
+  Clear as ClearIcon,
+  Assessment as AssessmentIcon,
+  Timeline as TimelineIcon,
+  CheckCircle as CheckCircleIcon,
+  Cancel as CancelIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 import PurchaseInvoiceForm from '../components/PurchaseInvoiceForm';
@@ -57,6 +65,7 @@ const Manufacturing = () => {
     contractor_id: '',
     phone: '',
     address: '',
+    cutting_rate: 250,
     status: 'active'
   });
   const [openOrderDialog, setOpenOrderDialog] = useState(false);
@@ -77,6 +86,8 @@ const Manufacturing = () => {
     duration: 1,
     duration_type: 'day',
     start_date: new Date().toISOString().split('T')[0],
+    raw_material_id: '',
+    raw_material_quantity: '',
     notes: ''
   });
   const [advancePaymentData, setAdvancePaymentData] = useState({
@@ -96,6 +107,18 @@ const Manufacturing = () => {
   const [openReassignDialog, setOpenReassignDialog] = useState(false);
   const [contractorToDelete, setContractorToDelete] = useState(null);
   const [newContractorId, setNewContractorId] = useState('');
+  const [rawMaterials, setRawMaterials] = useState([]);
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [openInvoiceDialog, setOpenInvoiceDialog] = useState(false);
+  const [assignmentFilters, setAssignmentFilters] = useState({
+    contractor_name: '',
+    start_date: '',
+    end_date: ''
+  });
+  const [reportData, setReportData] = useState([]);
+  const [reportError, setReportError] = useState(null);
+  const [reportDialog, setReportDialog] = useState(false);
+  const [selectedReport, setSelectedReport] = useState(null);
 
   useEffect(() => {
     fetchManufacturingOrders();
@@ -103,11 +126,12 @@ const Manufacturing = () => {
     fetchProducts();
     fetchContractors();
     fetchAssignments();
+    fetchRawMaterials();
   }, []);
 
   const fetchManufacturingOrders = async () => {
     try {
-      const response = await axios.get('/api/manufacturing-orders');
+      const response = await axios.get('/api/manufacturing/orders');
       setManufacturingOrders(response.data);
     } catch (error) {
       console.error('Error fetching manufacturing orders:', error);
@@ -150,6 +174,7 @@ const Manufacturing = () => {
         contractor_id: contractor.contractor_id,
         phone: contractor.phone,
         address: contractor.address,
+        cutting_rate: contractor.cutting_rate,
         status: contractor.status || 'active'
       });
     } else {
@@ -159,6 +184,7 @@ const Manufacturing = () => {
         contractor_id: '',
         phone: '',
         address: '',
+        cutting_rate: 250,
         status: 'active'
       });
     }
@@ -216,9 +242,9 @@ const Manufacturing = () => {
       }
 
       if (selectedOrder) {
-        await axios.put(`/api/manufacturing-orders/${selectedOrder.id}`, orderData);
+        await axios.put(`/api/manufacturing/orders/${selectedOrder.id}`, orderData);
       } else {
-        await axios.post('/api/manufacturing-orders', orderData);
+        await axios.post('/api/manufacturing/orders', orderData);
       }
       fetchManufacturingOrders();
       handleCloseOrderDialog();
@@ -228,7 +254,7 @@ const Manufacturing = () => {
     }
   };
 
-  const handleDelete = async (contractorId) => {
+  const handleDeleteContractor = async (contractorId) => {
     if (window.confirm('Are you sure you want to delete this contractor? This action cannot be undone.')) {
       try {
         await axios.delete(`/api/manufacturing/contractors/${contractorId}`);
@@ -247,6 +273,18 @@ const Manufacturing = () => {
           console.error('Error deleting contractor:', error);
           alert(error.response?.data?.message || 'Error deleting contractor');
         }
+      }
+    }
+  };
+
+  const handleDeleteOrder = async (orderId) => {
+    if (window.confirm('Are you sure you want to delete this order? This action cannot be undone.')) {
+      try {
+        await axios.delete(`/api/manufacturing/orders/${orderId}`);
+        fetchManufacturingOrders();
+      } catch (error) {
+        console.error('Error deleting order:', error);
+        alert(error.response?.data?.message || 'Error deleting order');
       }
     }
   };
@@ -325,6 +363,8 @@ const Manufacturing = () => {
         duration: assignment.duration,
         duration_type: assignment.duration_type,
         start_date: assignment.start_date ? formatDate(assignment.start_date, 'YYYY-MM-DD') : formatDate(getCurrentDateTime(), 'YYYY-MM-DD'),
+        raw_material_id: assignment.raw_material_id,
+        raw_material_quantity: assignment.raw_material_quantity,
         notes: assignment.notes || ''
       });
     } else {
@@ -335,6 +375,8 @@ const Manufacturing = () => {
         duration: 1,
         duration_type: 'day',
         start_date: formatDate(getCurrentDateTime(), 'YYYY-MM-DD'),
+        raw_material_id: '',
+        raw_material_quantity: '',
         notes: ''
       });
     }
@@ -356,7 +398,8 @@ const Manufacturing = () => {
       // Refresh both assignments and contractors data
       await Promise.all([
         fetchAssignments(),
-        fetchContractors()
+        fetchContractors(),
+        fetchRawMaterials() // Refresh raw materials after assignment
       ]);
 
       setOpenAssignmentDialog(false);
@@ -368,6 +411,8 @@ const Manufacturing = () => {
         duration: 1,
         duration_type: 'day',
         start_date: new Date().toISOString().split('T')[0],
+        raw_material_id: '',
+        raw_material_quantity: '',
         notes: ''
       });
     } catch (error) {
@@ -407,7 +452,18 @@ const Manufacturing = () => {
 
   const fetchAssignments = async () => {
     try {
-      const response = await axios.get('/api/manufacturing/assignments');
+      const params = new URLSearchParams();
+      if (assignmentFilters.contractor_name) {
+        params.append('contractor_name', assignmentFilters.contractor_name);
+      }
+      if (assignmentFilters.start_date) {
+        params.append('start_date', assignmentFilters.start_date);
+      }
+      if (assignmentFilters.end_date) {
+        params.append('end_date', assignmentFilters.end_date);
+      }
+
+      const response = await axios.get(`/api/manufacturing/assignments?${params.toString()}`);
       setAssignments(response.data);
     } catch (error) {
       console.error('Error fetching assignments:', error);
@@ -440,31 +496,17 @@ const Manufacturing = () => {
     <>
       <IconButton
         size="small"
-        onClick={() => handleOpenDialog(contractor)}
-        sx={{ color: 'primary.main' }}
-      >
-        <EditIcon />
-      </IconButton>
-      <IconButton
-        size="small"
         onClick={() => handleOpenAssignmentDialog(null, contractor)}
-        sx={{ color: 'success.main', ml: 1 }}
+        sx={{ color: 'info.main' }}
       >
         <AddIcon />
       </IconButton>
       <IconButton
         size="small"
         onClick={() => handleOpenPaymentDialog(contractor)}
-        sx={{ color: 'info.main', ml: 1 }}
+        sx={{ color: 'warning.main', ml: 1 }}
       >
         <PaymentIcon />
-      </IconButton>
-      <IconButton
-        size="small"
-        onClick={() => handleDelete(contractor.id)}
-        sx={{ color: 'error.main', ml: 1 }}
-      >
-        <DeleteIcon />
       </IconButton>
       <IconButton
         size="small"
@@ -475,6 +517,20 @@ const Manufacturing = () => {
         sx={{ color: 'success.main', ml: 1 }}
       >
         <ShoppingCartIcon />
+      </IconButton>
+      <IconButton
+        size="small"
+        onClick={() => handleOpenDialog(contractor)}
+        sx={{ color: 'primary.main', ml: 1 }}
+      >
+        <EditIcon />
+      </IconButton>
+      <IconButton
+        size="small"
+        onClick={() => handleDeleteContractor(contractor.id)}
+        sx={{ color: 'error.main', ml: 1 }}
+      >
+        <DeleteIcon />
       </IconButton>
     </>
   );
@@ -497,6 +553,253 @@ const Manufacturing = () => {
     }
   };
 
+  const fetchRawMaterials = async () => {
+    try {
+      const response = await axios.get('/api/inventory/raw-materials');
+      setRawMaterials(response.data);
+    } catch (error) {
+      console.error('Error fetching raw materials:', error);
+    }
+  };
+
+  const handlePrintInvoice = async (invoice) => {
+    try {
+      const response = await axios.get(`/api/manufacturing/invoices/${invoice.id}/print`);
+
+      // Create a new window and write the invoice HTML
+      const invoiceWindow = window.open('', '_blank');
+      invoiceWindow.document.write(response.data.invoiceHtml);
+      invoiceWindow.document.close();
+
+      // Print automatically
+      invoiceWindow.onload = function() {
+        invoiceWindow.print();
+      };
+    } catch (error) {
+      console.error('Error printing invoice:', error);
+      alert(error.response?.data?.message || 'Error printing invoice');
+    }
+  };
+
+  const handleMarkAsPaid = async (order) => {
+    try {
+      await axios.put(`/api/manufacturing/orders/${order.id}/mark-paid`);
+      fetchManufacturingOrders(); // Refresh the orders list
+      alert('Order marked as paid successfully');
+    } catch (error) {
+      console.error('Error marking order as paid:', error);
+      alert(error.response?.data?.message || 'Error marking order as paid');
+    }
+  };
+
+  const handlePrintManufacturingReceipt = async (order) => {
+    try {
+      const response = await axios.get(`/api/manufacturing/orders/${order.id}/receipt`);
+
+      // Create a new window and write the receipt HTML
+      const receiptWindow = window.open('', '_blank');
+      receiptWindow.document.write(response.data.receiptHtml);
+      receiptWindow.document.close();
+
+      // Print automatically
+      receiptWindow.onload = function() {
+        receiptWindow.print();
+      };
+    } catch (error) {
+      console.error('Error printing manufacturing receipt:', error);
+      alert(error.response?.data?.message || 'Error printing receipt');
+    }
+  };
+
+  const generateReport = async () => {
+    try {
+      setReportError(null);
+      const params = new URLSearchParams();
+      if (assignmentFilters.contractor_name) {
+        params.append('contractor_name', assignmentFilters.contractor_name);
+      }
+      if (assignmentFilters.start_date) {
+        params.append('start_date', assignmentFilters.start_date);
+      }
+      if (assignmentFilters.end_date) {
+        params.append('end_date', assignmentFilters.end_date);
+      }
+
+      const response = await axios.get(`/api/manufacturing/reports/assignments?${params.toString()}`);
+      setReportData(response.data);
+    } catch (error) {
+      console.error('Error generating report:', error);
+      setReportError(error.response?.data?.message || 'Error generating report');
+    }
+  };
+
+  useEffect(() => {
+    if (currentTab === 3) {
+      generateReport();
+    }
+  }, [assignmentFilters, currentTab]);
+
+  const handleOpenReport = (assignment) => {
+    setSelectedReport(assignment);
+    setReportDialog(true);
+  };
+
+  const handleCloseReport = () => {
+    setReportDialog(false);
+    setSelectedReport(null);
+  };
+
+  const handlePrintReport = async (assignment) => {
+    try {
+      const response = await axios.get(`/api/manufacturing/assignments/${assignment.id}/report`);
+
+      // Create a new window and write the report HTML
+      const reportWindow = window.open('', '_blank');
+      reportWindow.document.write(response.data.reportHtml);
+      reportWindow.document.close();
+
+      // Print automatically
+      reportWindow.onload = function() {
+        reportWindow.print();
+      };
+    } catch (error) {
+      console.error('Error printing assignment report:', error);
+      alert(error.response?.data?.message || 'Error printing report');
+    }
+  };
+
+  const ReportDialog = () => (
+    <Dialog
+      open={reportDialog}
+      onClose={handleCloseReport}
+      maxWidth="md"
+      fullWidth
+    >
+      <DialogTitle>
+        Assignment Report - {selectedReport?.contractor_name}
+      </DialogTitle>
+      <DialogContent>
+        {selectedReport && (
+          <Box>
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+              <Grid item xs={12} sm={6} md={4}>
+                <SummaryCard
+                  title="Raw Material"
+                  value={`${selectedReport.raw_material_quantity} kg`}
+                  icon={ProductIcon}
+                  iconColor="primary.main"
+                  gradientColor="primary"
+                  subtitle={selectedReport.raw_material_name}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={4}>
+                <SummaryCard
+                  title="Finished Product"
+                  value={`${selectedReport.quantity} kg`}
+                  icon={ProductIcon}
+                  iconColor="success.main"
+                  gradientColor="success"
+                  subtitle="Expected Output"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={4}>
+                <SummaryCard
+                  title="Efficiency"
+                  value={selectedReport.efficiency === 'N/A' ? 'N/A' :
+                         selectedReport.efficiency.endsWith('*') ?
+                         `${selectedReport.efficiency.slice(0, -1)}%` :
+                         `${selectedReport.efficiency}%`}
+                  icon={SpeedIcon}
+                  iconColor="warning.main"
+                  gradientColor="warning"
+                  subtitle={selectedReport.status === 'active' ? 'Target Efficiency' :
+                           selectedReport.status === 'completed' ? 'Actual Efficiency' : 'Not Applicable'}
+                />
+              </Grid>
+            </Grid>
+
+            <Typography variant="h6" sx={{ mb: 2 }}>Assignment Details</Typography>
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+              <Grid item xs={12} md={6}>
+                <Paper sx={{ p: 2 }}>
+                  <Typography variant="subtitle2" color="text.secondary">Contract Information</Typography>
+                  <Box sx={{ mt: 1 }}>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      <strong>Contractor ID:</strong> {selectedReport.contractor_id}
+                    </Typography>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      <strong>Phone:</strong> {selectedReport.contractor_phone}
+                    </Typography>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      <strong>Start Date:</strong> {new Date(selectedReport.start_date).toLocaleDateString()}
+                    </Typography>
+                    <Typography variant="body2">
+                      <strong>End Date:</strong> {new Date(selectedReport.end_date).toLocaleDateString()}
+                    </Typography>
+                  </Box>
+                </Paper>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Paper sx={{ p: 2 }}>
+                  <Typography variant="subtitle2" color="text.secondary">Production Details</Typography>
+                  <Box sx={{ mt: 1 }}>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      <strong>Raw Material:</strong> {selectedReport.raw_material_name}
+                    </Typography>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      <strong>Duration:</strong> {selectedReport.duration} {selectedReport.duration_type}(s)
+                    </Typography>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      <strong>Status:</strong>
+                      <Chip
+                        size="small"
+                        label={selectedReport.status.charAt(0).toUpperCase() + selectedReport.status.slice(1)}
+                        color={
+                          selectedReport.status === 'completed' ? 'success' :
+                          selectedReport.status === 'active' ? 'primary' :
+                          'default'
+                        }
+                        sx={{ ml: 1 }}
+                      />
+                    </Typography>
+                    <Typography variant="body2">
+                      <strong>Notes:</strong> {selectedReport.notes || 'N/A'}
+                    </Typography>
+                  </Box>
+                </Paper>
+              </Grid>
+            </Grid>
+
+            {selectedReport.status === 'completed' && (
+              <Typography variant="body1" color="success.main" sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                <CheckCircleIcon /> Assignment completed successfully
+              </Typography>
+            )}
+
+            {selectedReport.status === 'cancelled' && (
+              <Typography variant="body1" color="error.main" sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                <CancelIcon /> Assignment was cancelled
+              </Typography>
+            )}
+
+            {selectedReport.status === 'active' && (
+              <Typography variant="body1" color="primary.main" sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                <TimelineIcon /> Assignment is in progress
+              </Typography>
+            )}
+          </Box>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={handleCloseReport}>Close</Button>
+      </DialogActions>
+    </Dialog>
+  );
+
+  useEffect(() => {
+    fetchAssignments();
+  }, [assignmentFilters]);
+
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
       {/* Header */}
@@ -510,7 +813,7 @@ const Manufacturing = () => {
             startIcon={<AddIcon />}
             onClick={() => handleOpenDialog()}
           >
-            Add Contractor
+            New Contractor
           </Button>
           <Button
             variant="contained"
@@ -527,7 +830,7 @@ const Manufacturing = () => {
         <Grid item xs={12} sm={6} md={3}>
           <SummaryCard
             icon={FactoryIcon}
-            title="Manufacturing Orders"
+            title="Total Orders"
             value={manufacturingOrders.length}
             subtitle={`${manufacturingOrders.filter(o => o.status === 'in_progress').length} In Progress`}
             iconColor="#9C27B0"
@@ -588,9 +891,10 @@ const Manufacturing = () => {
           onChange={handleTabChange}
           sx={{ borderBottom: 1, borderColor: 'divider', px: 2, pt: 2 }}
         >
-          <Tab label="Manufacturing Orders" />
+          <Tab label="Orders" />
           <Tab label="Contractors" />
           <Tab label="Cinnamon Assignments" />
+          <Tab label="Reports" />
         </Tabs>
 
         {/* Manufacturing Orders Tab */}
@@ -604,6 +908,7 @@ const Manufacturing = () => {
                   <TableCell>Quantity</TableCell>
                   <TableCell>Start Date</TableCell>
                   <TableCell>Status</TableCell>
+                  <TableCell>Payment Status</TableCell>
                   <TableCell align="right">Actions</TableCell>
                 </TableRow>
               </TableHead>
@@ -621,17 +926,40 @@ const Manufacturing = () => {
                         size="small"
                       />
                     </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={order.payment_status || 'pending'}
+                        color={order.payment_status === 'paid' ? 'success' : 'warning'}
+                        size="small"
+                      />
+                    </TableCell>
                     <TableCell align="right">
+                      {order.status === 'completed' && order.payment_status !== 'paid' && (
+                        <IconButton
+                          size="small"
+                          onClick={() => handleMarkAsPaid(order)}
+                          sx={{ color: 'success.main', ml: 1 }}
+                        >
+                          <PaymentIcon />
+                        </IconButton>
+                      )}
+                      <IconButton
+                        size="small"
+                        onClick={() => handlePrintManufacturingReceipt(order)}
+                        sx={{ color: 'info.main', ml: 1 }}
+                      >
+                        <PrintIcon />
+                      </IconButton>
                       <IconButton
                         size="small"
                         onClick={() => handleOpenOrderDialog(order)}
-                        sx={{ color: 'primary.main' }}
+                        sx={{ color: 'primary.main', ml: 1 }}
                       >
                         <EditIcon />
                       </IconButton>
                       <IconButton
                         size="small"
-                        onClick={() => handleDelete(order.id)}
+                        onClick={() => handleDeleteOrder(order.id)}
                         sx={{ color: 'error.main', ml: 1 }}
                       >
                         <DeleteIcon />
@@ -684,48 +1012,353 @@ const Manufacturing = () => {
 
         {/* Assignments Tab */}
         {currentTab === 2 && (
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Contractor</TableCell>
-                  <TableCell>Quantity (kg)</TableCell>
-                  <TableCell>Duration</TableCell>
-                  <TableCell>Start Date</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {assignments.map((assignment) => (
-                  <TableRow key={assignment.id} hover>
-                    <TableCell>
-                      {contractors.find(c => c.id === assignment.contractor_id)?.name || 'Unknown'}
-                    </TableCell>
-                    <TableCell>{assignment.quantity}</TableCell>
-                    <TableCell>{`${assignment.duration} ${assignment.duration_type}(s)`}</TableCell>
-                    <TableCell>{new Date(assignment.start_date).toLocaleDateString()}</TableCell>
-                    <TableCell>
-                      <Chip
-                        label={assignment.status}
-                        color={getStatusColor(assignment.status)}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell align="right">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleOpenAssignmentDialog(assignment)}
-                        sx={{ color: 'primary.main' }}
-                      >
-                        <EditIcon />
-                      </IconButton>
-                    </TableCell>
+          <>
+            <Paper sx={{ p: 2, mb: 3 }}>
+              <Grid container spacing={2} alignItems="center">
+                <Grid item xs={12} sm={4}>
+                  <FormControl fullWidth>
+                    <InputLabel>Contractor</InputLabel>
+                    <Select
+                      value={assignmentFilters.contractor_name}
+                      label="Contractor"
+                      onChange={(e) => setAssignmentFilters(prev => ({
+                        ...prev,
+                        contractor_name: e.target.value
+                      }))}
+                      endAdornment={
+                        assignmentFilters.contractor_name && (
+                          <IconButton
+                            size="small"
+                            sx={{ mr: 2 }}
+                            onClick={() => setAssignmentFilters(prev => ({
+                              ...prev,
+                              contractor_name: ''
+                            }))}
+                          >
+                            <ClearIcon fontSize="small" />
+                          </IconButton>
+                        )
+                      }
+                    >
+                      <MenuItem value="">
+                        <em>All Contractors</em>
+                      </MenuItem>
+                      {contractors.map((contractor) => (
+                        <MenuItem key={contractor.id} value={contractor.name}>
+                          {contractor.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    label="Start Date"
+                    type="date"
+                    value={assignmentFilters.start_date}
+                    onChange={(e) => setAssignmentFilters(prev => ({
+                      ...prev,
+                      start_date: e.target.value
+                    }))}
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                    InputProps={{
+                      endAdornment: assignmentFilters.start_date && (
+                        <IconButton
+                          size="small"
+                          onClick={() => setAssignmentFilters(prev => ({
+                            ...prev,
+                            start_date: ''
+                          }))}
+                        >
+                          <ClearIcon fontSize="small" />
+                        </IconButton>
+                      )
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    label="End Date"
+                    type="date"
+                    value={assignmentFilters.end_date}
+                    onChange={(e) => setAssignmentFilters(prev => ({
+                      ...prev,
+                      end_date: e.target.value
+                    }))}
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                    InputProps={{
+                      endAdornment: assignmentFilters.end_date && (
+                        <IconButton
+                          size="small"
+                          onClick={() => setAssignmentFilters(prev => ({
+                            ...prev,
+                            end_date: ''
+                          }))}
+                        >
+                          <ClearIcon fontSize="small" />
+                        </IconButton>
+                      ),
+                      inputProps: {
+                        min: assignmentFilters.start_date || undefined
+                      }
+                    }}
+                  />
+                </Grid>
+              </Grid>
+            </Paper>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Contractor</TableCell>
+                    <TableCell>Raw Material</TableCell>
+                    <TableCell>Raw Material Qty</TableCell>
+                    <TableCell>Expected Output (kg)</TableCell>
+                    <TableCell>Duration</TableCell>
+                    <TableCell>Start Date</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell align="right">Actions</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                </TableHead>
+                <TableBody>
+                  {assignments.map((assignment) => (
+                    <TableRow key={assignment.id} hover>
+                      <TableCell>
+                        {contractors.find(c => c.id === assignment.contractor_id)?.name || 'Unknown'}
+                      </TableCell>
+                      <TableCell>
+                        {rawMaterials.find(r => r.id === assignment.raw_material_id)?.product_name || 'N/A'}
+                      </TableCell>
+                      <TableCell>{assignment.raw_material_quantity || 'N/A'}</TableCell>
+                      <TableCell>{assignment.quantity}</TableCell>
+                      <TableCell>{`${assignment.duration} ${assignment.duration_type}(s)`}</TableCell>
+                      <TableCell>{new Date(assignment.start_date).toLocaleDateString()}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={assignment.status}
+                          color={getStatusColor(assignment.status)}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell align="right">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleOpenAssignmentDialog(assignment)}
+                          sx={{ color: 'primary.main', ml: 1 }}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleDeleteOrder(assignment.id)}
+                          sx={{ color: 'error.main', ml: 1 }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </>
+        )}
+
+        {/* Reports Tab */}
+        {currentTab === 3 && (
+          <Box>
+            <Paper sx={{ p: 2, mb: 3 }}>
+              <Grid container spacing={2} alignItems="center">
+                <Grid item xs={12} sm={4}>
+                  <FormControl fullWidth>
+                    <InputLabel>Contractor</InputLabel>
+                    <Select
+                      value={assignmentFilters.contractor_name}
+                      label="Contractor"
+                      onChange={(e) => setAssignmentFilters(prev => ({
+                        ...prev,
+                        contractor_name: e.target.value
+                      }))}
+                      endAdornment={
+                        assignmentFilters.contractor_name && (
+                          <IconButton
+                            size="small"
+                            sx={{ mr: 2 }}
+                            onClick={() => setAssignmentFilters(prev => ({
+                              ...prev,
+                              contractor_name: ''
+                            }))}
+                          >
+                            <ClearIcon fontSize="small" />
+                          </IconButton>
+                        )
+                      }
+                    >
+                      <MenuItem value="">
+                        <em>All Contractors</em>
+                      </MenuItem>
+                      {contractors.map((contractor) => (
+                        <MenuItem key={contractor.id} value={contractor.name}>
+                          {contractor.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    label="Start Date"
+                    type="date"
+                    value={assignmentFilters.start_date}
+                    onChange={(e) => setAssignmentFilters(prev => ({
+                      ...prev,
+                      start_date: e.target.value
+                    }))}
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                    InputProps={{
+                      endAdornment: assignmentFilters.start_date && (
+                        <IconButton
+                          size="small"
+                          onClick={() => setAssignmentFilters(prev => ({
+                            ...prev,
+                            start_date: ''
+                          }))}
+                        >
+                          <ClearIcon fontSize="small" />
+                        </IconButton>
+                      )
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    label="End Date"
+                    type="date"
+                    value={assignmentFilters.end_date}
+                    onChange={(e) => setAssignmentFilters(prev => ({
+                      ...prev,
+                      end_date: e.target.value
+                    }))}
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                    InputProps={{
+                      endAdornment: assignmentFilters.end_date && (
+                        <IconButton
+                          size="small"
+                          onClick={() => setAssignmentFilters(prev => ({
+                            ...prev,
+                            end_date: ''
+                          }))}
+                        >
+                          <ClearIcon fontSize="small" />
+                        </IconButton>
+                      ),
+                      inputProps: {
+                        min: assignmentFilters.start_date || undefined
+                      }
+                    }}
+                  />
+                </Grid>
+              </Grid>
+            </Paper>
+
+            {reportError && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {reportError}
+              </Alert>
+            )}
+
+            {/* Reports Grid */}
+            <Grid container spacing={3}>
+              {reportData.map((assignment) => (
+                <Grid item xs={12} md={6} lg={4} key={assignment.id}>
+                  <Paper
+                    sx={{
+                      p: 2,
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      cursor: 'pointer',
+                      '&:hover': {
+                        bgcolor: 'action.hover',
+                      },
+                    }}
+                    onClick={() => handleOpenReport(assignment)}
+                  >
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="h6" gutterBottom>
+                        {assignment.contractor_name}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                        {assignment.raw_material_name} • {assignment.status}
+                      </Typography>
+                    </Box>
+
+                    <Grid container spacing={2}>
+                      <Grid item xs={6}>
+                        <Typography variant="caption" color="text.secondary">
+                          Raw Material
+                        </Typography>
+                        <Box sx={{ mt: 0.5 }}>
+                          <Chip
+                            label={`${assignment.raw_material_quantity} ${assignment.raw_material_unit}`}
+                            color="primary"
+                            size="small"
+                          />
+                        </Box>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="caption" color="text.secondary">
+                          Finished Product
+                        </Typography>
+                        <Box sx={{ mt: 0.5 }}>
+                          <Chip
+                            label={`${assignment.quantity} kg`}
+                            color="success"
+                            size="small"
+                          />
+                        </Box>
+                      </Grid>
+                    </Grid>
+
+                    <Box sx={{ mt: 2 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        Efficiency
+                      </Typography>
+                      <Typography variant="body2">
+                        {assignment.efficiency}% • Duration: {assignment.duration} {assignment.duration_type}(s)
+                      </Typography>
+                    </Box>
+
+                    <Box sx={{ mt: 'auto', pt: 2 }}>
+                      <Button
+                        variant="outlined"
+                        fullWidth
+                        startIcon={<AssessmentIcon />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenReport(assignment);
+                        }}
+                      >
+                        View Report
+                      </Button>
+                    </Box>
+                  </Paper>
+                </Grid>
+              ))}
+            </Grid>
+          </Box>
         )}
       </Paper>
 
@@ -886,9 +1519,41 @@ const Manufacturing = () => {
               </FormControl>
             </Grid>
             <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel>Raw Material</InputLabel>
+                <Select
+                  value={assignmentFormData.raw_material_id}
+                  onChange={(e) => setAssignmentFormData(prev => ({
+                    ...prev,
+                    raw_material_id: e.target.value
+                  }))}
+                  required
+                >
+                  {rawMaterials.map(material => (
+                    <MenuItem key={material.id} value={material.id}>
+                      {material.product_name} (Stock: {material.quantity} {material.unit})
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
               <TextField
                 fullWidth
-                label="Quantity (kg)"
+                label="Raw Material Quantity"
+                type="number"
+                value={assignmentFormData.raw_material_quantity}
+                onChange={(e) => setAssignmentFormData(prev => ({
+                  ...prev,
+                  raw_material_quantity: e.target.value
+                }))}
+                required
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Expected Output Quantity (kg)"
                 type="number"
                 value={assignmentFormData.quantity}
                 onChange={(e) => setAssignmentFormData(prev => ({
@@ -941,11 +1606,28 @@ const Manufacturing = () => {
                 required
               />
             </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Notes"
+                multiline
+                rows={2}
+                value={assignmentFormData.notes}
+                onChange={(e) => setAssignmentFormData(prev => ({
+                  ...prev,
+                  notes: e.target.value
+                }))}
+              />
+            </Grid>
           </Grid>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpenAssignmentDialog(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleAssignmentSubmit}>
+          <Button
+            variant="contained"
+            onClick={handleAssignmentSubmit}
+            disabled={!assignmentFormData.contractor_id || !assignmentFormData.quantity || !assignmentFormData.raw_material_id || !assignmentFormData.raw_material_quantity}
+          >
             Assign
           </Button>
         </DialogActions>
@@ -1073,6 +1755,20 @@ const Manufacturing = () => {
                 rows={2}
               />
             </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Cutting Rate"
+                name="cutting_rate"
+                type="number"
+                value={formData.cutting_rate}
+                onChange={handleInputChange}
+                required
+                InputProps={{
+                  startAdornment: <InputAdornment position="start">Rs.</InputAdornment>
+                }}
+              />
+            </Grid>
           </Grid>
         </DialogContent>
         <DialogActions>
@@ -1123,6 +1819,8 @@ const Manufacturing = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <ReportDialog />
     </Box>
   );
 };

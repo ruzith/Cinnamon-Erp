@@ -4,6 +4,7 @@ const { protect } = require('../middleware/authMiddleware');
 const Report = require('../models/domain/Report');
 const Transaction = require('../models/domain/Transaction');
 const Account = require('../models/domain/Account');
+const Settings = require('../models/domain/Settings');
 const { authorize } = require('../middleware/authMiddleware');
 const reportTemplates = require('../data/reportTemplates');
 const { pool } = require('../config/db');
@@ -35,12 +36,12 @@ router.get('/departments', protect, async (req, res) => {
       SELECT DISTINCT d.department as department_name
       FROM employees e
       JOIN designations d ON e.designation_id = d.id
-      WHERE d.department IS NOT NULL 
+      WHERE d.department IS NOT NULL
       ORDER BY d.department
     `;
-    
+
     const departments = await executeQuery(query);
-    
+
     // Transform into the format expected by the frontend
     const formattedDepartments = departments.map(dept => ({
       value: dept.department_name,
@@ -49,7 +50,7 @@ router.get('/departments', protect, async (req, res) => {
         si: dept.department_name
       }
     }));
-    
+
     res.json(formattedDepartments);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -60,16 +61,16 @@ router.get('/departments', protect, async (req, res) => {
 router.get('/product-lines', protect, async (req, res) => {
   try {
     const query = `
-      SELECT 
+      SELECT
         p.id as value,
         p.name as product_name
       FROM products p
       WHERE p.status = 'active'
       ORDER BY p.name
     `;
-    
+
     const productLines = await executeQuery(query);
-    
+
     // Transform into the format expected by the frontend
     const formattedProductLines = productLines.map(prod => ({
       value: prod.value,
@@ -78,7 +79,7 @@ router.get('/product-lines', protect, async (req, res) => {
         si: prod.product_name
       }
     }));
-    
+
     res.json(formattedProductLines);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -89,16 +90,16 @@ router.get('/product-lines', protect, async (req, res) => {
 router.get('/material-categories', protect, async (req, res) => {
   try {
     const query = `
-      SELECT DISTINCT 
+      SELECT DISTINCT
         category as value,
         category as category_name
       FROM inventory
-      WHERE category IS NOT NULL 
+      WHERE category IS NOT NULL
       ORDER BY category
     `;
-    
+
     const categories = await executeQuery(query);
-    
+
     // Transform into the format expected by the frontend
     const formattedCategories = categories.map(cat => ({
       value: cat.value,
@@ -107,8 +108,38 @@ router.get('/material-categories', protect, async (req, res) => {
         si: cat.category_name
       }
     }));
-    
+
     res.json(formattedCategories);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Add route to get cutting contractors for report filters
+router.get('/cutting-contractors', protect, async (req, res) => {
+  try {
+    const query = `
+      SELECT
+        id as value,
+        name,
+        contractor_id,
+        status
+      FROM cutting_contractors
+      ORDER BY status = 'active' DESC, name
+    `;
+
+    const contractors = await executeQuery(query);
+
+    // Transform into the format expected by the frontend
+    const formattedContractors = contractors.map(contractor => ({
+      value: contractor.value,
+      label: {
+        en: `${contractor.name} (${contractor.contractor_id})${contractor.status !== 'active' ? ' - ' + contractor.status.toUpperCase() : ''}`,
+        si: `${contractor.name} (${contractor.contractor_id})${contractor.status !== 'active' ? ' - ' + contractor.status.toUpperCase() : ''}`
+      }
+    }));
+
+    res.json(formattedContractors);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -123,7 +154,7 @@ router.get('/templates', protect, authorize('admin', 'manager', 'accountant'), a
       // Add any additional fields needed by the frontend
       status: 'active'
     }));
-    
+
     res.json(templates);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -134,8 +165,20 @@ router.get('/templates', protect, authorize('admin', 'manager', 'accountant'), a
 router.post('/generate/:code', protect, async (req, res) => {
   try {
     const { code } = req.params;
-    const { filters, format, language } = req.body;
-    
+    const { filters, format = 'json', language = 'en' } = req.body;
+
+    // Get currency settings using direct query
+    const [settingsRows] = await pool.execute('SELECT * FROM settings LIMIT 1');
+    const settings = settingsRows[0];
+
+    if (!settings || !settings.default_currency) {
+      return res.status(500).json({ message: 'Currency settings not configured' });
+    }
+    const currency = {
+      code: settings.default_currency,
+      symbol: settings.currency_symbol || '$'  // Fallback to $ if not set
+    };
+
     // Find the report template
     const template = reportTemplates.find(t => t.code === code);
     if (!template) {
@@ -146,38 +189,43 @@ router.post('/generate/:code', protect, async (req, res) => {
     let results;
     switch (code) {
       case 'SALES_SUMMARY': {
+        // Make the date filter optional
         const dateFilter = filters.dateRange ? new Date(filters.dateRange) : null;
         const query = `
-          SELECT 
+          SELECT
             DATE(t.date) as date,
             SUM(te.credit - te.debit) as totalSales,
-            COUNT(DISTINCT t.id) as itemCount
+            COUNT(DISTINCT t.id) as itemCount,
+            COUNT(DISTINCT te.id) as transactionCount,
+            AVG(te.credit - te.debit) as averageSale,
+            MAX(te.credit - te.debit) as maxSale,
+            MIN(te.credit - te.debit) as minSale
           FROM transactions t
           JOIN transactions_entries te ON t.id = te.transaction_id
           JOIN accounts a ON te.account_id = a.id
-          WHERE t.status = ?
-            AND a.type = 'revenue'
-            ${dateFilter ? 'AND DATE(t.date) >= ?' : ''}
+          WHERE a.type = 'revenue'
+          ${dateFilter ? 'AND DATE(t.date) >= ?' : ''}
           GROUP BY DATE(t.date)
           ORDER BY date DESC
+          LIMIT 10
         `;
-        
+
         const params = [
-          filters.status || 'completed',
           ...(dateFilter ? [dateFilter.toISOString().split('T')[0]] : [])
         ];
 
-        console.log('Query:', query);
-        console.log('Parameters:', params);
-        console.log('Date filter:', dateFilter);
-
+        console.log('Executing SALES_SUMMARY query:', query, 'with params:', params);
         const rows = await executeQuery(query, params);
-        console.log('Query results:', rows);
+        console.log('SALES_SUMMARY results:', rows);
 
         results = rows.map(row => ({
           date: row.date,
           totalSales: Number(row.totalSales || 0),
-          itemCount: Number(row.itemCount || 0)
+          itemCount: Number(row.itemCount || 0),
+          transactionCount: Number(row.transactionCount || 0),
+          averageSale: Number(row.averageSale || 0),
+          maxSale: Number(row.maxSale || 0),
+          minSale: Number(row.minSale || 0)
         }));
         break;
       }
@@ -185,9 +233,9 @@ router.post('/generate/:code', protect, async (req, res) => {
       case 'EMPLOYEE_SUMMARY': {
         const departmentFilter = filters.department ? `AND d.department = ?` : '';
         const employmentTypeFilter = filters.employmentType ? `AND e.employment_type = ?` : '';
-        
+
         const query = `
-          SELECT 
+          SELECT
             e.name,
             d.title as designation,
             d.department,
@@ -207,7 +255,7 @@ router.post('/generate/:code', protect, async (req, res) => {
         ];
 
         const rows = await executeQuery(query, params);
-        
+
         results = rows.map(row => ({
           name: row.name,
           designation: row.designation,
@@ -218,31 +266,84 @@ router.post('/generate/:code', protect, async (req, res) => {
         break;
       }
 
+      case 'TASK_SUMMARY': {
+        const { dateRangeStart, dateRangeEnd } = filters;
+        const statusFilter = filters.status ? `AND t.status = ?` : '';
+        const priorityFilter = filters.priority ? `AND t.priority = ?` : '';
+
+        const query = `
+          SELECT
+            t.id as taskId,
+            t.title,
+            u.name as assignee,
+            t.due_date as dueDate,
+            t.status,
+            t.priority,
+            t.estimated_hours as estimatedHours,
+            t.description
+          FROM tasks t
+          LEFT JOIN users u ON t.assigned_to = u.id
+          WHERE t.due_date BETWEEN ? AND ?
+            ${statusFilter}
+            ${priorityFilter}
+          ORDER BY t.due_date ASC
+        `;
+
+        const params = [
+          dateRangeStart,
+          dateRangeEnd,
+          ...(filters.status ? [filters.status] : []),
+          ...(filters.priority ? [filters.priority] : [])
+        ];
+
+        const rows = await executeQuery(query, params);
+
+        results = rows.map(row => ({
+          taskId: row.taskId,
+          title: row.title,
+          assignee: row.assignee,
+          dueDate: row.dueDate,
+          status: row.status,
+          priority: row.priority,
+          estimatedHours: Number(row.estimatedHours || 0),
+          description: row.description
+        }));
+        break;
+      }
+
       case 'CUTTING_PERFORMANCE': {
-        const dateFilter = filters.dateRange ? new Date(filters.dateRange) : null;
-        const contractorFilter = filters.contractor ? `AND c.id = ?` : '';
-        
-        const [rows] = await pool.execute(`
-          SELECT 
-            c.name as contractorName,
-            SUM(co.area_covered) as areaCovered,
-            AVG(co.efficiency_score) as efficiency
-          FROM cutting_operations co
-          JOIN contractors c ON co.contractor_id = c.id
-          WHERE co.status = 'completed'
-            ${dateFilter ? 'AND DATE(co.date) = ?' : ''}
+        const startDate = filters.dateRangeStart ? new Date(filters.dateRangeStart) : null;
+        const endDate = filters.dateRangeEnd ? new Date(filters.dateRangeEnd) : null;
+        const contractorFilter = filters.contractor ? 'AND cc.id = ?' : '';
+
+        const query = `
+          SELECT
+            cc.name as contractorName,
+            SUM(ct.area_covered) as areaCovered,
+            AVG(ct.progress) as efficiency
+          FROM cutting_tasks ct
+          JOIN land_assignments la ON ct.assignment_id = la.id
+          JOIN cutting_contractors cc ON la.contractor_id = cc.id
+          WHERE la.status = 'completed'
+            ${startDate ? 'AND ct.date >= ?' : ''}
+            ${endDate ? 'AND ct.date <= ?' : ''}
             ${contractorFilter}
-          GROUP BY c.id, c.name
+          GROUP BY cc.id, cc.name
           ORDER BY efficiency DESC
-        `, [
-          ...(dateFilter ? [dateFilter.toISOString().split('T')[0]] : []),
+        `;
+
+        const params = [
+          ...(startDate ? [startDate.toISOString().split('T')[0]] : []),
+          ...(endDate ? [endDate.toISOString().split('T')[0]] : []),
           ...(filters.contractor ? [filters.contractor] : [])
-        ]);
-        
+        ];
+
+        const [rows] = await pool.execute(query, params);
+
         results = rows.map(row => ({
           contractorName: row.contractorName,
-          areaCovered: Number(row.areaCovered),
-          efficiency: Number(row.efficiency)
+          areaCovered: Number(row.areaCovered || 0),
+          efficiency: Number(row.efficiency || 0)
         }));
         break;
       }
@@ -250,7 +351,7 @@ router.post('/generate/:code', protect, async (req, res) => {
       case 'MANUFACTURING_ADVANCED': {
         const dateFilter = filters.dateRange ? new Date(filters.dateRange) : null;
         const query = `
-          SELECT 
+          SELECT
             p.id,
             p.name as productLine,
             SUM(mo.quantity) as outputQuantity,
@@ -263,7 +364,7 @@ router.post('/generate/:code', protect, async (req, res) => {
           WHERE mo.status = 'completed'
           ${dateFilter ? 'AND DATE(mo.production_date) = ?' : ''}
           ${filters.productLine ? 'AND p.id = ?' : ''}
-          ${filters.efficiency ? 
+          ${filters.efficiency ?
             filters.efficiency === 'high' ? 'AND mo.efficiency > 0.9' :
             filters.efficiency === 'medium' ? 'AND mo.efficiency BETWEEN 0.7 AND 0.9' :
             filters.efficiency === 'low' ? 'AND mo.efficiency < 0.7' : ''
@@ -277,7 +378,7 @@ router.post('/generate/:code', protect, async (req, res) => {
         ];
 
         const rows = await executeQuery(query, params);
-        
+
         results = rows.map(row => ({
           productLine: row.productLine,
           outputQuantity: Number(row.outputQuantity || 0),
@@ -291,20 +392,28 @@ router.post('/generate/:code', protect, async (req, res) => {
 
       case 'MANUFACTURING_PURCHASING': {
         const query = `
-          SELECT 
-            i.code as materialCode,
-            i.name as materialName,
-            SUM(po.quantity) as quantity,
-            AVG(po.unit_price) as unitPrice,
-            SUM(po.quantity * po.unit_price) as totalCost,
-            AVG(DATEDIFF(po.delivery_date, po.order_date)) as deliveryTime
-          FROM purchase_orders po
-          JOIN inventory i ON po.material_id = i.id
-          WHERE po.status = 'completed'
-          ${filters.dateRange ? 'AND DATE(po.order_date) = ?' : ''}
-          ${filters.materialCategory ? 'AND i.category = ?' : ''}
-          GROUP BY i.id, i.code, i.name
-          ORDER BY i.name
+          SELECT
+            i.id as materialId,
+            i.product_name as materialCode,
+            i.product_name as materialName,
+            i.category as materialCategory,
+            SUM(pi.net_weight) as quantity,
+            AVG(pi.rate) as unitPrice,
+            SUM(pi.amount) as totalCost,
+            AVG(DATEDIFF(piv.due_date, piv.invoice_date)) as deliveryTime,
+            COUNT(DISTINCT piv.id) as orderCount,
+            MIN(pi.rate) as minPrice,
+            MAX(pi.rate) as maxPrice,
+            AVG(pi.amount) as averageOrderValue
+          FROM purchase_items pi
+          JOIN purchase_invoices piv ON pi.invoice_id = piv.id
+          JOIN inventory i ON pi.grade_id = i.id
+          WHERE 1=1
+            ${filters.dateRange ? 'AND DATE(piv.invoice_date) = ?' : ''}
+            ${filters.materialCategory ? 'AND i.category = ?' : ''}
+          GROUP BY i.id, i.product_name, i.category
+          ORDER BY i.product_name
+          LIMIT 10
         `;
 
         const params = [
@@ -312,15 +421,23 @@ router.post('/generate/:code', protect, async (req, res) => {
           ...(filters.materialCategory ? [filters.materialCategory] : [])
         ];
 
+        console.log('Executing MANUFACTURING_PURCHASING query:', query, 'with params:', params);
         const rows = await executeQuery(query, params);
-        
+        console.log('MANUFACTURING_PURCHASING results:', rows);
+
         results = rows.map(row => ({
+          materialId: row.materialId,
           materialCode: row.materialCode,
           materialName: row.materialName,
+          materialCategory: row.materialCategory,
           quantity: Number(row.quantity || 0),
           unitPrice: Number(row.unitPrice || 0),
           totalCost: Number(row.totalCost || 0),
-          deliveryTime: Number(row.deliveryTime || 0)
+          deliveryTime: Number(row.deliveryTime || 0),
+          orderCount: Number(row.orderCount || 0),
+          minPrice: Number(row.minPrice || 0),
+          maxPrice: Number(row.maxPrice || 0),
+          averageOrderValue: Number(row.averageOrderValue || 0)
         }));
         break;
       }
@@ -330,7 +447,7 @@ router.post('/generate/:code', protect, async (req, res) => {
     }
 
     // Handle different output formats
-    switch (format) {
+    switch (format.toLowerCase()) {
       case 'json':
         return res.json(results);
 
@@ -372,7 +489,7 @@ router.post('/generate/:code', protect, async (req, res) => {
         );
         res.setHeader(
           'Content-Disposition',
-          `attachment; filename=${code}_${new Date().toISOString().split('T')[0]}.xlsx`
+          `attachment; filename=${code}_${Date.now()}.xlsx`
         );
 
         // Write to response
@@ -386,7 +503,7 @@ router.post('/generate/:code', protect, async (req, res) => {
         }
 
         const doc = new PDFDocument();
-        
+
         // Set response headers
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader(
@@ -412,20 +529,20 @@ router.post('/generate/:code', protect, async (req, res) => {
         const headers = template.columns.map(col => col.header[language]);
         const tableTop = doc.y;
         let currentY = tableTop;
-        
+
         // Calculate column widths
         const pageWidth = doc.page.width - 100; // margins
         const columnWidth = pageWidth / headers.length;
-        
+
         // Draw headers
         headers.forEach((header, i) => {
           doc.fontSize(10)
-             .text(header, 
-                  50 + (i * columnWidth), 
+             .text(header,
+                  50 + (i * columnWidth),
                   currentY,
                   { width: columnWidth, align: 'left' });
         });
-        
+
         currentY += 20;
         doc.moveTo(50, currentY).lineTo(50 + pageWidth, currentY).stroke();
         currentY += 10;
@@ -481,14 +598,14 @@ function getExcelFormat(format, currency) {
 
 function formatValue(value, format, currency) {
   if (value === null || value === undefined) return '';
-  
+
   switch (format) {
     case 'currency': {
       if (typeof value !== 'number') return value;
-      
+
       const absValue = Math.abs(value);
       let formattedValue;
-      
+
       if (absValue >= 1000000) {
         formattedValue = (value / 1000000).toFixed(2) + 'M';
       } else if (absValue >= 1000) {
@@ -499,19 +616,19 @@ function formatValue(value, format, currency) {
           maximumFractionDigits: 2,
         }).format(value);
       }
-      
+
       return `${currency.symbol}${formattedValue}`;
     }
     case 'number':
-      return typeof value === 'number' ? 
+      return typeof value === 'number' ?
         new Intl.NumberFormat('en-US').format(value) :
         value;
     case 'percentage':
-      return typeof value === 'number' ? 
+      return typeof value === 'number' ?
         `${(value * 100).toFixed(2)}%` :
         value;
     case 'date':
-      return value instanceof Date ? 
+      return value instanceof Date ?
         value.toISOString().split('T')[0] :
         value;
     default:
@@ -523,10 +640,10 @@ function formatValue(value, format, currency) {
 router.get('/', protect, async (req, res) => {
   try {
     const { type, startDate, endDate } = req.query;
-    
+
     if (!type || !startDate || !endDate) {
-      return res.status(400).json({ 
-        message: 'Report type, start date, and end date are required' 
+      return res.status(400).json({
+        message: 'Report type, start date, and end date are required'
       });
     }
 
@@ -534,7 +651,7 @@ router.get('/', protect, async (req, res) => {
       case 'financial': {
         // Get transactions within date range
         const [transactions] = await Transaction.pool.execute(`
-          SELECT t.*, 
+          SELECT t.*,
                  te.account_id,
                  te.debit,
                  te.credit,
@@ -618,9 +735,9 @@ router.get('/', protect, async (req, res) => {
 router.post('/generate/TASK_SUMMARY', protect, async (req, res) => {
   try {
     const { filters } = req.body;
-    
+
     let query = `
-      SELECT 
+      SELECT
         t.id as taskId,
         t.title,
         u.name as assignee,
@@ -650,7 +767,7 @@ router.post('/generate/TASK_SUMMARY', protect, async (req, res) => {
     }
 
     const [rows] = await pool.execute(query, queryParams);
-    
+
     res.json(rows);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -661,9 +778,9 @@ router.post('/generate/TASK_SUMMARY', protect, async (req, res) => {
 router.post('/generate/MANUFACTURING_ADVANCED', protect, async (req, res) => {
   try {
     const { filters } = req.body;
-    
+
     let query = `
-      SELECT 
+      SELECT
         p.id,
         p.name as productLine,
         SUM(mo.quantity) as outputQuantity,
@@ -706,7 +823,7 @@ router.post('/generate/MANUFACTURING_ADVANCED', protect, async (req, res) => {
     query += ` GROUP BY p.id, p.name`;
 
     const rows = await executeQuery(query, queryParams);
-    
+
     const results = rows.map(row => ({
       productLine: row.productLine,
       outputQuantity: Number(row.outputQuantity || 0),
@@ -726,9 +843,9 @@ router.post('/generate/MANUFACTURING_ADVANCED', protect, async (req, res) => {
 router.post('/generate/MANUFACTURING_PURCHASING', protect, async (req, res) => {
   try {
     const { filters } = req.body;
-    
+
     let query = `
-      SELECT 
+      SELECT
         i.code as materialCode,
         i.name as materialName,
         SUM(po.quantity) as quantity,
@@ -757,7 +874,7 @@ router.post('/generate/MANUFACTURING_PURCHASING', protect, async (req, res) => {
                ORDER BY i.name`;
 
     const rows = await executeQuery(query, queryParams);
-    
+
     const results = rows.map(row => ({
       materialCode: row.materialCode,
       materialName: row.materialName,
@@ -774,4 +891,329 @@ router.post('/generate/MANUFACTURING_PURCHASING', protect, async (req, res) => {
   }
 });
 
-module.exports = router; 
+// Preview report
+router.post('/preview/:code', protect, async (req, res) => {
+  try {
+    const { code } = req.params;
+    const { filters = {}, language = 'en' } = req.body;
+
+    console.log('Preview request:', { code, filters, language });
+
+    // Get currency settings using direct query
+    const [settingsRows] = await pool.execute('SELECT * FROM settings LIMIT 1');
+    const settings = settingsRows[0];
+
+    if (!settings || !settings.default_currency) {
+      return res.status(500).json({ message: 'Currency settings not configured' });
+    }
+    const currency = {
+      code: settings.default_currency,
+      symbol: settings.currency_symbol || '$'  // Fallback to $ if not set
+    };
+
+    // Find the report template
+    const template = reportTemplates.find(t => t.code === code);
+    if (!template) {
+      return res.status(404).json({ message: 'Report template not found' });
+    }
+
+    // Execute query based on report type
+    let results;
+    switch (code) {
+      case 'SALES_SUMMARY': {
+        // Make the date filter optional
+        const dateFilter = filters.dateRange ? new Date(filters.dateRange) : null;
+        const query = `
+          SELECT
+            DATE(t.date) as date,
+            SUM(te.credit - te.debit) as totalSales,
+            COUNT(DISTINCT t.id) as itemCount,
+            COUNT(DISTINCT te.id) as transactionCount,
+            AVG(te.credit - te.debit) as averageSale,
+            MAX(te.credit - te.debit) as maxSale,
+            MIN(te.credit - te.debit) as minSale
+          FROM transactions t
+          JOIN transactions_entries te ON t.id = te.transaction_id
+          JOIN accounts a ON te.account_id = a.id
+          WHERE a.type = 'revenue'
+          ${dateFilter ? 'AND DATE(t.date) >= ?' : ''}
+          GROUP BY DATE(t.date)
+          ORDER BY date DESC
+          LIMIT 10
+        `;
+
+        const params = [
+          ...(dateFilter ? [dateFilter.toISOString().split('T')[0]] : [])
+        ];
+
+        console.log('Executing SALES_SUMMARY query:', query, 'with params:', params);
+        const rows = await executeQuery(query, params);
+        console.log('SALES_SUMMARY results:', rows);
+
+        results = rows.map(row => ({
+          date: row.date,
+          totalSales: Number(row.totalSales || 0),
+          itemCount: Number(row.itemCount || 0),
+          transactionCount: Number(row.transactionCount || 0),
+          averageSale: Number(row.averageSale || 0),
+          maxSale: Number(row.maxSale || 0),
+          minSale: Number(row.minSale || 0)
+        }));
+        break;
+      }
+
+      case 'EMPLOYEE_SUMMARY': {
+        const departmentFilter = filters.department ? `AND d.department = ?` : '';
+        const employmentTypeFilter = filters.employmentType ? `AND e.employment_type = ?` : '';
+
+        const query = `
+          SELECT
+            e.name,
+            d.title as designation,
+            d.department,
+            e.employment_type,
+            e.status
+          FROM employees e
+          JOIN designations d ON e.designation_id = d.id
+          WHERE 1=1
+            ${departmentFilter}
+            ${employmentTypeFilter}
+          ORDER BY e.name ASC
+          LIMIT 10
+        `;
+
+        const params = [
+          ...(filters.department ? [filters.department] : []),
+          ...(filters.employmentType ? [filters.employmentType] : [])
+        ];
+
+        console.log('Executing EMPLOYEE_SUMMARY query:', query, 'with params:', params);
+        const rows = await executeQuery(query, params);
+        console.log('EMPLOYEE_SUMMARY results:', rows);
+
+        results = rows.map(row => ({
+          name: row.name,
+          designation: row.designation,
+          department: row.department,
+          employmentType: row.employment_type,
+          status: row.status
+        }));
+        break;
+      }
+
+      case 'TASK_SUMMARY': {
+        const { dateRangeStart, dateRangeEnd } = filters;
+        const statusFilter = filters.status ? `AND t.status = ?` : '';
+        const priorityFilter = filters.priority ? `AND t.priority = ?` : '';
+
+        const query = `
+          SELECT
+            t.id as taskId,
+            t.title,
+            u.name as assignee,
+            t.due_date as dueDate,
+            t.status,
+            t.priority,
+            t.estimated_hours as estimatedHours,
+            t.description
+          FROM tasks t
+          LEFT JOIN users u ON t.assigned_to = u.id
+          WHERE 1=1
+            ${dateRangeStart && dateRangeEnd ? 'AND t.due_date BETWEEN ? AND ?' : ''}
+            ${statusFilter}
+            ${priorityFilter}
+          ORDER BY t.due_date ASC
+          LIMIT 10
+        `;
+
+        const params = [
+          ...(dateRangeStart && dateRangeEnd ? [dateRangeStart, dateRangeEnd] : []),
+          ...(filters.status ? [filters.status] : []),
+          ...(filters.priority ? [filters.priority] : [])
+        ];
+
+        console.log('Executing TASK_SUMMARY query:', query, 'with params:', params);
+        const rows = await executeQuery(query, params);
+        console.log('TASK_SUMMARY results:', rows);
+
+        results = rows.map(row => ({
+          taskId: row.taskId,
+          title: row.title,
+          assignee: row.assignee,
+          dueDate: row.dueDate,
+          status: row.status,
+          priority: row.priority,
+          estimatedHours: Number(row.estimatedHours || 0),
+          description: row.description
+        }));
+        break;
+      }
+
+      case 'CUTTING_PERFORMANCE': {
+        const startDate = filters.dateRangeStart ? new Date(filters.dateRangeStart) : null;
+        const endDate = filters.dateRangeEnd ? new Date(filters.dateRangeEnd) : null;
+        const contractorFilter = filters.contractor ? 'AND cc.id = ?' : '';
+
+        const query = `
+          SELECT
+            cc.name as contractorName,
+            SUM(ct.area_covered) as areaCovered,
+            AVG(ct.progress) as efficiency
+          FROM cutting_tasks ct
+          JOIN land_assignments la ON ct.assignment_id = la.id
+          JOIN cutting_contractors cc ON la.contractor_id = cc.id
+          WHERE 1=1
+            ${startDate ? 'AND ct.date >= ?' : ''}
+            ${endDate ? 'AND ct.date <= ?' : ''}
+            ${contractorFilter}
+          GROUP BY cc.id, cc.name
+          ORDER BY efficiency DESC
+          LIMIT 10
+        `;
+
+        const params = [
+          ...(startDate ? [startDate.toISOString().split('T')[0]] : []),
+          ...(endDate ? [endDate.toISOString().split('T')[0]] : []),
+          ...(filters.contractor ? [filters.contractor] : [])
+        ];
+
+        console.log('Executing CUTTING_PERFORMANCE query:', query, 'with params:', params);
+        const rows = await executeQuery(query, params);
+        console.log('CUTTING_PERFORMANCE results:', rows);
+
+        results = rows.map(row => ({
+          contractorName: row.contractorName,
+          areaCovered: Number(row.areaCovered || 0),
+          efficiency: Number(row.efficiency || 0)
+        }));
+        break;
+      }
+
+      case 'MANUFACTURING_ADVANCED': {
+        const dateFilter = filters.dateRange ? new Date(filters.dateRange) : null;
+        const query = `
+          SELECT
+            p.id,
+            p.name as productLine,
+            SUM(mo.quantity) as outputQuantity,
+            AVG(mo.defect_rate) as defectRate,
+            AVG(mo.efficiency) as efficiency,
+            SUM(mo.downtime_hours) as downtime,
+            AVG(mo.cost_per_unit) as costPerUnit
+          FROM manufacturing_orders mo
+          JOIN products p ON mo.product_id = p.id
+          WHERE 1=1
+            ${dateFilter ? 'AND DATE(mo.production_date) = ?' : ''}
+            ${filters.productLine ? 'AND p.id = ?' : ''}
+            ${filters.efficiency ?
+              filters.efficiency === 'high' ? 'AND mo.efficiency > 0.9' :
+              filters.efficiency === 'medium' ? 'AND mo.efficiency BETWEEN 0.7 AND 0.9' :
+              filters.efficiency === 'low' ? 'AND mo.efficiency < 0.7' : ''
+            : ''}
+          GROUP BY p.id, p.name
+          ORDER BY p.name
+          LIMIT 10
+        `;
+
+        const params = [
+          ...(dateFilter ? [dateFilter.toISOString().split('T')[0]] : []),
+          ...(filters.productLine ? [filters.productLine] : [])
+        ];
+
+        console.log('Executing MANUFACTURING_ADVANCED query:', query, 'with params:', params);
+        const rows = await executeQuery(query, params);
+        console.log('MANUFACTURING_ADVANCED results:', rows);
+
+        results = rows.map(row => ({
+          productLine: row.productLine,
+          outputQuantity: Number(row.outputQuantity || 0),
+          defectRate: Number(row.defectRate || 0),
+          efficiency: Number(row.efficiency || 0),
+          downtime: Number(row.downtime || 0),
+          costPerUnit: Number(row.costPerUnit || 0)
+        }));
+        break;
+      }
+
+      case 'MANUFACTURING_PURCHASING': {
+        const query = `
+          SELECT
+            i.id as materialId,
+            i.product_name as materialCode,
+            i.product_name as materialName,
+            i.category as materialCategory,
+            SUM(pi.net_weight) as quantity,
+            AVG(pi.rate) as unitPrice,
+            SUM(pi.amount) as totalCost,
+            AVG(DATEDIFF(piv.due_date, piv.invoice_date)) as deliveryTime,
+            COUNT(DISTINCT piv.id) as orderCount,
+            MIN(pi.rate) as minPrice,
+            MAX(pi.rate) as maxPrice,
+            AVG(pi.amount) as averageOrderValue
+          FROM purchase_items pi
+          JOIN purchase_invoices piv ON pi.invoice_id = piv.id
+          JOIN inventory i ON pi.grade_id = i.id
+          WHERE 1=1
+            ${filters.dateRange ? 'AND DATE(piv.invoice_date) = ?' : ''}
+            ${filters.materialCategory ? 'AND i.category = ?' : ''}
+          GROUP BY i.id, i.product_name, i.category
+          ORDER BY i.product_name
+          LIMIT 10
+        `;
+
+        const params = [
+          ...(filters.dateRange ? [new Date(filters.dateRange).toISOString().split('T')[0]] : []),
+          ...(filters.materialCategory ? [filters.materialCategory] : [])
+        ];
+
+        console.log('Executing MANUFACTURING_PURCHASING query:', query, 'with params:', params);
+        const rows = await executeQuery(query, params);
+        console.log('MANUFACTURING_PURCHASING results:', rows);
+
+        results = rows.map(row => ({
+          materialId: row.materialId,
+          materialCode: row.materialCode,
+          materialName: row.materialName,
+          materialCategory: row.materialCategory,
+          quantity: Number(row.quantity || 0),
+          unitPrice: Number(row.unitPrice || 0),
+          totalCost: Number(row.totalCost || 0),
+          deliveryTime: Number(row.deliveryTime || 0),
+          orderCount: Number(row.orderCount || 0),
+          minPrice: Number(row.minPrice || 0),
+          maxPrice: Number(row.maxPrice || 0),
+          averageOrderValue: Number(row.averageOrderValue || 0)
+        }));
+        break;
+      }
+
+      default:
+        return res.status(400).json({ message: 'Unsupported report type' });
+    }
+
+    // Return preview data with more information
+    const response = {
+      preview: true,
+      total: results.length,
+      isPartial: results.length === 10,
+      data: results,
+      filters: filters,
+      template: {
+        code: template.code,
+        name: template.name
+      }
+    };
+
+    console.log('Sending response:', response);
+    return res.json(response);
+
+  } catch (error) {
+    console.error('Report preview error:', error);
+    res.status(500).json({
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+module.exports = router;

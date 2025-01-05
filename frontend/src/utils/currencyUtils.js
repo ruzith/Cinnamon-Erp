@@ -24,7 +24,7 @@ export const useCurrencyFormatter = () => {
   const { settings, isLoading: settingsLoading } = useSelector(state => state.settings);
   const currencies = useSelector(state => state.currencies || []);
   const { user } = useSelector(state => state.auth);
-  
+
   // Modify effect to check for user authentication
   useEffect(() => {
     const fetchCurrencies = async () => {
@@ -44,7 +44,7 @@ export const useCurrencyFormatter = () => {
 
   const formatCurrency = useCallback((amount, useShortFormat = true) => {
     // If settings are still loading or not available, use default values
-    const defaultCurrency = (!settingsLoading && settings && currencies.length > 0) 
+    const defaultCurrency = (!settingsLoading && settings && currencies.length > 0)
       ? currencies.find(c => c.id === settings.default_currency)
       : null;
 
@@ -55,7 +55,7 @@ export const useCurrencyFormatter = () => {
     };
 
     // Format based on size and preference
-    const formattedAmount = useShortFormat 
+    const formattedAmount = useShortFormat
       ? formatLargeNumber(amount || 0)
       : new Intl.NumberFormat('en-US', {
           minimumFractionDigits: 2,
@@ -81,11 +81,11 @@ export const useCurrencyFormatter = () => {
 
 // For non-component usage, create a simpler formatter
 export const formatCurrencyStatic = (amount, useShortFormat = true) => {
-  const formattedAmount = useShortFormat 
+  const formattedAmount = useShortFormat
     ? formatLargeNumber(amount || 0)
     : new Intl.NumberFormat('en-US', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       }).format(amount || 0);
   return `Rs. ${formattedAmount}`;
-}; 
+};

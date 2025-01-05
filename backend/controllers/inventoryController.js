@@ -65,7 +65,7 @@ exports.updateInventoryItem = async (req, res) => {
   try {
     // Check if this is a partial update (like status change only)
     const isPartialUpdate = Object.keys(req.body).length === 1 && req.body.status;
-    
+
     const { error } = validateInventory(req.body, isPartialUpdate);
     if (error) {
       return res.status(400).json({ message: error.details[0].message });
@@ -180,7 +180,7 @@ exports.createInventoryTransaction = async (req, res) => {
 exports.getInventoryTransactions = async (req, res) => {
   try {
     const [rows] = await Inventory.pool.execute(`
-      SELECT it.*, 
+      SELECT it.*,
              i.product_name,
              i.unit
       FROM inventory_transactions it
@@ -275,7 +275,7 @@ exports.updateInventoryTransaction = async (req, res) => {
 
       // Get the updated transaction with related data
       const [updatedTransaction] = await connection.execute(`
-        SELECT it.*, 
+        SELECT it.*,
                i.product_name,
                i.unit
         FROM inventory_transactions it
@@ -298,6 +298,20 @@ exports.updateInventoryTransaction = async (req, res) => {
   }
 };
 
+// @desc    Get raw materials
+// @route   GET /api/inventory/raw-materials
+// @access  Private
+exports.getRawMaterials = async (req, res) => {
+  try {
+    const [items] = await Inventory.pool.execute(
+      'SELECT * FROM inventory WHERE product_type = "raw_material" AND status = "active"'
+    );
+    res.status(200).json(items);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 exports.getInventoryItems = exports.getInventoryItems;
 exports.getInventoryItem = exports.getInventoryItem;
 exports.createInventoryItem = exports.createInventoryItem;
@@ -305,4 +319,5 @@ exports.updateInventoryItem = exports.updateInventoryItem;
 exports.deleteInventoryItem = exports.deleteInventoryItem;
 exports.getInventoryTransactions = exports.getInventoryTransactions;
 exports.createInventoryTransaction = exports.createInventoryTransaction;
-exports.updateInventoryTransaction = exports.updateInventoryTransaction; 
+exports.updateInventoryTransaction = exports.updateInventoryTransaction;
+exports.getRawMaterials = exports.getRawMaterials;

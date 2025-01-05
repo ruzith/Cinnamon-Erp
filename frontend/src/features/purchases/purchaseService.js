@@ -68,4 +68,4 @@ const purchaseService = {
   getContractorAdvancePayments
 };
 
-export default purchaseService; 
+export default purchaseService;

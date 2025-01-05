@@ -19,18 +19,6 @@ const reportTemplates = [
           en: 'Date Range',
           si: 'කාල සීමාව'
         }
-      },
-      {
-        field: 'status',
-        type: 'select',
-        label: {
-          en: 'Status',
-          si: 'තත්වය'
-        },
-        options: [
-          { value: 'completed', label: { en: 'Completed', si: 'සම්පූර්ණයි' } },
-          { value: 'pending', label: { en: 'Pending', si: 'අපේක්ෂිතයි' } }
-        ]
       }
     ],
     columns: [
@@ -48,6 +36,26 @@ const reportTemplates = [
         field: 'itemCount',
         header: { en: 'Items Sold', si: 'විකුණන ලද අයිතම' },
         format: 'number'
+      },
+      {
+        field: 'transactionCount',
+        header: { en: 'Transaction Count', si: 'ගනුදෙනු ගණන' },
+        format: 'number'
+      },
+      {
+        field: 'averageSale',
+        header: { en: 'Average Sale', si: 'සාමාන්‍ය විකුණුම්' },
+        format: 'currency'
+      },
+      {
+        field: 'maxSale',
+        header: { en: 'Highest Sale', si: 'උපරිම විකුණුම' },
+        format: 'currency'
+      },
+      {
+        field: 'minSale',
+        header: { en: 'Lowest Sale', si: 'අවම විකුණුම' },
+        format: 'currency'
       }
     ]
   },
@@ -250,7 +258,7 @@ const reportTemplates = [
     category: 'manufacturing',
     description: {
       en: 'Detailed analysis of manufacturing processes and efficiency',
-      si: 'නිෂ්පා���න ක්‍රියාවලීන් සහ කාර්යක්ෂමතාව පිළිබඳ සවිස්තර විශ්ලේෂණය'
+      si: 'නිෂ්පාදන ක්‍රියාවලීන් සහ කාර්යක්ෂමතාව පිළිබඳ සවිස්තර විශ්ලේෂණය'
     },
     filters: [
       {
@@ -306,7 +314,87 @@ const reportTemplates = [
         format: 'currency'
       }
     ]
+  },
+  // Manufacturing Purchasing Report
+  {
+    code: 'MANUFACTURING_PURCHASING',
+    name: {
+      en: 'Manufacturing Purchasing Report',
+      si: 'නිෂ්පාදන මිලදී ගැනීම් වාර්තාව'
+    },
+    category: 'manufacturing',
+    description: {
+      en: 'Analysis of raw material purchases and supplier performance',
+      si: 'අමු ද්‍රව්‍ය මිලදී ගැනීම් සහ සැපයුම්කරු කාර්යසාධනය විශ්ලේෂණය'
+    },
+    filters: [
+      {
+        field: 'dateRange',
+        type: 'date',
+        label: { en: 'Date Range', si: 'කාල සීමාව' }
+      },
+      {
+        field: 'materialCategory',
+        type: 'select',
+        label: { en: 'Material Category', si: 'ද්‍රව්‍ය වර්ගය' },
+        optionsUrl: '/api/reports/material-categories'
+      }
+    ],
+    columns: [
+      {
+        field: 'materialCode',
+        header: { en: 'Material Code', si: 'ද්‍රව්‍ය කේතය' }
+      },
+      {
+        field: 'materialName',
+        header: { en: 'Material Name', si: 'ද්‍රව්‍ය නාමය' }
+      },
+      {
+        field: 'materialCategory',
+        header: { en: 'Category', si: 'වර්ගය' }
+      },
+      {
+        field: 'quantity',
+        header: { en: 'Total Quantity', si: 'මුළු ප්‍රමාණය' },
+        format: 'number'
+      },
+      {
+        field: 'unitPrice',
+        header: { en: 'Average Unit Price', si: 'සාමාන්‍ය ඒකක මිල' },
+        format: 'currency'
+      },
+      {
+        field: 'totalCost',
+        header: { en: 'Total Cost', si: 'මුළු පිරිවැය' },
+        format: 'currency'
+      },
+      {
+        field: 'deliveryTime',
+        header: { en: 'Avg. Delivery Time (Days)', si: 'සාමාන්‍ය බෙදාහැරීමේ කාලය (දින)' },
+        format: 'number'
+      },
+      {
+        field: 'orderCount',
+        header: { en: 'Number of Orders', si: 'ඇණවුම් ගණන' },
+        format: 'number'
+      },
+      {
+        field: 'minPrice',
+        header: { en: 'Lowest Price', si: 'අවම මිල' },
+        format: 'currency'
+      },
+      {
+        field: 'maxPrice',
+        header: { en: 'Highest Price', si: 'උපරිම මිල' },
+        format: 'currency'
+      },
+      {
+        field: 'averageOrderValue',
+        header: { en: 'Average Order Value', si: 'සාමාන්‍ය ඇණවුම් වටිනාකම' },
+        format: 'currency'
+      }
+    ]
   }
 ];
 
-export default reportTemplates; 
+export default reportTemplates;

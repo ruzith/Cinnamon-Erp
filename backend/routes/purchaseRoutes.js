@@ -28,20 +28,20 @@ router.post('/grades', protect, authorize('admin'), async (req, res) => {
 // Purchase Invoice routes
 router.post('/invoices', protect, authorize('admin', 'accountant'), async (req, res) => {
   try {
-    const invoice = new PurchaseInvoice(req.body);
-    
+    const purchaseInvoice = new PurchaseInvoice();
+
     // If invoice is confirmed, create cutting payment
     if (req.body.status === 'confirmed') {
       const cuttingPayment = await CuttingPayment.create({
-        contractor: invoice.contractor,
-        amount: invoice.cuttingCharges,
+        contractor: req.body.contractor,
+        amount: req.body.cuttingCharges,
         status: 'pending',
-        notes: `Generated from Purchase Invoice ${invoice.invoiceNumber}`
+        notes: `Generated from Purchase Invoice`
       });
     }
-    
-    await invoice.save();
-    res.status(201).json(await invoice.populate(['contractor', 'items.grade', 'advancePayments']));
+
+    const invoice = await purchaseInvoice.createWithItems(req.body, req.body.items);
+    res.status(201).json(invoice);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
@@ -95,7 +95,7 @@ router.get('/invoices/contractor/:contractorId', protect, async (req, res) => {
 // Add route to get advance payments for a contractor
 router.get('/advance-payments/contractor/:contractorId', protect, async (req, res) => {
   try {
-    const payments = await AdvancePayment.find({ 
+    const payments = await AdvancePayment.find({
       contractor: req.params.contractorId,
       status: { $ne: 'used' }
     });
@@ -105,4 +105,4 @@ router.get('/advance-payments/contractor/:contractorId', protect, async (req, re
   }
 });
 
-module.exports = router; 
+module.exports = router;

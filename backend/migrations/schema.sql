@@ -24,9 +24,10 @@ DROP TABLE IF EXISTS task_history;
 DROP TABLE IF EXISTS tasks;
 DROP TABLE IF EXISTS task_categories;
 DROP TABLE IF EXISTS cutting_payments;
+DROP TABLE IF EXISTS cutting_advance_payments;
 DROP TABLE IF EXISTS cutting_tasks;
 DROP TABLE IF EXISTS land_assignments;
-DROP TABLE IF EXISTS advance_payments;
+DROP TABLE IF EXISTS manufacturing_advance_payments;
 DROP TABLE IF EXISTS cinnamon_assignments;
 DROP TABLE IF EXISTS manufacturing_orders;
 DROP TABLE IF EXISTS manufacturing_contractors;
@@ -38,8 +39,8 @@ DROP TABLE IF EXISTS product_categories;
 DROP TABLE IF EXISTS employee_group_members;
 DROP TABLE IF EXISTS employee_groups;
 DROP TABLE IF EXISTS salary_advances;
-DROP TABLE IF EXISTS employee_payrolls;
 DROP TABLE IF EXISTS employee_payroll_items;
+DROP TABLE IF EXISTS employee_payrolls;
 DROP TABLE IF EXISTS employee_work_hours;
 DROP TABLE IF EXISTS employees;
 DROP TABLE IF EXISTS designations;
@@ -263,6 +264,7 @@ CREATE TABLE cutting_contractors (
   name VARCHAR(255) NOT NULL,
   contractor_id VARCHAR(50) NOT NULL UNIQUE,
   phone VARCHAR(20) NOT NULL,
+  address TEXT NOT NULL,
   status ENUM('active', 'inactive') DEFAULT 'active',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -274,6 +276,26 @@ CREATE TABLE manufacturing_contractors (
   contractor_id VARCHAR(50) NOT NULL UNIQUE,
   phone VARCHAR(20) NOT NULL,
   address TEXT NOT NULL,
+  cutting_rate DECIMAL(10,2) NOT NULL DEFAULT 250.00,
+  status ENUM('active', 'inactive') DEFAULT 'active',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- Inventory table
+CREATE TABLE inventory (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  product_name VARCHAR(255) NOT NULL,
+  category VARCHAR(100) NOT NULL,
+  product_type ENUM('raw_material', 'finished_good') NOT NULL,
+  quantity DECIMAL(10,2) NOT NULL DEFAULT 0,
+  unit VARCHAR(50) NOT NULL,
+  min_stock_level DECIMAL(10,2) NOT NULL,
+  max_stock_level DECIMAL(10,2) NOT NULL,
+  location VARCHAR(100),
+  purchase_price DECIMAL(15,2) NOT NULL,
+  selling_price DECIMAL(15,2),
+  description TEXT,
   status ENUM('active', 'inactive') DEFAULT 'active',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -287,9 +309,13 @@ CREATE TABLE land_assignments (
   start_date DATE NOT NULL,
   end_date DATE NOT NULL,
   status ENUM('active', 'completed', 'cancelled') DEFAULT 'active',
+  raw_item_id INT,
+  quantity_received DECIMAL(10,2),
+  completed_at TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (contractor_id) REFERENCES cutting_contractors(id),
-  FOREIGN KEY (land_id) REFERENCES lands(id)
+  FOREIGN KEY (land_id) REFERENCES lands(id),
+  FOREIGN KEY (raw_item_id) REFERENCES inventory(id)
 );
 
 -- Cutting Tasks table
@@ -425,25 +451,6 @@ CREATE TABLE products (
   FOREIGN KEY (category_id) REFERENCES product_categories(id)
 );
 
--- Inventory table
-CREATE TABLE inventory (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  product_name VARCHAR(255) NOT NULL,
-  category VARCHAR(100) NOT NULL,
-  product_type ENUM('raw_material', 'finished_good') NOT NULL,
-  quantity DECIMAL(10,2) NOT NULL DEFAULT 0,
-  unit VARCHAR(50) NOT NULL,
-  min_stock_level DECIMAL(10,2) NOT NULL,
-  max_stock_level DECIMAL(10,2) NOT NULL,
-  location VARCHAR(100),
-  purchase_price DECIMAL(15,2) NOT NULL,
-  selling_price DECIMAL(15,2),
-  description TEXT,
-  status ENUM('active', 'inactive') DEFAULT 'active',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
-
 -- Inventory Transactions table
 CREATE TABLE inventory_transactions (
   id INT PRIMARY KEY AUTO_INCREMENT,
@@ -533,12 +540,15 @@ CREATE TABLE purchase_invoices (
 CREATE TABLE purchase_items (
   id INT PRIMARY KEY AUTO_INCREMENT,
   invoice_id INT NOT NULL,
-  product_id INT NOT NULL,
-  quantity INT NOT NULL,
-  unit_price DECIMAL(15,2) NOT NULL,
-  total_amount DECIMAL(15,2) NOT NULL,
+  grade_id INT NOT NULL,
+  total_weight DECIMAL(15,2) NOT NULL,
+  deduct_weight1 DECIMAL(15,2) NOT NULL DEFAULT 0,
+  deduct_weight2 DECIMAL(15,2) NOT NULL DEFAULT 0,
+  net_weight DECIMAL(15,2) NOT NULL,
+  rate DECIMAL(15,2) NOT NULL,
+  amount DECIMAL(15,2) NOT NULL,
   FOREIGN KEY (invoice_id) REFERENCES purchase_invoices(id),
-  FOREIGN KEY (product_id) REFERENCES products(id)
+  FOREIGN KEY (grade_id) REFERENCES inventory(id)
 );
 
 -- Loans table
@@ -610,6 +620,9 @@ CREATE TABLE manufacturing_orders (
   downtime_hours DECIMAL(5,2) DEFAULT 0,
   cost_per_unit DECIMAL(10,2) DEFAULT 0,
   production_date DATE,
+  payment_status ENUM('pending', 'paid') DEFAULT 'pending',
+  payment_date DATE,
+  inventory_updated BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (product_id) REFERENCES products(id),
@@ -636,29 +649,33 @@ CREATE TABLE asset_maintenance (
 );
 
 -- Cinnamon Assignments table
-CREATE TABLE cinnamon_assignments (
+CREATE TABLE IF NOT EXISTS cinnamon_assignments (
   id INT PRIMARY KEY AUTO_INCREMENT,
   contractor_id INT NOT NULL,
   quantity DECIMAL(10,2) NOT NULL,
   duration INT NOT NULL,
   duration_type ENUM('day', 'week', 'month') NOT NULL,
   start_date DATE NOT NULL,
-  end_date DATE,
-  status ENUM('active', 'completed', 'cancelled') DEFAULT 'active',
+  end_date DATE NOT NULL,
+  raw_material_id INT,
+  raw_material_quantity DECIMAL(10,2),
   notes TEXT,
+  status ENUM('active', 'completed', 'cancelled') DEFAULT 'active',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (contractor_id) REFERENCES manufacturing_contractors(id)
+  FOREIGN KEY (contractor_id) REFERENCES manufacturing_contractors(id),
+  FOREIGN KEY (raw_material_id) REFERENCES inventory(id)
 );
 
--- Advance Payments table
-CREATE TABLE advance_payments (
+-- Manufacturing Advance Payments table
+CREATE TABLE manufacturing_advance_payments (
   id INT PRIMARY KEY AUTO_INCREMENT,
   contractor_id INT NOT NULL,
   amount DECIMAL(10,2) NOT NULL,
   payment_date DATE NOT NULL,
   receipt_number VARCHAR(50) NOT NULL UNIQUE,
   notes TEXT,
+  status ENUM('unused', 'used') DEFAULT 'unused',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (contractor_id) REFERENCES manufacturing_contractors(id)
@@ -868,6 +885,18 @@ CREATE TABLE employee_work_hours (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (employee_id) REFERENCES employees(id)
+);
+
+-- Add cutting_advance_payments table
+CREATE TABLE IF NOT EXISTS cutting_advance_payments (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  contractor_id INT NOT NULL,
+  amount DECIMAL(10,2) NOT NULL,
+  notes TEXT,
+  status ENUM('pending', 'approved', 'paid', 'cancelled') DEFAULT 'pending',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (contractor_id) REFERENCES cutting_contractors(id)
 );
 
 

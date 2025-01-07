@@ -34,11 +34,20 @@ class Payroll extends BaseModel {
   }
 
   async createPayroll(payrollData) {
-    const [result] = await this.pool.execute(
-      'INSERT INTO employee_payrolls SET ?',
-      payrollData
-    );
-    return result.insertId;
+    try {
+      const columns = Object.keys(payrollData);
+      const values = Object.values(payrollData);
+      const placeholders = Array(values.length).fill('?').join(', ');
+
+      const [result] = await this.pool.execute(
+        `INSERT INTO employee_payrolls (${columns.join(', ')}) VALUES (${placeholders})`,
+        values
+      );
+
+      return result.insertId;
+    } catch (error) {
+      throw error;
+    }
   }
 
   async updateStatus(id, status, paymentDate = null) {

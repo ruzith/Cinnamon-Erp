@@ -28,8 +28,7 @@ const registerUser = asyncHandler(async (req, res) => {
     email,
     password,
     role: 'staff',
-    status: 'active',
-    department: null
+    status: 'active'
   });
 
   if (user) {
@@ -39,7 +38,6 @@ const registerUser = asyncHandler(async (req, res) => {
       email: user.email,
       role: user.role,
       status: user.status,
-      department: user.department,
       token: generateToken(user.id)
     });
   } else {

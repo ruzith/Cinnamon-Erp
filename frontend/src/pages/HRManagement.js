@@ -41,6 +41,7 @@ import {
   Receipt as PayrollIcon,
   Clear as ClearIcon,
   Timeline as TimelineIcon,
+  Delete as DeleteIcon,
 } from '@mui/icons-material';
 import axios from '../app/axios';
 import { format } from 'date-fns';
@@ -60,6 +61,206 @@ function TabPanel(props) {
     </div>
   );
 }
+
+const PayrollForm = ({ onSubmit, onClose, onSuccess }) => {
+  const [selectedEmployee, setSelectedEmployee] = useState('');
+  const [month, setMonth] = useState('');
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [additionalAmounts, setAdditionalAmounts] = useState([]);
+  const [deductionItems, setDeductionItems] = useState([]);
+  const [employees, setEmployees] = useState([]);
+
+  useEffect(() => {
+    fetchEmployees();
+  }, []);
+
+  const fetchEmployees = async () => {
+    try {
+      const response = await axios.get('/api/employees');
+      setEmployees(response.data);
+    } catch (error) {
+      console.error('Error fetching employees:', error);
+    }
+  };
+
+  const handleAddAdditional = () => {
+    setAdditionalAmounts([
+      ...additionalAmounts,
+      { description: '', amount: 0 }
+    ]);
+  };
+
+  const handleAddDeduction = () => {
+    setDeductionItems([
+      ...deductionItems,
+      { description: '', amount: 0 }
+    ]);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    await onSubmit({
+      employee_id: selectedEmployee,
+      month: parseInt(month),
+      year: parseInt(year),
+      additional_amounts: additionalAmounts.map(item => ({
+        description: item.description,
+        amount: parseFloat(item.amount)
+      })),
+      deduction_items: deductionItems.map(item => ({
+        description: item.description,
+        amount: parseFloat(item.amount)
+      }))
+    });
+    if (onSuccess) {
+      await onSuccess();
+    }
+    onClose();
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <Grid container spacing={2}>
+        <Grid item xs={12}>
+          <FormControl fullWidth required>
+            <InputLabel>Employee</InputLabel>
+            <Select
+              value={selectedEmployee}
+              onChange={(e) => setSelectedEmployee(e.target.value)}
+              label="Employee"
+            >
+              {employees.map((emp) => (
+                <MenuItem key={emp.id} value={emp.id}>
+                  {emp.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Grid>
+
+        <Grid item xs={6}>
+          <FormControl fullWidth required>
+            <InputLabel>Month</InputLabel>
+            <Select value={month} onChange={(e) => setMonth(e.target.value)} label="Month">
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                <MenuItem key={m} value={m}>
+                  {new Date(2000, m - 1).toLocaleString('default', { month: 'long' })}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Grid>
+
+        <Grid item xs={6}>
+          <TextField
+            fullWidth
+            required
+            label="Year"
+            type="number"
+            value={year}
+            onChange={(e) => setYear(e.target.value)}
+            inputProps={{ min: 2000, max: 2100 }}
+          />
+        </Grid>
+
+        {/* Additional Amounts Section */}
+        <Grid item xs={12}>
+          <Typography variant="subtitle1" gutterBottom>Additional Amounts</Typography>
+          {additionalAmounts.map((item, index) => (
+            <Box key={index} sx={{ display: 'flex', gap: 2, mb: 2 }}>
+              <TextField
+                fullWidth
+                label="Description"
+                value={item.description}
+                onChange={(e) => {
+                  const newItems = [...additionalAmounts];
+                  newItems[index].description = e.target.value;
+                  setAdditionalAmounts(newItems);
+                }}
+              />
+              <TextField
+                type="number"
+                label="Amount"
+                value={item.amount}
+                onChange={(e) => {
+                  const newItems = [...additionalAmounts];
+                  newItems[index].amount = parseFloat(e.target.value) || 0;
+                  setAdditionalAmounts(newItems);
+                }}
+                sx={{ width: '200px' }}
+              />
+              <IconButton onClick={() => {
+                setAdditionalAmounts(additionalAmounts.filter((_, i) => i !== index));
+              }}>
+                <DeleteIcon />
+              </IconButton>
+            </Box>
+          ))}
+          <Button
+            startIcon={<AddIcon />}
+            onClick={handleAddAdditional}
+            variant="outlined"
+            size="small"
+          >
+            Add Additional Amount
+          </Button>
+        </Grid>
+
+        {/* Deduction Items Section */}
+        <Grid item xs={12}>
+          <Typography variant="subtitle1" gutterBottom>Deductions</Typography>
+          {deductionItems.map((item, index) => (
+            <Box key={index} sx={{ display: 'flex', gap: 2, mb: 2 }}>
+              <TextField
+                fullWidth
+                label="Description"
+                value={item.description}
+                onChange={(e) => {
+                  const newItems = [...deductionItems];
+                  newItems[index].description = e.target.value;
+                  setDeductionItems(newItems);
+                }}
+              />
+              <TextField
+                type="number"
+                label="Amount"
+                value={item.amount}
+                onChange={(e) => {
+                  const newItems = [...deductionItems];
+                  newItems[index].amount = parseFloat(e.target.value) || 0;
+                  setDeductionItems(newItems);
+                }}
+                sx={{ width: '200px' }}
+              />
+              <IconButton onClick={() => {
+                setDeductionItems(deductionItems.filter((_, i) => i !== index));
+              }}>
+                <DeleteIcon />
+              </IconButton>
+            </Box>
+          ))}
+          <Button
+            startIcon={<AddIcon />}
+            onClick={handleAddDeduction}
+            variant="outlined"
+            size="small"
+          >
+            Add Deduction
+          </Button>
+        </Grid>
+
+        <Grid item xs={12} sx={{ mt: 2 }}>
+          <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
+            <Button onClick={onClose}>Cancel</Button>
+            <Button type="submit" variant="contained" color="primary">
+              Generate Payroll
+            </Button>
+          </Box>
+        </Grid>
+      </Grid>
+    </form>
+  );
+};
 
 export default function HRManagement() {
   const [tabValue, setTabValue] = useState(0);
@@ -106,7 +307,7 @@ export default function HRManagement() {
   const fetchEmployees = async () => {
     try {
       const response = await axios.get('/api/employees');
-      setEmployees(response.data.filter(emp => emp.employment_type === 'permanent'));
+      setEmployees(response.data);
     } catch (error) {
       console.error('Error fetching employees:', error);
     }
@@ -778,11 +979,18 @@ export default function HRManagement() {
         </Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Button
-            variant="contained"
+            variant="outlined"
             startIcon={<AddIcon />}
             onClick={() => setOpenAdvanceDialog(true)}
           >
             New Salary Advance
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<PayrollIcon />}
+            onClick={() => setOpenPayrollDialog(true)}
+          >
+            Generate Payroll
           </Button>
         </Box>
       </Box>
@@ -833,13 +1041,61 @@ export default function HRManagement() {
           onChange={(e, newValue) => setTabValue(newValue)}
           sx={{ borderBottom: 1, borderColor: 'divider', px: 2, pt: 2 }}
         >
-          <Tab label="Salary Advances" />
           <Tab label="Payroll" />
+          <Tab label="Salary Advances" />
           <Tab label="Reports" />
         </Tabs>
 
-        {/* Salary Advances Tab */}
+        {/* Payroll Tab */}
         <TabPanel value={tabValue} index={0}>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Employee</TableCell>
+                  <TableCell>Month/Year</TableCell>
+                  <TableCell>Basic Salary</TableCell>
+                  <TableCell>Additional</TableCell>
+                  <TableCell>Deductions</TableCell>
+                  <TableCell>Net Salary</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {payrolls.map((payroll) => (
+                  <TableRow key={payroll.id} hover>
+                    <TableCell>{payroll.employee_name}</TableCell>
+                    <TableCell>{`${payroll.month}/${payroll.year}`}</TableCell>
+                    <TableCell>{formatCurrency(payroll.basic_salary, false)}</TableCell>
+                    <TableCell>{formatCurrency(payroll.additional_amount || 0, false)}</TableCell>
+                    <TableCell>{formatCurrency(payroll.deductions, false)}</TableCell>
+                    <TableCell>{formatCurrency(payroll.net_salary, false)}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={payroll.status}
+                        color={getStatusColor(payroll.status)}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <IconButton
+                        size="small"
+                        onClick={() => handlePrintPayroll(payroll)}
+                        sx={{ color: 'success.main' }}
+                      >
+                        <PrintIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </TabPanel>
+
+        {/* Salary Advances Tab */}
+        <TabPanel value={tabValue} index={1}>
           <TableContainer>
             <Table>
               <TableHead>
@@ -883,52 +1139,6 @@ export default function HRManagement() {
                           </IconButton>
                         </>
                       )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </TabPanel>
-
-        {/* Payroll Tab */}
-        <TabPanel value={tabValue} index={1}>
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Employee</TableCell>
-                  <TableCell>Month/Year</TableCell>
-                  <TableCell>Basic Salary</TableCell>
-                  <TableCell>Deductions</TableCell>
-                  <TableCell>Net Salary</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {payrolls.map((payroll) => (
-                  <TableRow key={payroll.id} hover>
-                    <TableCell>{payroll.employee_name}</TableCell>
-                    <TableCell>{`${payroll.month}/${payroll.year}`}</TableCell>
-                    <TableCell>{formatCurrency(payroll.basic_salary, false)}</TableCell>
-                    <TableCell>{formatCurrency(payroll.deductions, false)}</TableCell>
-                    <TableCell>{formatCurrency(payroll.net_salary, false)}</TableCell>
-                    <TableCell>
-                      <Chip
-                        label={payroll.status}
-                        color={getStatusColor(payroll.status)}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell align="right">
-                      <IconButton
-                        size="small"
-                        onClick={() => handlePrintPayroll(payroll)}
-                        sx={{ color: 'success.main' }}
-                      >
-                        <PrintIcon />
-                      </IconButton>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -1147,50 +1357,91 @@ export default function HRManagement() {
       </Dialog>
 
       {/* Payroll Dialog */}
-      <Dialog open={openPayrollDialog} onClose={() => setOpenPayrollDialog(false)}>
+      <Dialog
+        open={openPayrollDialog}
+        onClose={() => setOpenPayrollDialog(false)}
+        maxWidth="md"
+        fullWidth
+      >
         <DialogTitle>Generate Payroll</DialogTitle>
         <DialogContent>
-          <FormControl fullWidth sx={{ mt: 2 }}>
-            <InputLabel>Employee</InputLabel>
-            <Select
-              value={selectedEmployee}
-              onChange={(e) => setSelectedEmployee(e.target.value)}
-            >
-              {employees.map((emp) => (
-                <MenuItem key={emp.id} value={emp.id}>
-                  {emp.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl fullWidth sx={{ mt: 2 }}>
-            <InputLabel>Month</InputLabel>
-            <Select
-              value={payrollMonth}
-              onChange={(e) => setPayrollMonth(e.target.value)}
-            >
-              {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
-                <MenuItem key={month} value={month}>
-                  {format(new Date(2000, month - 1), 'MMMM')}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <TextField
-            fullWidth
-            label="Year"
-            type="number"
-            value={payrollYear}
-            onChange={(e) => setPayrollYear(e.target.value)}
-            sx={{ mt: 2 }}
+          <PayrollForm
+            onSubmit={async (formData) => {
+              try {
+                // Calculate totals
+                const totalAdditional = formData.additional_amounts.reduce((sum, item) => sum + parseFloat(item.amount), 0);
+                const totalDeductions = formData.deduction_items.reduce((sum, item) => sum + parseFloat(item.amount), 0);
+
+                // Get employee's basic salary and pending advances
+                const employee = employees.find(emp => emp.id === formData.employee_id);
+                const basicSalary = employee ? parseFloat(employee.basic_salary) : 0;
+
+                // Fetch approved salary advances for this employee
+                const advancesResponse = await axios.get(`/api/hr/salary-advances/employee/${formData.employee_id}`);
+
+                // Filter advances for the specific month and year
+                const monthAdvances = advancesResponse.data
+                  .filter(adv => {
+                    const advanceDate = new Date(adv.request_date);
+                    return advanceDate.getMonth() + 1 === formData.month &&
+                           advanceDate.getFullYear() === formData.year &&
+                           adv.approval_status === 'approved';
+                  })
+                  .reduce((sum, adv) => sum + parseFloat(adv.amount), 0);
+
+                // Total deductions include both deduction items and monthly advances
+                const totalAllDeductions = totalDeductions + monthAdvances;
+
+                // Ensure all numbers are properly parsed and calculated
+                const finalBasicSalary = parseFloat(basicSalary.toFixed(2));
+                const finalAdditional = parseFloat(totalAdditional.toFixed(2));
+                const finalDeductions = parseFloat(totalAllDeductions.toFixed(2));
+                const finalNetSalary = parseFloat((finalBasicSalary + finalAdditional - finalDeductions).toFixed(2));
+
+                // Create main payroll record with correct calculations
+                const payrollResponse = await axios.post('/api/hr/payroll', {
+                  employee_id: formData.employee_id,
+                  month: parseInt(formData.month),
+                  year: parseInt(formData.year),
+                  basic_salary: finalBasicSalary,
+                  additional_amount: finalAdditional,
+                  deductions: finalDeductions,
+                  net_salary: finalNetSalary,
+                  created_by: user.id
+                });
+
+                // If payroll created successfully, add the items
+                if (payrollResponse.data?.id) {
+                  // Add additional amounts
+                  for (const item of formData.additional_amounts) {
+                    await axios.post('/api/hr/payroll-items', {
+                      payroll_id: payrollResponse.data.id,
+                      type: 'addition',
+                      description: item.description,
+                      amount: parseFloat(item.amount)
+                    });
+                  }
+
+                  // Add deductions
+                  for (const item of formData.deduction_items) {
+                    await axios.post('/api/hr/payroll-items', {
+                      payroll_id: payrollResponse.data.id,
+                      type: 'deduction',
+                      description: item.description,
+                      amount: parseFloat(item.amount)
+                    });
+                  }
+                }
+              } catch (error) {
+                console.error('Error generating payroll:', error);
+                alert(error.response?.data?.message || 'Error generating payroll');
+                throw error;
+              }
+            }}
+            onSuccess={fetchPayrolls}
+            onClose={() => setOpenPayrollDialog(false)}
           />
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenPayrollDialog(false)}>Cancel</Button>
-          <Button onClick={handlePayrollSubmit} variant="contained" color="primary">
-            Generate
-          </Button>
-        </DialogActions>
       </Dialog>
 
       <ReportDialog />

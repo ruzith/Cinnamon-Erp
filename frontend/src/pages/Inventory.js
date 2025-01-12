@@ -63,8 +63,7 @@ const Inventory = () => {
   const [selectedItem, setSelectedItem] = useState(null);
   const [formData, setFormData] = useState({
     product_name: '',
-    category: '',
-    product_type: 'raw_material',
+    category: 'raw_material',
     quantity: '',
     unit: '',
     min_stock_level: '',
@@ -157,7 +156,6 @@ const Inventory = () => {
       setFormData({
         product_name: item.product_name,
         category: item.category,
-        product_type: item.product_type,
         quantity: item.quantity,
         unit: item.unit,
         min_stock_level: item.min_stock_level,
@@ -175,8 +173,7 @@ const Inventory = () => {
       setSelectedItem(null);
       setFormData({
         product_name: '',
-        category: '',
-        product_type: 'raw_material',
+        category: 'raw_material',
         quantity: '',
         unit: '',
         min_stock_level: '',
@@ -263,8 +260,7 @@ const Inventory = () => {
       const payload = {
         product_name: formData.product_name,
         category: formData.category,
-        product_type: formData.product_type,
-        quantity: Number(formData.quantity),
+        quantity: Number(formData.quantity) || 0,
         unit: formData.unit,
         min_stock_level: Number(formData.min_stock_level),
         max_stock_level: Number(formData.max_stock_level),
@@ -467,7 +463,6 @@ const Inventory = () => {
                 <TableRow>
                   <TableCell>Product Name</TableCell>
                   <TableCell>Category</TableCell>
-                  <TableCell>Type</TableCell>
                   <TableCell align="right">Quantity</TableCell>
                   <TableCell>Stock Level</TableCell>
                   <TableCell align="right">Price/Assignment</TableCell>
@@ -480,8 +475,13 @@ const Inventory = () => {
                 {inventory.map((item) => (
                   <TableRow key={item.id} hover>
                     <TableCell>{item.product_name}</TableCell>
-                    <TableCell>{item.category}</TableCell>
-                    <TableCell>{item.product_type}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={item.category === 'finished_good' ? 'Finished Good' : 'Raw Material'}
+                        color={item.category === 'finished_good' ? 'primary' : 'secondary'}
+                        size="small"
+                      />
+                    </TableCell>
                     <TableCell align="right">
                       {item.quantity} {item.unit}
                     </TableCell>
@@ -493,7 +493,7 @@ const Inventory = () => {
                       />
                     </TableCell>
                     <TableCell align="right">
-                      {item.product_type === 'finished_good'
+                      {item.category === 'finished_good'
                         ? (
                             <>
                               {formatCurrency(item.purchase_price)}
@@ -666,10 +666,10 @@ const Inventory = () => {
             </Grid>
             <Grid item xs={12} sm={6}>
               <FormControl fullWidth>
-                <InputLabel>Product Type</InputLabel>
+                <InputLabel>Category</InputLabel>
                 <Select
-                  name="product_type"
-                  value={formData.product_type}
+                  name="category"
+                  value={formData.category}
                   onChange={handleInputChange}
                   required
                 >
@@ -686,7 +686,6 @@ const Inventory = () => {
                 type="number"
                 value={formData.quantity}
                 onChange={handleInputChange}
-                required
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -736,12 +735,12 @@ const Inventory = () => {
                 type="number"
                 value={formData.purchase_price}
                 onChange={handleInputChange}
-                required={formData.product_type === 'finished_good'}
-                disabled={formData.product_type === 'raw_material'}
-                helperText={formData.product_type === 'raw_material' ? 'Not applicable for raw materials' : ''}
+                required={formData.category === 'finished_good'}
+                disabled={formData.category === 'raw_material'}
+                helperText={formData.category === 'raw_material' ? 'Not applicable for raw materials' : ''}
               />
             </Grid>
-            {formData.product_type === 'raw_material' && (
+            {formData.category === 'raw_material' && (
               <>
                 <Grid item xs={12} sm={6}>
                   <FormControl fullWidth>
@@ -781,7 +780,7 @@ const Inventory = () => {
                 </Grid>
               </>
             )}
-            {formData.product_type === 'finished_good' && (
+            {formData.category === 'finished_good' && (
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth>
                   <InputLabel>Manufacturing Purchase</InputLabel>

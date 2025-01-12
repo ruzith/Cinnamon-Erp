@@ -3,8 +3,7 @@ const Joi = require('joi');
 exports.validateInventory = (data, partial = false) => {
   const schema = Joi.object({
     product_name: partial ? Joi.string() : Joi.string().required(),
-    category: partial ? Joi.string() : Joi.string().required(),
-    product_type: partial ? Joi.string().valid('raw_material', 'finished_good') : Joi.string().valid('raw_material', 'finished_good').required(),
+    category: partial ? Joi.string().valid('raw_material', 'finished_good') : Joi.string().valid('raw_material', 'finished_good').required(),
     quantity: partial ? Joi.number().min(0) : Joi.number().min(0).required(),
     unit: partial ? Joi.string() : Joi.string().required(),
     min_stock_level: partial ? Joi.number().min(0) : Joi.number().min(0).required(),
@@ -47,4 +46,4 @@ const transactionSchema = Joi.object({
   }))
 });
 
-exports.validateTransaction = (data) => transactionSchema.validate(data); 
+exports.validateTransaction = (data) => transactionSchema.validate(data);

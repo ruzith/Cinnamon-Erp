@@ -4,20 +4,6 @@ import { useDispatch } from 'react-redux';
 import { setCurrencies } from '../features/currencies/currencySlice';
 import axios from 'axios';
 
-// Move formatLargeNumber outside of the hook so it can be used by both functions
-const formatLargeNumber = (number) => {
-  const absNumber = Math.abs(number);
-  if (absNumber >= 1000000) {
-    return (number / 1000000).toFixed(2) + 'M';
-  } else if (absNumber >= 1000) {
-    return (number / 1000).toFixed(1) + 'K';
-  }
-  return new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(number);
-};
-
 // Create a hook to access currency settings
 export const useCurrencyFormatter = () => {
   const dispatch = useDispatch();
@@ -42,7 +28,7 @@ export const useCurrencyFormatter = () => {
     }
   }, [dispatch, currencies.length, user]);
 
-  const formatCurrency = useCallback((amount, useShortFormat = true) => {
+  const formatCurrency = useCallback((amount) => {
     // If settings are still loading or not available, use default values
     const defaultCurrency = (!settingsLoading && settings && currencies.length > 0)
       ? currencies.find(c => c.id === settings.default_currency)
@@ -54,15 +40,13 @@ export const useCurrencyFormatter = () => {
       rate: 1
     };
 
-    // Format based on size and preference
-    const formattedAmount = useShortFormat
-      ? formatLargeNumber(amount || 0)
-      : new Intl.NumberFormat('en-US', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        }).format(amount || 0);
+    // Format the full amount with thousands separators
+    const formattedAmount = new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount || 0);
 
-    // Return the pre-formatted amount with the appropriate currency symbol
+    // Return the formatted amount with the appropriate currency symbol
     return `${currencyInfo.symbol} ${formattedAmount}`;
   }, [currencies, settings, settingsLoading]);
 
@@ -80,12 +64,10 @@ export const useCurrencyFormatter = () => {
 };
 
 // For non-component usage, create a simpler formatter
-export const formatCurrencyStatic = (amount, useShortFormat = true) => {
-  const formattedAmount = useShortFormat
-    ? formatLargeNumber(amount || 0)
-    : new Intl.NumberFormat('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      }).format(amount || 0);
+export const formatCurrencyStatic = (amount) => {
+  const formattedAmount = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount || 0);
   return `Rs. ${formattedAmount}`;
 };

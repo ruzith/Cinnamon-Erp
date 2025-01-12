@@ -120,7 +120,8 @@ const CuttingManagement = () => {
     company_contribution: 180,
     manufacturing_contribution: 120,
     notes: '',
-    status: 'pending'
+    status: 'pending',
+    isFromAssignment: false
   });
   const [payments, setPayments] = useState([]);
   const [advancePayments, setAdvancePayments] = useState([]);
@@ -541,7 +542,6 @@ const CuttingManagement = () => {
 
   const handleOpenCuttingPaymentDialog = async (item) => {
     try {
-      // Refresh assignments list before opening dialog
       await fetchAssignments();
 
       const baseFormData = {
@@ -559,7 +559,8 @@ const CuttingManagement = () => {
         setCuttingPaymentFormData({
           ...baseFormData,
           contractor_id: item.contractor_id,
-          assignment_id: item.id
+          assignment_id: item.id,
+          isFromAssignment: true
         });
       } else {
         // It's a contractor
@@ -576,7 +577,8 @@ const CuttingManagement = () => {
         setCuttingPaymentFormData({
           ...baseFormData,
           contractor_id: item.id,
-          assignment_id: ''
+          assignment_id: '',
+          isFromAssignment: false
         });
       }
       setOpenCuttingPaymentDialog(true);
@@ -597,7 +599,8 @@ const CuttingManagement = () => {
       company_contribution: 180,
       manufacturing_contribution: 120,
       notes: '',
-      status: 'pending'
+      status: 'pending',
+      isFromAssignment: false
     });
   };
 
@@ -695,6 +698,36 @@ const CuttingManagement = () => {
     }
   };
 
+  const handleMarkAdvancePaymentAsPaid = async (paymentId) => {
+    try {
+      await axios.put(`/api/cutting/advance-payments/${paymentId}/mark-paid`);
+      enqueueSnackbar('Advance payment marked as paid', { variant: 'success' });
+      await Promise.all([
+        fetchContractors(),
+        fetchPayments(),
+        fetchAdvancePayments()
+      ]);
+    } catch (error) {
+      console.error('Error marking advance payment as paid:', error);
+      enqueueSnackbar(error.response?.data?.message || 'Error marking payment as paid', { variant: 'error' });
+    }
+  };
+
+  const handleMarkPaymentAsPaid = async (paymentId) => {
+    try {
+      await axios.put(`/api/cutting/payments/${paymentId}/mark-paid`);
+      enqueueSnackbar('Payment marked as paid', { variant: 'success' });
+      await Promise.all([
+        fetchContractors(),
+        fetchPayments(),
+        fetchAdvancePayments()
+      ]);
+    } catch (error) {
+      console.error('Error marking payment as paid:', error);
+      enqueueSnackbar(error.response?.data?.message || 'Error marking payment as paid', { variant: 'error' });
+    }
+  };
+
   const handleEditAssignment = (assignment) => {
     // Fetch all active lands including the currently assigned one
     axios.get('/api/lands?status=active&includeAssigned=true')
@@ -736,21 +769,17 @@ const CuttingManagement = () => {
 
   const handlePrintPayment = async (payment) => {
     try {
-      // Get company settings
       const settingsResponse = await axios.get('/api/settings');
       const settings = settingsResponse.data;
-
-      // Get payment details with contractor info
       const paymentResponse = await axios.get(`/api/cutting/payments/${payment.id}`);
       const paymentDetails = paymentResponse.data;
 
-      // Generate receipt HTML
       const receiptResponse = await axios.post('/api/cutting/payments/receipt', {
         payment: paymentDetails,
         settings: settings
       });
 
-      // Create a new window and print
+      // Open print window
       const printWindow = window.open('', '_blank');
       printWindow.document.write(receiptResponse.data.receiptHtml);
       printWindow.document.close();
@@ -759,7 +788,6 @@ const CuttingManagement = () => {
       printWindow.close();
     } catch (error) {
       console.error('Error printing payment:', error);
-      // Show error notification
       enqueueSnackbar('Error printing payment receipt', { variant: 'error' });
     }
   };
@@ -1190,20 +1218,31 @@ const CuttingManagement = () => {
                       />
                     </TableCell>
                     <TableCell align="right">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleEditAdvancePayment(payment)}
-                        sx={{ color: 'primary.main' }}
-                      >
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDeleteAdvancePayment(payment.id)}
-                        sx={{ color: 'error.main', ml: 1 }}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
+                        {payment.status !== 'paid' && (
+                          <Button
+                            size="small"
+                            color="success"
+                            onClick={() => handleMarkAdvancePaymentAsPaid(payment.id)}
+                          >
+                            Paid
+                          </Button>
+                        )}
+                        <IconButton
+                          size="small"
+                          onClick={() => handleEditAdvancePayment(payment)}
+                          sx={{ color: 'primary.main' }}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleDeleteAdvancePayment(payment.id)}
+                          sx={{ color: 'error.main' }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Box>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -1247,27 +1286,38 @@ const CuttingManagement = () => {
                       />
                     </TableCell>
                     <TableCell align="right">
-                      <IconButton
-                        size="small"
-                        onClick={() => handlePrintPayment(payment)}
-                        sx={{ color: 'success.main' }}
-                      >
-                        <PrintIcon />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleEditPayment(payment)}
-                        sx={{ color: 'primary.main', ml: 1 }}
-                      >
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDeletePayment(payment.id)}
-                        sx={{ color: 'error.main', ml: 1 }}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
+                        {payment.status !== 'paid' && (
+                          <Button
+                            size="small"
+                            color="success"
+                            onClick={() => handleMarkPaymentAsPaid(payment.id)}
+                          >
+                            Paid
+                          </Button>
+                        )}
+                        <IconButton
+                          size="small"
+                          onClick={() => handlePrintPayment(payment)}
+                          sx={{ color: 'success.main' }}
+                        >
+                          <PrintIcon />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleEditPayment(payment)}
+                          sx={{ color: 'primary.main' }}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleDeletePayment(payment.id)}
+                          sx={{ color: 'error.main' }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Box>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -1702,7 +1752,7 @@ const CuttingManagement = () => {
         <DialogTitle>Process Cutting Payment</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
-            {!cuttingPaymentFormData.assignment_id && (
+            {!cuttingPaymentFormData.isFromAssignment && (
               <Grid item xs={12}>
                 <FormControl fullWidth required>
                   <InputLabel>Assignment</InputLabel>
@@ -1747,22 +1797,22 @@ const CuttingManagement = () => {
                   }));
                 }}
                 required
-                helperText={`Total Value: ${formatCurrency(cuttingPaymentFormData.quantity_kg * cuttingPaymentFormData.price_per_kg, false)}`}
+                helperText={`Total Charge: ${formatCurrency(cuttingPaymentFormData.quantity_kg * cuttingPaymentFormData.price_per_kg, false)}`}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
-                label="Price per kg"
+                label="Charge per kg"
                 type="number"
                 value={cuttingPaymentFormData.price_per_kg}
                 onChange={(e) => {
-                  const pricePerKg = e.target.value;
-                  const total = cuttingPaymentFormData.quantity_kg * pricePerKg;
+                  const chargePerKg = e.target.value;
+                  const total = cuttingPaymentFormData.quantity_kg * chargePerKg;
                   const { companyContribution, manufacturingContribution } = calculateContributions(total);
                   setCuttingPaymentFormData(prev => ({
                     ...prev,
-                    price_per_kg: pricePerKg,
+                    price_per_kg: chargePerKg,
                     total_amount: total,
                     company_contribution: companyContribution,
                     manufacturing_contribution: manufacturingContribution
@@ -1798,11 +1848,19 @@ const CuttingManagement = () => {
                 label="Company Contribution"
                 type="number"
                 value={cuttingPaymentFormData.company_contribution}
-                onChange={(e) => setCuttingPaymentFormData(prev => ({
-                  ...prev,
-                  company_contribution: e.target.value,
-                  manufacturing_contribution: prev.total_amount - e.target.value
-                }))}
+                onChange={(e) => {
+                  const newCompanyContribution = parseFloat(e.target.value) || 0;
+                  const totalAmount = parseFloat(cuttingPaymentFormData.total_amount) || 0;
+                  const newManufacturingContribution = totalAmount - newCompanyContribution;
+
+                  if (newManufacturingContribution >= 0) {
+                    setCuttingPaymentFormData(prev => ({
+                      ...prev,
+                      company_contribution: newCompanyContribution,
+                      manufacturing_contribution: newManufacturingContribution
+                    }));
+                  }
+                }}
                 helperText={`Current: ${formatCurrency(cuttingPaymentFormData.company_contribution, false)}`}
               />
             </Grid>
@@ -1812,11 +1870,19 @@ const CuttingManagement = () => {
                 label="Manufacturing Contribution"
                 type="number"
                 value={cuttingPaymentFormData.manufacturing_contribution}
-                onChange={(e) => setCuttingPaymentFormData(prev => ({
-                  ...prev,
-                  manufacturing_contribution: e.target.value,
-                  company_contribution: prev.total_amount - e.target.value
-                }))}
+                onChange={(e) => {
+                  const newManufacturingContribution = parseFloat(e.target.value) || 0;
+                  const totalAmount = parseFloat(cuttingPaymentFormData.total_amount) || 0;
+                  const newCompanyContribution = totalAmount - newManufacturingContribution;
+
+                  if (newCompanyContribution >= 0) {
+                    setCuttingPaymentFormData(prev => ({
+                      ...prev,
+                      manufacturing_contribution: newManufacturingContribution,
+                      company_contribution: newCompanyContribution
+                    }));
+                  }
+                }}
                 helperText={`Current: ${formatCurrency(cuttingPaymentFormData.manufacturing_contribution, false)}`}
               />
             </Grid>

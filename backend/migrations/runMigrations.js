@@ -4,7 +4,7 @@ const path = require('path');
 
 const runMigrations = async () => {
   const connection = await pool.getConnection();
-  
+
   try {
     await connection.beginTransaction();
 
@@ -39,4 +39,4 @@ const runMigrations = async () => {
 };
 
 // Run migrations
-runMigrations(); 
+runMigrations();

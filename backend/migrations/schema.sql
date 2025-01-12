@@ -16,6 +16,8 @@ DROP TABLE IF EXISTS assets;
 DROP TABLE IF EXISTS asset_categories;
 DROP TABLE IF EXISTS manufacturing_materials;
 DROP TABLE IF EXISTS purchase_items;
+DROP TABLE IF EXISTS cutting_payment_usages;
+DROP TABLE IF EXISTS cutting_advance_payments;
 DROP TABLE IF EXISTS purchase_invoices;
 DROP TABLE IF EXISTS sales_items;
 DROP TABLE IF EXISTS sales_invoices;
@@ -275,12 +277,15 @@ CREATE TABLE wells (
 -- Cutting Contractors table
 CREATE TABLE cutting_contractors (
   id INT PRIMARY KEY AUTO_INCREMENT,
+  contractor_id VARCHAR(20) NOT NULL UNIQUE,
   name VARCHAR(255) NOT NULL,
-  contractor_id VARCHAR(50) NOT NULL UNIQUE,
-  phone VARCHAR(20) NOT NULL,
-  address TEXT NOT NULL,
+  phone VARCHAR(20),
+  address TEXT,
+  cutting_rate DECIMAL(10,2) DEFAULT 250.00,
+  latest_manufacturing_contribution DECIMAL(10,2) DEFAULT 250.00,
   status ENUM('active', 'inactive') DEFAULT 'active',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 -- Manufacturing Contractors table
@@ -300,8 +305,7 @@ CREATE TABLE manufacturing_contractors (
 CREATE TABLE inventory (
   id INT PRIMARY KEY AUTO_INCREMENT,
   product_name VARCHAR(255) NOT NULL,
-  category VARCHAR(100) NOT NULL,
-  product_type ENUM('raw_material', 'finished_good') NOT NULL,
+  category ENUM('raw_material', 'finished_good') NOT NULL,
   quantity DECIMAL(10,2) NOT NULL DEFAULT 0,
   unit VARCHAR(50) NOT NULL,
   min_stock_level DECIMAL(10,2) NOT NULL,
@@ -530,24 +534,56 @@ CREATE TABLE sales_items (
   FOREIGN KEY (product_id) REFERENCES inventory(id)
 );
 
--- Purchase Invoices table
+-- Purchase Invoices table (create this first)
 CREATE TABLE purchase_invoices (
   id INT PRIMARY KEY AUTO_INCREMENT,
-  invoice_number VARCHAR(50) NOT NULL UNIQUE,
+  invoice_number VARCHAR(20) NOT NULL,
   supplier_id INT NOT NULL,
+  contractor_id INT,
   invoice_date DATE NOT NULL,
   due_date DATE NOT NULL,
-  subtotal DECIMAL(15,2) NOT NULL,
-  tax_amount DECIMAL(15,2) DEFAULT 0,
-  total_amount DECIMAL(15,2) NOT NULL,
-  paid_amount DECIMAL(15,2) DEFAULT 0,
+  subtotal DECIMAL(10,2) DEFAULT 0.00,
+  total_amount DECIMAL(10,2) DEFAULT 0.00,
+  cutting_rate DECIMAL(10,2) DEFAULT 0.00,
+  cutting_charges DECIMAL(10,2) DEFAULT 0.00,
+  advance_payment DECIMAL(10,2) DEFAULT 0.00,
+  final_amount DECIMAL(10,2) DEFAULT 0.00,
   status ENUM('draft', 'confirmed', 'paid', 'cancelled') DEFAULT 'draft',
   notes TEXT,
   created_by INT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (supplier_id) REFERENCES customers(id),
+  FOREIGN KEY (contractor_id) REFERENCES cutting_contractors(id),
   FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+-- Then create cutting_advance_payments table
+CREATE TABLE cutting_advance_payments (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  contractor_id INT NOT NULL,
+  amount DECIMAL(10,2) NOT NULL,
+  notes TEXT,
+  status ENUM('pending', 'paid', 'used', 'cancelled') DEFAULT 'pending',
+  used_in_invoice INT NULL,
+  used_date TIMESTAMP NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (contractor_id) REFERENCES cutting_contractors(id),
+  FOREIGN KEY (used_in_invoice) REFERENCES purchase_invoices(id)
+);
+
+-- Finally create cutting_payment_usages table
+CREATE TABLE cutting_payment_usages (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  advance_payment_id INT NOT NULL,
+  invoice_id INT NOT NULL,
+  used_date TIMESTAMP NOT NULL,
+  amount DECIMAL(10,2) NOT NULL,
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (advance_payment_id) REFERENCES cutting_advance_payments(id),
+  FOREIGN KEY (invoice_id) REFERENCES purchase_invoices(id)
 );
 
 -- Purchase Items table
@@ -899,18 +935,6 @@ CREATE TABLE employee_work_hours (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (employee_id) REFERENCES employees(id)
-);
-
--- Add cutting_advance_payments table
-CREATE TABLE IF NOT EXISTS cutting_advance_payments (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  contractor_id INT NOT NULL,
-  amount DECIMAL(10,2) NOT NULL,
-  notes TEXT,
-  status ENUM('pending', 'approved', 'paid', 'cancelled') DEFAULT 'pending',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (contractor_id) REFERENCES cutting_contractors(id)
 );
 
 

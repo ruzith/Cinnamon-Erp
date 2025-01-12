@@ -9,9 +9,9 @@ exports.getInventoryItems = async (req, res) => {
     let query = 'SELECT * FROM inventory';
     const params = [];
 
-    if (req.query.type) {
-      query += ' WHERE product_type = ?';
-      params.push(req.query.type);
+    if (req.query.category) {
+      query += ' WHERE category = ?';
+      params.push(req.query.category);
     }
 
     const [items] = await Inventory.pool.execute(query, params);
@@ -304,7 +304,7 @@ exports.updateInventoryTransaction = async (req, res) => {
 exports.getRawMaterials = async (req, res) => {
   try {
     const [items] = await Inventory.pool.execute(
-      'SELECT * FROM inventory WHERE product_type = "raw_material" AND status = "active"'
+      'SELECT * FROM inventory WHERE category = "raw_material" AND status = "active"'
     );
     res.status(200).json(items);
   } catch (error) {

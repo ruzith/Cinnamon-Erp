@@ -544,8 +544,8 @@ const Dashboard = () => {
               <Grid item xs={12}>
                 <ProgressCard
                   title="Task Completion"
-                  value={dashboardData.taskCompletion.value}
-                  target={dashboardData.taskCompletion.target}
+                  value={dashboardData.summary.completedTasks}
+                  target={dashboardData.summary.totalTasks}
                   color="46, 125, 50"
                   isMonetary={false}
                 />

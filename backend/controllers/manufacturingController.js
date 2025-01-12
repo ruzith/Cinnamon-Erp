@@ -897,34 +897,340 @@ exports.markOrderAsPaid = async (req, res) => {
 };
 
 exports.printInvoice = async (req, res) => {
+  const connection = await pool.getConnection();
   try {
     const { id } = req.params;
 
-    // Get invoice details
-    const [invoice] = await pool.execute(`
-      SELECT i.*, p.name as product_name, p.unit,
-             mc.name as contractor_name, mc.contractor_id
-      FROM manufacturing_invoices i
-      JOIN products p ON i.product_id = p.id
-      LEFT JOIN manufacturing_contractors mc ON i.contractor_id = mc.id
-      WHERE i.id = ?
+    // Get invoice details with items
+    const [invoices] = await connection.execute(`
+      SELECT
+        pi.*,
+        c.name as supplier_name,
+        c.phone as supplier_phone,
+        c.address as supplier_address,
+        cc.name as contractor_name,
+        cc.contractor_id as contractor_code,
+        cc.phone as contractor_phone
+      FROM purchase_invoices pi
+      JOIN customers c ON pi.supplier_id = c.id
+      LEFT JOIN cutting_contractors cc ON pi.contractor_id = cc.id
+      WHERE pi.id = ?
     `, [id]);
 
-    if (!invoice[0]) {
+    if (!invoices[0]) {
       return res.status(404).json({ message: 'Invoice not found' });
     }
 
-    // Get company settings
-    const settings = await Settings.get();
+    const invoice = invoices[0];
 
-    // Generate invoice HTML using the template
-    const invoiceHtml = generateManufacturingInvoice(invoice[0], settings);
+    // Get invoice items with their details
+    const [items] = await connection.execute(`
+      SELECT
+        pit.*,
+        i.product_name,
+        i.unit,
+        CAST(pit.total_weight AS DECIMAL(15,2)) as total_weight,
+        CAST(pit.deduct_weight1 AS DECIMAL(15,2)) as deduct_weight1,
+        CAST(pit.deduct_weight2 AS DECIMAL(15,2)) as deduct_weight2,
+        CAST(pit.net_weight AS DECIMAL(15,2)) as net_weight,
+        CAST(pit.rate AS DECIMAL(15,2)) as rate,
+        CAST(pit.amount AS DECIMAL(15,2)) as amount
+      FROM purchase_items pit
+      JOIN inventory i ON pit.grade_id = i.id
+      WHERE pit.invoice_id = ?
+    `, [id]);
+
+    // Get company settings
+    const [settingsResult] = await connection.execute(
+      'SELECT * FROM settings WHERE id = 1'
+    );
+    const settings = settingsResult[0] || {};
+
+    // Format dates and ensure numbers
+    invoice.invoice_date = invoice.invoice_date ? new Date(invoice.invoice_date) : new Date();
+    invoice.due_date = invoice.due_date ? new Date(invoice.due_date) : new Date();
+    invoice.items = items;
+    invoice.total_amount = Number(invoice.total_amount) || 0;
+    invoice.cutting_rate = Number(invoice.cutting_rate) || 0;
+    invoice.cutting_charges = Number(invoice.cutting_charges) || 0;
+    invoice.advance_payment = Number(invoice.advance_payment) || 0;
+    invoice.final_amount = Number(invoice.final_amount) || 0;
+
+    // Process items to ensure numbers
+    invoice.items = items.map(item => ({
+      ...item,
+      total_weight: Number(item.total_weight) || 0,
+      deduct_weight1: Number(item.deduct_weight1) || 0,
+      deduct_weight2: Number(item.deduct_weight2) || 0,
+      net_weight: Number(item.net_weight) || 0,
+      rate: Number(item.rate) || 0,
+      amount: Number(item.amount) || 0
+    }));
+
+    // Calculate totals
+    const totals = items.reduce((acc, item) => ({
+      total_weight: acc.total_weight + item.total_weight,
+      deduct_weight1: acc.deduct_weight1 + item.deduct_weight1,
+      deduct_weight2: acc.deduct_weight2 + item.deduct_weight2,
+      net_weight: acc.net_weight + item.net_weight,
+      amount: acc.amount + item.amount
+    }), {
+      total_weight: 0,
+      deduct_weight1: 0,
+      deduct_weight2: 0,
+      net_weight: 0,
+      amount: 0
+    });
+
+    invoice.totals = totals;
+
+    // Generate receipt HTML using the template
+    const invoiceHtml = generatePurchaseInvoice(invoice, settings);
 
     res.json({ invoiceHtml });
   } catch (error) {
     console.error('Error printing invoice:', error);
-    res.status(500).json({ message: 'Error printing invoice' });
+    res.status(500).json({
+      message: 'Error printing invoice',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  } finally {
+    connection.release();
   }
+};
+
+// Update the generatePurchaseInvoice helper function
+const generatePurchaseInvoice = (invoice, settings) => {
+  // Ensure totals are numbers before using toFixed
+  const totals = {
+    total_weight: Number(invoice.totals.total_weight || 0),
+    deduct_weight1: Number(invoice.totals.deduct_weight1 || 0),
+    deduct_weight2: Number(invoice.totals.deduct_weight2 || 0),
+    net_weight: Number(invoice.totals.net_weight || 0),
+    amount: Number(invoice.totals.amount || 0)
+  };
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Purchase Invoice - ${invoice.invoice_number}</title>
+      <style>
+        @media print {
+          @page {
+            size: A4;
+            margin: 15mm;
+          }
+        }
+        body {
+          font-family: Arial, sans-serif;
+          padding: 15px;
+          max-width: 800px;
+          margin: 0 auto;
+          color: #333;
+          line-height: 1.5;
+        }
+        .watermark {
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%) rotate(-45deg);
+          font-size: 100px;
+          opacity: 0.05;
+          z-index: -1;
+          color: #000;
+          white-space: nowrap;
+        }
+        .company-header {
+          text-align: center;
+          margin-bottom: 18px;
+          padding-bottom: 15px;
+          border-bottom: 2px solid #333;
+        }
+        .company-name {
+          font-size: 24px;
+          font-weight: bold;
+          margin: 0;
+          color: #1976d2;
+        }
+        .company-details {
+          font-size: 13px;
+          color: #666;
+          margin: 4px 0;
+        }
+        .document-title {
+          font-size: 18px;
+          font-weight: bold;
+          text-align: center;
+          margin: 18px 0;
+          color: #333;
+          text-transform: uppercase;
+        }
+        .slip-header {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 18px;
+          padding: 15px;
+          background-color: #f5f5f5;
+          border-radius: 5px;
+        }
+        .order-info, .contractor-info {
+          flex: 1;
+        }
+        .info-label {
+          font-weight: bold;
+          color: #666;
+          font-size: 12px;
+          text-transform: uppercase;
+        }
+        .info-value {
+          font-size: 13px;
+          margin-bottom: 8px;
+        }
+        .materials-details {
+          margin: 18px 0;
+          border: 1px solid #ddd;
+          border-radius: 5px;
+        }
+        .materials-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 0;
+        }
+        .materials-table th {
+          background-color: #f8f9fa;
+          color: #666;
+          font-size: 12px;
+          text-transform: uppercase;
+          padding: 10px;
+          border-bottom: 1px solid #eee;
+        }
+        .materials-table td {
+          padding: 10px;
+          text-align: left;
+          border-bottom: 1px solid #eee;
+          font-size: 13px;
+        }
+        .total-section {
+          margin-top: 18px;
+          padding: 15px;
+          background-color: #1976d2;
+          color: white;
+          border-radius: 5px;
+        }
+        .total-row {
+          display: flex;
+          justify-content: space-between;
+          margin: 6px 0;
+          font-size: 13px;
+        }
+        .total-label {
+          font-weight: bold;
+        }
+        .final-row {
+          margin-top: 10px;
+          padding-top: 10px;
+          border-top: 1px solid rgba(255, 255, 255, 0.2);
+          font-size: 15px;
+        }
+        .footer {
+          margin-top: 18px;
+          text-align: center;
+          font-size: 12px;
+          color: #666;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="watermark">PURCHASE INVOICE</div>
+
+      <div class="company-header">
+        <h1 class="company-name">${settings.company_name || 'Company Name'}</h1>
+        <p class="company-details">${settings.company_address || 'Company Address'}</p>
+        <p class="company-details">Tel: ${settings.company_phone || 'N/A'} | VAT No: ${settings.vat_number || 'N/A'} | Tax No: ${settings.tax_number || 'N/A'}</p>
+      </div>
+
+      <div class="document-title">Purchase Invoice</div>
+
+      <div class="slip-header">
+        <div class="order-info">
+          <div class="info-label">Invoice Number</div>
+          <div class="info-value">${invoice.invoice_number}</div>
+          <div class="info-label">Date</div>
+          <div class="info-value">${new Date(invoice.invoice_date).toLocaleDateString()}</div>
+          <div class="info-label">Due Date</div>
+          <div class="info-value">${new Date(invoice.due_date).toLocaleDateString()}</div>
+        </div>
+        <div class="contractor-info">
+          <div class="info-label">Supplier Details</div>
+          <div class="info-value">${invoice.supplier_name}</div>
+          <div class="info-value">${invoice.supplier_phone || 'N/A'}</div>
+          <div class="info-label">Contractor Details</div>
+          <div class="info-value">${invoice.contractor_name || 'N/A'}</div>
+          <div class="info-value">Code: ${invoice.contractor_code || 'N/A'}</div>
+        </div>
+      </div>
+
+      <div class="materials-details">
+        <table class="materials-table">
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Total Weight</th>
+              <th>Deduct 1</th>
+              <th>Deduct 2</th>
+              <th>Net Weight</th>
+              <th>Rate</th>
+              <th>Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${invoice.items.map(item => `
+              <tr>
+                <td>${item.product_name}</td>
+                <td>${item.total_weight.toFixed(2)} ${item.unit}</td>
+                <td>${item.deduct_weight1.toFixed(2)} ${item.unit}</td>
+                <td>${item.deduct_weight2.toFixed(2)} ${item.unit}</td>
+                <td>${item.net_weight.toFixed(2)} ${item.unit}</td>
+                <td>Rs. ${item.rate.toFixed(2)}</td>
+                <td>Rs. ${item.amount.toFixed(2)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="total-section">
+        <div class="total-row">
+          <span class="total-label">Total Amount</span>
+          <span>Rs. ${invoice.total_amount.toFixed(2)}</span>
+        </div>
+        <div class="total-row">
+          <span class="total-label">Cutting Rate</span>
+          <span>Rs. ${invoice.cutting_rate.toFixed(2)}/kg</span>
+        </div>
+        <div class="total-row">
+          <span class="total-label">Cutting Charges</span>
+          <span>Rs. ${invoice.cutting_charges.toFixed(2)}</span>
+        </div>
+        <div class="total-row">
+          <span class="total-label">Advance Payment</span>
+          <span>Rs. ${invoice.advance_payment.toFixed(2)}</span>
+        </div>
+        <div class="total-row final-row">
+          <span class="total-label">Final Amount</span>
+          <span>Rs. ${invoice.final_amount.toFixed(2)}</span>
+        </div>
+      </div>
+
+      <div class="footer">
+        <p>Notes: ${invoice.notes || 'N/A'}</p>
+        <p>For any queries, please contact us at ${settings.company_phone || 'N/A'} | Generated on ${new Date().toLocaleString()} IST</p>
+      </div>
+    </body>
+    </html>
+  `;
 };
 
 // @desc    Get cinnamon assignment reports
@@ -1272,64 +1578,161 @@ exports.createPurchaseInvoice = async (req, res) => {
   try {
     await connection.beginTransaction();
 
-    // Get unused advance payments for the contractor
-    const unusedPayments = await AdvancePayment.getUnusedPaymentsByContractor(req.body.contractor);
-    const totalAdvanceAvailable = unusedPayments.reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
+    const {
+      contractor,
+      items,
+      status,
+      notes,
+      selectedAdvanceIds,
+      totalAmount,
+      totalNetWeight,
+      cuttingRate,
+      cuttingCharges,
+      advancePayment,
+      finalAmount
+    } = req.body;
 
-    // Validate if the advance payment amount in the request is not more than available
-    if (parseFloat(req.body.advancePayment || 0) > totalAdvanceAvailable) {
-      throw new Error('Advance payment amount exceeds available unused advance payments');
+    // Validate required fields
+    if (!contractor) {
+      throw new Error('Contractor is required');
+    }
+    if (!items || items.length === 0) {
+      throw new Error('At least one item is required');
     }
 
-    // Create the purchase invoice
-    const invoiceData = {
-      ...req.body,
-      created_by: req.user.id,
-      invoice_date: new Date(),
-      due_date: new Date(),
-    };
-    const [invoiceResult] = await connection.execute(
-      'INSERT INTO purchase_invoices SET ?',
-      invoiceData
+    // Generate invoice number
+    const date = new Date();
+    const year = date.getFullYear().toString().substr(-2);
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+
+    const [lastInvoice] = await connection.query(
+      'SELECT invoice_number FROM purchase_invoices WHERE invoice_number LIKE ? ORDER BY id DESC LIMIT 1',
+      [`PUR${year}${month}%`]
     );
 
-    // Create the purchase items
-    for (const item of req.body.items) {
+    let invoiceNumber;
+    if (lastInvoice.length > 0) {
+      const lastNumber = parseInt(lastInvoice[0].invoice_number.slice(-4));
+      invoiceNumber = `PUR${year}${month}${(lastNumber + 1).toString().padStart(4, '0')}`;
+    } else {
+      invoiceNumber = `PUR${year}${month}0001`;
+    }
+
+    // Insert purchase invoice
+    const [result] = await connection.execute(
+      `INSERT INTO purchase_invoices (
+        invoice_number,
+        supplier_id,
+        contractor_id,
+        invoice_date,
+        due_date,
+        subtotal,
+        total_amount,
+        cutting_rate,
+        cutting_charges,
+        advance_payment,
+        final_amount,
+        status,
+        notes,
+        created_by
+      ) VALUES (?, ?, ?, CURDATE(), DATE_ADD(CURDATE(), INTERVAL 15 DAY), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        invoiceNumber,
+        1, // Default supplier ID
+        contractor,
+        totalAmount,
+        totalAmount,
+        cuttingRate,
+        cuttingCharges,
+        advancePayment,
+        finalAmount,
+        status,
+        notes || '',
+        req.user.id
+      ]
+    );
+
+    const invoiceId = result.insertId;
+
+    // Insert purchase items
+    for (const item of items) {
       await connection.execute(
-        'INSERT INTO purchase_items SET ?',
-        {
-          invoice_id: invoiceResult.insertId,
-          ...item
-        }
+        `INSERT INTO purchase_items (
+          invoice_id,
+          grade_id,
+          total_weight,
+          deduct_weight1,
+          deduct_weight2,
+          net_weight,
+          rate,
+          amount
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          invoiceId,
+          item.grade,
+          item.total_weight,
+          item.deduct_weight1,
+          item.deduct_weight2,
+          item.net_weight,
+          item.rate,
+          item.amount
+        ]
       );
     }
 
-    // Handle advance payments
-    if (req.body.advancePayment > 0) {
-      let remainingAmount = parseFloat(req.body.advancePayment);
-      const usedPaymentIds = [];
+    // Update advance payment status if any
+    if (selectedAdvanceIds && selectedAdvanceIds.length > 0) {
+      // Update cutting advance payments status to used
+      await connection.execute(
+        `UPDATE cutting_advance_payments
+         SET
+           status = 'used',
+           used_in_invoice = ?,
+           used_date = CURRENT_TIMESTAMP
+         WHERE id IN (${selectedAdvanceIds.map(() => '?').join(',')})`,
+        [invoiceId, ...selectedAdvanceIds]
+      );
 
-      // Use advance payments in chronological order until the required amount is met
-      for (const payment of unusedPayments) {
-        if (remainingAmount <= 0) break;
+      // Create a record in cutting_payment_usages table
+      for (const advanceId of selectedAdvanceIds) {
+        const [advancePayment] = await connection.execute(
+          'SELECT amount FROM cutting_advance_payments WHERE id = ?',
+          [advanceId]
+        );
 
-        const paymentAmount = parseFloat(payment.amount);
-        usedPaymentIds.push(payment.id);
-        remainingAmount -= paymentAmount;
-      }
-
-      // Mark the used advance payments
-      if (usedPaymentIds.length > 0) {
-        await AdvancePayment.markPaymentsAsUsed(usedPaymentIds);
+        if (advancePayment.length > 0) {
+          await connection.execute(
+            `INSERT INTO cutting_payment_usages (
+              advance_payment_id,
+              invoice_id,
+              used_date,
+              amount,
+              notes
+            ) VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?)`,
+            [
+              advanceId,
+              invoiceId,
+              advancePayment[0].amount,
+              `Used in purchase invoice ${invoiceNumber}`
+            ]
+          );
+        }
       }
     }
 
     await connection.commit();
-    res.status(201).json({ id: invoiceResult.insertId });
+    res.status(201).json({
+      message: 'Purchase invoice created successfully',
+      id: invoiceId,
+      invoice_number: invoiceNumber
+    });
   } catch (error) {
     await connection.rollback();
-    console.error('Error creating purchase invoice:', error);
-    res.status(500).json({ message: error.message });
+    console.error('Detailed error creating purchase invoice:', error);
+    res.status(400).json({
+      message: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   } finally {
     connection.release();
   }
@@ -1437,5 +1840,82 @@ exports.deleteAssignment = async (req, res) => {
     res.status(500).json({ message: error.message });
   } finally {
     connection.release();
+  }
+};
+
+exports.getPurchases = async (req, res) => {
+  try {
+    const query = `
+      SELECT
+        pi.id,
+        pi.invoice_number,
+        pi.invoice_date as date,
+        c.name as supplier_name,
+        cc.name as contractor_name,
+        GROUP_CONCAT(
+          DISTINCT CONCAT(
+            i.product_name,
+            ' (',
+            pit.net_weight,
+            ' ',
+            i.unit,
+            ' @ Rs.',
+            pit.rate,
+            '/kg)'
+          )
+          SEPARATOR ', '
+        ) as product_details,
+        GROUP_CONCAT(DISTINCT i.product_name) as product_name,
+        CAST(SUM(pit.net_weight) AS DECIMAL(10,2)) as quantity,
+        MAX(i.unit) as unit,
+        pi.total_amount,
+        pi.status,
+        pi.advance_payment,
+        pi.cutting_rate,
+        pi.cutting_charges,
+        pi.final_amount
+      FROM purchase_invoices pi
+      JOIN customers c ON pi.supplier_id = c.id
+      LEFT JOIN cutting_contractors cc ON pi.contractor_id = cc.id
+      JOIN purchase_items pit ON pi.id = pit.invoice_id
+      JOIN inventory i ON pit.grade_id = i.id
+      GROUP BY
+        pi.id,
+        pi.invoice_number,
+        pi.invoice_date,
+        c.name,
+        cc.name,
+        pi.total_amount,
+        pi.status,
+        pi.advance_payment,
+        pi.cutting_rate,
+        pi.cutting_charges,
+        pi.final_amount
+      ORDER BY pi.invoice_date DESC
+    `;
+
+    const [purchases] = await pool.query(query);
+
+    // Format the purchase data
+    const formattedPurchases = purchases.map(purchase => ({
+      ...purchase,
+      product_name: purchase.product_name.split(',').join(', '),
+      product_details: purchase.product_details,
+      date: purchase.date,
+      quantity: Number(purchase.quantity).toFixed(2),
+      total_amount: Number(purchase.total_amount).toFixed(2),
+      advance_payment: Number(purchase.advance_payment || 0).toFixed(2),
+      cutting_rate: Number(purchase.cutting_rate || 0).toFixed(2),
+      cutting_charges: Number(purchase.cutting_charges || 0).toFixed(2),
+      final_amount: Number(purchase.final_amount || 0).toFixed(2)
+    }));
+
+    res.json(formattedPurchases);
+  } catch (error) {
+    console.error('Error fetching purchases:', error);
+    res.status(500).json({
+      message: 'Error fetching purchases',
+      error: error.message
+    });
   }
 };

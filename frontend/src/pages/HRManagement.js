@@ -558,8 +558,14 @@ export default function HRManagement() {
                 <span class="detail-label">Basic Salary</span>
                 <span class="amount">${formatCurrencyStatic(basicSalary, false)}</span>
               </div>
+              ${payroll.additional_amount > 0 ? `
               <div class="detail-row">
-                <span class="detail-label">Deductions (Salary Advances)</span>
+                <span class="detail-label">Additional Amount</span>
+                <span class="amount">+${formatCurrencyStatic(parseFloat(payroll.additional_amount), false)}</span>
+              </div>
+              ` : ''}
+              <div class="detail-row">
+                <span class="detail-label">Deductions</span>
                 <span class="amount">-${formatCurrencyStatic(deductions, false)}</span>
               </div>
             </div>

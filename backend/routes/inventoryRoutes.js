@@ -27,7 +27,7 @@ router.get('/raw-materials', protect, getRawMaterials);
 router.get('/finished-goods', protect, async (req, res) => {
   try {
     const [rows] = await pool.execute(
-      'SELECT id, product_name, purchase_price, quantity, unit FROM inventory WHERE product_type = ? AND status = ?',
+      'SELECT id, product_name, purchase_price, quantity, unit FROM inventory WHERE category = ? AND status = ?',
       ['finished_good', 'active']
     );
     res.json(rows);

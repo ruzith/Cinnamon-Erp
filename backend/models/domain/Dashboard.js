@@ -440,7 +440,7 @@ class Dashboard extends BaseModel {
         COUNT(CASE WHEN quantity <= min_stock_level THEN 1 END) as low_stock_items,
         COUNT(*) as inventory_orders,
         COALESCE(SUM(CASE
-          WHEN product_type = 'finished_good'
+          WHEN category = 'finished_good'
           THEN quantity * purchase_price
           ELSE 0
         END), 0) as total_value

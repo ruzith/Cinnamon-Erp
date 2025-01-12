@@ -23,20 +23,26 @@ import {
   Typography,
   Divider,
   Box,
+  Checkbox,
 } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { useDispatch } from 'react-redux';
 import { createInvoice } from '../features/purchases/purchaseSlice';
 import axios from 'axios';
 import { useCurrencyFormatter } from '../utils/currencyUtils';
+import { useTheme } from '@mui/material/styles';
+import PropTypes from 'prop-types';
 
-const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
+const PurchaseInvoiceForm = ({ open, onClose, selectedContractor, onSuccess, contractors }) => {
   const dispatch = useDispatch();
   const { formatCurrency } = useCurrencyFormatter();
   const [finishedGoods, setFinishedGoods] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [contractors, setContractors] = useState([]);
-  const [advancePayments, setAdvancePayments] = useState({ payments: [], totalUnusedAdvance: 0 });
+  const [advancePayments, setAdvancePayments] = useState({
+    payments: [],
+    totalUnusedAdvance: 0
+  });
+  const [selectedAdvances, setSelectedAdvances] = useState(new Set());
   const [formData, setFormData] = useState({
     contractor: '',
     items: [],
@@ -44,17 +50,14 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
     status: 'draft',
     notes: ''
   });
+  const theme = useTheme();
 
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        const [goodsRes, contractorsRes] = await Promise.all([
-          axios.get('/api/inventory/finished-goods'),
-          axios.get('/api/manufacturing/contractors')
-        ]);
+        const goodsRes = await axios.get('/api/inventory/finished-goods');
         setFinishedGoods(goodsRes.data);
-        setContractors(contractorsRes.data);
       } catch (error) {
         console.error('Error fetching data:', error);
       }
@@ -68,8 +71,9 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
     const fetchAdvancePayments = async () => {
       if (formData.contractor) {
         try {
-          const response = await axios.get(`/api/manufacturing/contractors/${formData.contractor}/advance-payments?status=unused`);
+          const response = await axios.get(`/api/cutting/contractors/${formData.contractor}/advance-payments?status=paid`);
           setAdvancePayments(response.data);
+          setSelectedAdvances(new Set(response.data.payments.map(p => p.id)));
         } catch (error) {
           console.error('Error fetching advance payments:', error);
         }
@@ -84,7 +88,7 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
       setFormData(prev => ({
         ...prev,
         contractor: selectedContractor.id,
-        cuttingRate: selectedContractor.cutting_rate
+        cuttingRate: selectedContractor.latest_manufacturing_contribution || 250.00
       }));
     }
   }, [selectedContractor]);
@@ -125,12 +129,19 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
     setFormData(prev => ({ ...prev, items: newItems }));
   };
 
+  const calculateTotalSelectedAdvances = () => {
+    return advancePayments.payments
+      .filter(payment => selectedAdvances.has(payment.id))
+      .reduce((sum, payment) => sum + parseFloat(payment.amount), 0);
+  };
+
   const calculateTotals = () => {
     const totalNetWeight = formData.items.reduce((sum, item) => sum + parseFloat(item.net_weight || 0), 0);
-    const totalAmount = formData.items.reduce((sum, item) => sum + parseFloat(item.amount || 0), 0);
+    const totalAmount = formData.items.reduce((sum, item) => sum + parseFloat(item.net_total || 0), 0);
     const cuttingCharges = totalNetWeight * parseFloat(formData.cuttingRate || 0);
     const amountAfterCutting = totalAmount - cuttingCharges;
-    const finalAmount = amountAfterCutting - advancePayments.totalUnusedAdvance;
+    const totalSelectedAdvances = calculateTotalSelectedAdvances();
+    const finalAmount = amountAfterCutting - totalSelectedAdvances;
 
     return {
       totalNetWeight: totalNetWeight.toFixed(2),
@@ -141,21 +152,48 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
     };
   };
 
-  const handleSubmit = async () => {
-    if (!formData.contractor) {
-      alert('Please select a contractor');
-      return;
-    }
-
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     try {
-      await dispatch(createInvoice({
-        ...formData,
-        ...calculateTotals(),
-        advancePayment: advancePayments.totalUnusedAdvance
-      })).unwrap();
+      if (!formData.contractor) {
+        throw new Error('Please select a contractor');
+      }
+
+      const requestData = {
+        contractor: formData.contractor,
+        items: formData.items.map(item => ({
+          grade: item.grade,
+          total_weight: parseFloat(item.total_weight),
+          deduct_weight1: parseFloat(item.deduct_weight1),
+          deduct_weight2: parseFloat(item.deduct_weight2),
+          net_weight: parseFloat(item.net_weight),
+          rate: parseFloat(item.rate),
+          amount: parseFloat(item.amount)
+        })),
+        status: formData.status,
+        notes: formData.notes,
+        selectedAdvanceIds: Array.from(selectedAdvances),
+        totalAmount: calculateTotals().totalAmount,
+        totalNetWeight: calculateTotals().totalNetWeight,
+        cuttingRate: formData.cuttingRate,
+        cuttingCharges: calculateTotals().cuttingCharges,
+        advancePayment: calculateTotalSelectedAdvances(),
+        finalAmount: calculateTotals().finalAmount
+      };
+
+      console.log('Sending purchase invoice data:', requestData);
+
+      const response = await axios.post('/api/manufacturing/purchase-invoices', requestData);
+      console.log('Purchase invoice response:', response.data);
+
+      if (onSuccess) {
+        onSuccess();
+      }
       onClose();
     } catch (error) {
-      console.error('Failed to create invoice:', error);
+      console.error('Error creating purchase invoice:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Error creating purchase invoice';
+      alert(`Failed to create purchase invoice: ${errorMessage}`);
     }
   };
 
@@ -191,7 +229,7 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
                 <Grid container spacing={2}>
                   <Grid item xs={8}>
                     <FormControl fullWidth size="small">
-                      <InputLabel>Select Contractor</InputLabel>
+                      <InputLabel>Select Cutting Contractor</InputLabel>
                       <Select
                         value={formData.contractor}
                         onChange={(e) => {
@@ -199,15 +237,19 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
                           setFormData(prev => ({
                             ...prev,
                             contractor: e.target.value,
-                            cuttingRate: contractor?.cutting_rate || 250
+                            cuttingRate: contractor?.latest_manufacturing_contribution || 250.00
                           }));
                         }}
-                        label="Select Contractor"
+                        label="Select Cutting Contractor"
                         required
                       >
                         {contractors.map(contractor => (
                           <MenuItem key={contractor.id} value={contractor.id}>
-                            {contractor.name} ({contractor.contractor_id}) - {formatCurrency(contractor.cutting_rate)}/kg
+                            {contractor.name} ({contractor.contractor_id})
+                            {contractor.latest_manufacturing_contribution ?
+                              ` - ${formatCurrency(contractor.latest_manufacturing_contribution)}/kg` :
+                              ' - No rate set'
+                            }
                           </MenuItem>
                         ))}
                       </Select>
@@ -251,16 +293,16 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
                   <Table size="small" sx={{ '& .MuiTableCell-root': { py: 1, px: 1 } }}>
                     <TableHead>
                       <TableRow>
-                        <TableCell sx={{ width: '20%', bgcolor: 'grey.50' }}>Grade</TableCell>
-                        <TableCell sx={{ width: '10%', bgcolor: 'grey.50' }}>Total (kg)</TableCell>
-                        <TableCell sx={{ width: '10%', bgcolor: 'grey.50' }}>Deduct 1 (kg)</TableCell>
-                        <TableCell sx={{ width: '10%', bgcolor: 'grey.50' }}>Deduct 2 (kg)</TableCell>
-                        <TableCell sx={{ width: '10%', bgcolor: 'grey.50' }}>Net (kg)</TableCell>
-                        <TableCell sx={{ width: '12%', bgcolor: 'grey.50' }}>Rate ({formatCurrency(0).split(' ')[0]})</TableCell>
-                        <TableCell sx={{ width: '10%', bgcolor: 'grey.50' }}>Amount ({formatCurrency(0).split(' ')[0]})</TableCell>
-                        <TableCell sx={{ width: '8%', bgcolor: 'grey.50' }}>Cal</TableCell>
-                        <TableCell sx={{ width: '10%', bgcolor: 'grey.50' }}>Net ({formatCurrency(0).split(' ')[0]})</TableCell>
-                        <TableCell padding="none" sx={{ bgcolor: 'grey.50' }} />
+                        <TableCell sx={{ width: '20%', bgcolor: theme.palette.action.hover }}>Grade</TableCell>
+                        <TableCell sx={{ width: '10%', bgcolor: theme.palette.action.hover }}>Total (kg)</TableCell>
+                        <TableCell sx={{ width: '10%', bgcolor: theme.palette.action.hover }}>Deduct 1 (kg)</TableCell>
+                        <TableCell sx={{ width: '10%', bgcolor: theme.palette.action.hover }}>Deduct 2 (kg)</TableCell>
+                        <TableCell sx={{ width: '10%', bgcolor: theme.palette.action.hover }}>Net (kg)</TableCell>
+                        <TableCell sx={{ width: '12%', bgcolor: theme.palette.action.hover }}>Rate ({formatCurrency(0).split(' ')[0]})</TableCell>
+                        <TableCell sx={{ width: '10%', bgcolor: theme.palette.action.hover }}>Amount ({formatCurrency(0).split(' ')[0]})</TableCell>
+                        <TableCell sx={{ width: '8%', bgcolor: theme.palette.action.hover }}>Cal</TableCell>
+                        <TableCell sx={{ width: '10%', bgcolor: theme.palette.action.hover }}>Net ({formatCurrency(0).split(' ')[0]})</TableCell>
+                        <TableCell padding="none" sx={{ bgcolor: theme.palette.action.hover }} />
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -334,19 +376,19 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
                         </TableRow>
                       ))}
                       <TableRow>
-                        <TableCell colSpan={4} align="right" sx={{ bgcolor: 'grey.50' }}>
+                        <TableCell colSpan={4} align="right" sx={{ bgcolor: theme.palette.action.hover }}>
                           <Typography variant="body2" sx={{ fontWeight: 600 }}>Totals:</Typography>
                         </TableCell>
-                        <TableCell sx={{ bgcolor: 'grey.50' }}>
+                        <TableCell sx={{ bgcolor: theme.palette.action.hover }}>
                           <Typography variant="body2" sx={{ fontWeight: 600 }}>{formatCurrency(calculateTotals().totalNetWeight)} kg</Typography>
                         </TableCell>
-                        <TableCell sx={{ bgcolor: 'grey.50' }} />
-                        <TableCell sx={{ bgcolor: 'grey.50' }} />
-                        <TableCell sx={{ bgcolor: 'grey.50' }} />
-                        <TableCell sx={{ bgcolor: 'grey.50' }}>
+                        <TableCell sx={{ bgcolor: theme.palette.action.hover }} />
+                        <TableCell sx={{ bgcolor: theme.palette.action.hover }} />
+                        <TableCell sx={{ bgcolor: theme.palette.action.hover }} />
+                        <TableCell sx={{ bgcolor: theme.palette.action.hover }}>
                           <Typography variant="body2" sx={{ fontWeight: 600 }}>{formatCurrency(calculateTotals().totalAmount)}</Typography>
                         </TableCell>
-                        <TableCell padding="none" sx={{ bgcolor: 'grey.50' }} />
+                        <TableCell padding="none" sx={{ bgcolor: theme.palette.action.hover }} />
                       </TableRow>
                     </TableBody>
                   </Table>
@@ -363,7 +405,7 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
                       <Box sx={{
                         display: 'flex',
                         justifyContent: 'space-between',
-                        bgcolor: 'grey.50',
+                        bgcolor: theme.palette.action.hover,
                         py: 1.25,
                         px: 1
                       }}>
@@ -394,10 +436,10 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
                         px: 1
                       }}>
                         <Typography variant="body2">
-                          Advance ({advancePayments.payments.length}):
+                          Advance ({selectedAdvances.size} selected):
                         </Typography>
                         <Typography variant="body2" color="error.main">
-                          - {formatCurrency(advancePayments.totalUnusedAdvance)}
+                          - {formatCurrency(calculateTotalSelectedAdvances())}
                         </Typography>
                       </Box>
                       <Divider />
@@ -430,23 +472,34 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
                         <Table size="small" sx={{ '& .MuiTableCell-root': { py: 1, px: 1 } }}>
                           <TableHead>
                             <TableRow>
-                              <TableCell sx={{ bgcolor: 'grey.50' }}>Date</TableCell>
-                              <TableCell sx={{ bgcolor: 'grey.50' }}>Amount ({formatCurrency(0).split(' ')[0]})</TableCell>
-                              <TableCell sx={{ bgcolor: 'grey.50' }}>Reference</TableCell>
-                              <TableCell sx={{ bgcolor: 'grey.50' }}>Status</TableCell>
+                              <TableCell sx={{ width: '48px', bgcolor: theme.palette.action.hover }}></TableCell>
+                              <TableCell sx={{ bgcolor: theme.palette.action.hover }}>Date</TableCell>
+                              <TableCell sx={{ bgcolor: theme.palette.action.hover }}>Amount ({formatCurrency(0).split(' ')[0]})</TableCell>
+                              <TableCell sx={{ bgcolor: theme.palette.action.hover }}>Reference</TableCell>
                             </TableRow>
                           </TableHead>
                           <TableBody>
-                            {advancePayments.payments.map((payment, index) => (
-                              <TableRow key={index} hover>
-                                <TableCell>{new Date(payment.payment_date).toLocaleDateString()}</TableCell>
+                            {advancePayments.payments.map((payment) => (
+                              <TableRow key={payment.id} hover>
+                                <TableCell padding="checkbox">
+                                  <Checkbox
+                                    checked={selectedAdvances.has(payment.id)}
+                                    onChange={(e) => {
+                                      const newSelected = new Set(selectedAdvances);
+                                      if (e.target.checked) {
+                                        newSelected.add(payment.id);
+                                      } else {
+                                        newSelected.delete(payment.id);
+                                      }
+                                      setSelectedAdvances(newSelected);
+                                    }}
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  {new Date(payment.created_at).toLocaleDateString()}
+                                </TableCell>
                                 <TableCell>{formatCurrency(parseFloat(payment.amount))}</TableCell>
                                 <TableCell>{payment.receipt_number}</TableCell>
-                                <TableCell>
-                                  <Typography variant="body2" color="success.main">
-                                    Unused
-                                  </Typography>
-                                </TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
@@ -478,6 +531,14 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor }) => {
       </DialogActions>
     </Dialog>
   );
+};
+
+PurchaseInvoiceForm.propTypes = {
+  open: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  selectedContractor: PropTypes.object,
+  onSuccess: PropTypes.func,
+  contractors: PropTypes.array.isRequired
 };
 
 export default PurchaseInvoiceForm;

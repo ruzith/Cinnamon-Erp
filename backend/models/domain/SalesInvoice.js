@@ -9,12 +9,12 @@ class SalesInvoice extends BaseModel {
     const date = new Date();
     const year = date.getFullYear().toString().substr(-2);
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    
+
     const [result] = await this.pool.execute(
       'SELECT COUNT(*) as count FROM sales_invoices WHERE YEAR(created_at) = YEAR(CURRENT_DATE)'
     );
     const count = result[0].count + 1;
-    
+
     return `SAL${year}${month}${count.toString().padStart(4, '0')}`;
   }
 
@@ -28,7 +28,7 @@ class SalesInvoice extends BaseModel {
 
   async getWithDetails(id) {
     const [invoice] = await this.pool.execute(`
-      SELECT si.*, 
+      SELECT si.*,
              u.name as created_by_name,
              JSON_OBJECT(
                'name', si.customer_name,
@@ -64,7 +64,7 @@ class SalesInvoice extends BaseModel {
       // Validate stock availability
       for (const item of items) {
         const [inventory] = await connection.execute(
-          'SELECT quantity FROM inventory WHERE id = ? AND product_type = "finished_good"',
+          'SELECT quantity FROM inventory WHERE id = ? AND category = "finished_good"',
           [item.product_id]
         );
 
@@ -82,11 +82,11 @@ class SalesInvoice extends BaseModel {
 
       // Generate invoice number
       const invoiceNumber = await this.generateInvoiceNumber();
-      
+
       // Create invoice with explicit field names
       const [result] = await connection.execute(`
         INSERT INTO sales_invoices (
-          invoice_number, date, customer_name, customer_address, 
+          invoice_number, date, customer_name, customer_address,
           customer_phone, customer_email, sub_total, discount,
           tax, total, payment_method, payment_status, notes, status, created_by
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -202,4 +202,4 @@ class SalesInvoice extends BaseModel {
   }
 }
 
-module.exports = new SalesInvoice(); 
+module.exports = new SalesInvoice();

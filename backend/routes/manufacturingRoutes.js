@@ -22,7 +22,9 @@ const {
   printInvoice,
   getAssignmentReports,
   printAssignmentReport,
-  getManufacturingInvoices
+  getManufacturingInvoices,
+  getPurchases,
+  createPurchaseInvoice
 } = require('../controllers/manufacturingController');
 const ManufacturingOrder = require('../models/domain/ManufacturingOrder');
 const { validateOrder } = require('../validators/manufacturingValidator');
@@ -125,5 +127,9 @@ router.get('/material-requirements/:orderId', protect, getMaterialRequirements);
 // Invoice routes
 router.get('/invoices', protect, getManufacturingInvoices);
 router.get('/invoices/:id/print', protect, printInvoice);
+
+// Purchases routes
+router.get('/purchases', protect, getPurchases);
+router.post('/purchase-invoices', protect, authorize('admin', 'manager'), createPurchaseInvoice);
 
 module.exports = router;

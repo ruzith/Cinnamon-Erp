@@ -29,7 +29,10 @@ const {
   deleteAdvancePayment,
   updateAdvancePayment,
   updatePayment,
-  generateReceipt
+  generateReceipt,
+  getContractorAdvancePayments,
+  markAdvancePaymentAsPaid,
+  markPaymentAsPaid
 } = require('../controllers/cuttingController');
 
 router.use(protect);
@@ -97,5 +100,12 @@ router.route('/advance-payments/:id')
 
 router.route('/advance-payments/contractor/:id')
   .get(getAdvancePaymentsByContractor);
+
+// Add this route
+router.get('/contractors/:id/advance-payments', protect, getContractorAdvancePayments);
+
+// Add these new routes
+router.put('/advance-payments/:id/mark-paid', markAdvancePaymentAsPaid);
+router.put('/payments/:id/mark-paid', markPaymentAsPaid);
 
 module.exports = router;

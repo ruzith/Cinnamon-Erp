@@ -7,10 +7,38 @@ const CuttingPayment = require('../models/domain/CuttingPayment');
 // @access  Private
 exports.getContractors = async (req, res) => {
   try {
-    const contractors = await CuttingContractor.getActiveWithAssignments();
-    res.status(200).json(contractors);
+    const includeContribution = req.query.include_contribution === 'true';
+
+    const baseQuery = `
+      SELECT
+        cc.*,
+        COUNT(DISTINCT CASE WHEN la.status = 'active' THEN la.id END) as active_assignments,
+        GROUP_CONCAT(DISTINCT CASE WHEN la.status = 'active' THEN l.land_number END) as assigned_lands
+    `;
+
+    const contributionQuery = includeContribution ? `,
+        (SELECT cp.manufacturing_contribution
+         FROM cutting_payments cp
+         WHERE cp.contractor_id = cc.id
+         ORDER BY cp.created_at DESC
+         LIMIT 1) as latest_manufacturing_contribution
+    ` : '';
+
+    const query = `
+      ${baseQuery}
+      ${contributionQuery}
+      FROM cutting_contractors cc
+      LEFT JOIN land_assignments la ON cc.id = la.contractor_id
+      LEFT JOIN lands l ON la.land_id = l.id
+      GROUP BY cc.id
+      ORDER BY cc.name ASC
+    `;
+
+    const [contractors] = await CuttingContractor.pool.execute(query);
+    res.json(contractors);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Error fetching contractors:', error);
+    res.status(500).json({ error: 'Failed to fetch contractors' });
   }
 };
 
@@ -1176,5 +1204,119 @@ exports.generateReceipt = async (req, res) => {
     res.status(200).json({ receiptHtml });
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get contractor advance payments
+// @route   GET /api/cutting/contractors/:id/advance-payments
+// @access  Private
+exports.getContractorAdvancePayments = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const status = req.query.status;
+
+    let query = `
+      SELECT cap.*,
+             cc.name as contractor_name,
+             cc.contractor_id as contractor_number
+      FROM cutting_advance_payments cap
+      JOIN cutting_contractors cc ON cap.contractor_id = cc.id
+      WHERE cap.contractor_id = ?
+    `;
+
+    if (status) {
+      query += ` AND cap.status = ?`;
+    }
+
+    query += ` ORDER BY cap.created_at DESC`;
+
+    const [payments] = await CuttingContractor.pool.execute(
+      query,
+      status ? [id, status] : [id]
+    );
+
+    // Calculate total unused advance
+    const totalUnusedAdvance = payments.reduce((sum, payment) => {
+      return sum + parseFloat(payment.amount || 0);
+    }, 0);
+
+    res.json({
+      payments,
+      totalUnusedAdvance
+    });
+  } catch (error) {
+    console.error('Error fetching contractor advance payments:', error);
+    res.status(500).json({ error: 'Failed to fetch advance payments' });
+  }
+};
+
+// @desc    Mark advance payment as paid
+// @route   PUT /api/cutting/advance-payments/:id/mark-paid
+// @access  Private/Admin/Accountant
+exports.markAdvancePaymentAsPaid = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [result] = await CuttingContractor.pool.execute(
+      'UPDATE cutting_advance_payments SET status = ?, updated_at = NOW() WHERE id = ?',
+      ['paid', id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Advance payment not found' });
+    }
+
+    // Fetch updated payment details
+    const [updatedPayment] = await CuttingContractor.pool.execute(`
+      SELECT cap.*,
+             cc.name as contractor_name,
+             cc.contractor_id as contractor_number
+      FROM cutting_advance_payments cap
+      JOIN cutting_contractors cc ON cap.contractor_id = cc.id
+      WHERE cap.id = ?
+    `, [id]);
+
+    res.json(updatedPayment[0]);
+  } catch (error) {
+    console.error('Error marking advance payment as paid:', error);
+    res.status(500).json({ message: 'Error marking advance payment as paid' });
+  }
+};
+
+// @desc    Mark payment as paid
+// @route   PUT /api/cutting/payments/:id/mark-paid
+// @access  Private/Admin/Accountant
+exports.markPaymentAsPaid = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [result] = await CuttingContractor.pool.execute(
+      'UPDATE cutting_payments SET status = ?, updated_at = NOW() WHERE id = ?',
+      ['paid', id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Payment not found' });
+    }
+
+    // Fetch updated payment details
+    const [updatedPayment] = await CuttingContractor.pool.execute(`
+      SELECT cp.*,
+             cc.name as contractor_name,
+             l.land_number,
+             l.location,
+             u.name as created_by_name
+      FROM cutting_payments cp
+      LEFT JOIN cutting_contractors cc ON cp.contractor_id = cc.id
+      LEFT JOIN land_assignments la ON cp.assignment_id = la.id
+      LEFT JOIN lands l ON la.land_id = l.id
+      LEFT JOIN users u ON cp.created_by = u.id
+      WHERE cp.id = ?
+    `, [id]);
+
+    res.json(updatedPayment[0]);
+  } catch (error) {
+    console.error('Error marking payment as paid:', error);
+    res.status(500).json({ message: 'Error marking payment as paid' });
   }
 };

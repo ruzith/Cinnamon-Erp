@@ -53,6 +53,171 @@ import LandCategoryManager from '../components/lands/LandCategoryManager';
 import SummaryCard from '../components/common/SummaryCard';
 import axios from 'axios';
 
+const CategoryDialog = ({
+  open,
+  onClose,
+  selectedCategory,
+  onSubmit
+}) => {
+  const [formData, setFormData] = useState({
+    name: selectedCategory?.name || '',
+    description: selectedCategory?.description || '',
+    status: selectedCategory?.status || 'active'
+  });
+
+  useEffect(() => {
+    if (selectedCategory) {
+      setFormData({
+        name: selectedCategory.name,
+        description: selectedCategory.description || '',
+        status: selectedCategory.status
+      });
+    } else {
+      setFormData({
+        name: '',
+        description: '',
+        status: 'active'
+      });
+    }
+  }, [selectedCategory]);
+
+  const handleInputChange = (e) => {
+    setFormData(prev => ({
+      ...prev,
+      [e.target.name]: e.target.value
+    }));
+  };
+
+  const handleSubmit = () => {
+    onSubmit(formData);
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+    >
+      <DialogTitle>
+        {selectedCategory ? 'Edit Category' : 'New Category'}
+      </DialogTitle>
+      <DialogContent>
+        <Grid container spacing={2} sx={{ mt: 1 }}>
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="Name"
+              name="name"
+              value={formData.name}
+              onChange={handleInputChange}
+              required
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="Description"
+              name="description"
+              value={formData.description}
+              onChange={handleInputChange}
+              multiline
+              rows={3}
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <FormControl fullWidth>
+              <InputLabel>Status</InputLabel>
+              <Select
+                name="status"
+                value={formData.status}
+                onChange={handleInputChange}
+                label="Status"
+              >
+                <MenuItem value="active">Active</MenuItem>
+                <MenuItem value="inactive">Inactive</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+        </Grid>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="contained" onClick={handleSubmit}>
+          {selectedCategory ? 'Update' : 'Create'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
+const ReassignmentDialog = ({
+  open,
+  onClose,
+  reassignmentData,
+  categories,
+  onReassign,
+  oldCategoryId,
+  onCategoryChange
+}) => (
+  <Dialog
+    open={open}
+    onClose={onClose}
+    maxWidth="sm"
+    fullWidth
+  >
+    <DialogTitle>Reassign Lands</DialogTitle>
+    <DialogContent>
+      <Box sx={{ mt: 2 }}>
+        <Alert severity="info" sx={{ mb: 2 }}>
+          This category has lands assigned to it. Please select a new category for these lands before deleting.
+        </Alert>
+
+        <FormControl fullWidth sx={{ mb: 2 }}>
+          <InputLabel>New Category</InputLabel>
+          <Select
+            value={reassignmentData.newCategoryId}
+            onChange={(e) => onCategoryChange(e.target.value)}
+            label="New Category"
+          >
+            {categories
+              .filter(c => c.id !== oldCategoryId)
+              .map((category) => (
+                <MenuItem key={category.id} value={category.id}>
+                  {category.name}
+                </MenuItem>
+              ))}
+          </Select>
+        </FormControl>
+
+        <Typography variant="subtitle2" sx={{ mb: 1 }}>
+          Affected Lands ({reassignmentData.affectedLands.length}):
+        </Typography>
+        <List dense>
+          {reassignmentData.affectedLands.map((land) => (
+            <ListItem key={land.id}>
+              <ListItemText
+                primary={land.name}
+                secondary={`${land.land_number} - ${land.size} ha`}
+              />
+            </ListItem>
+          ))}
+        </List>
+      </Box>
+    </DialogContent>
+    <DialogActions>
+      <Button onClick={onClose}>Cancel</Button>
+      <Button
+        onClick={() => onReassign(reassignmentData.newCategoryId)}
+        color="primary"
+        disabled={!reassignmentData.newCategoryId}
+      >
+        Reassign and Delete
+      </Button>
+    </DialogActions>
+  </Dialog>
+);
+
 const LandManagement = () => {
   const dispatch = useDispatch();
   const { lands, isLoading } = useSelector((state) => state.lands);
@@ -67,11 +232,13 @@ const LandManagement = () => {
   const [categories, setCategories] = useState([]);
   const [categoryDialog, setCategoryDialog] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
-  const [categoryFormData, setCategoryFormData] = useState({
-    name: '',
-    description: '',
-    status: 'active'
+  const [contractors, setContractors] = useState([]);
+  const [reassignmentData, setReassignmentData] = useState({
+    oldCategoryId: null,
+    newCategoryId: '',
+    affectedLands: []
   });
+  const [reassignDialog, setReassignDialog] = useState(false);
   const [filters, setFilters] = useState({
     landId: '',
     startDate: null,
@@ -82,13 +249,6 @@ const LandManagement = () => {
     maxTasks: '',
     contractorId: ''
   });
-  const [contractors, setContractors] = useState([]);
-  const [reassignmentData, setReassignmentData] = useState({
-    oldCategoryId: null,
-    newCategoryId: '',
-    affectedLands: []
-  });
-  const [reassignDialog, setReassignDialog] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -110,47 +270,21 @@ const LandManagement = () => {
   };
 
   const handleOpenCategoryDialog = (category = null) => {
-    if (category) {
-      setSelectedCategory(category);
-      setCategoryFormData({
-        name: category.name,
-        description: category.description || '',
-        status: category.status
-      });
-    } else {
-      setSelectedCategory(null);
-      setCategoryFormData({
-        name: '',
-        description: '',
-        status: 'active'
-      });
-    }
+    setSelectedCategory(category);
     setCategoryDialog(true);
   };
 
   const handleCloseCategoryDialog = () => {
     setCategoryDialog(false);
     setSelectedCategory(null);
-    setCategoryFormData({
-      name: '',
-      description: '',
-      status: 'active'
-    });
   };
 
-  const handleCategoryInputChange = (e) => {
-    setCategoryFormData(prev => ({
-      ...prev,
-      [e.target.name]: e.target.value
-    }));
-  };
-
-  const handleCategorySubmit = async () => {
+  const handleCategorySubmit = async (formData) => {
     try {
       if (selectedCategory) {
-        await axios.put(`/api/land-categories/${selectedCategory.id}`, categoryFormData);
+        await axios.put(`/api/land-categories/${selectedCategory.id}`, formData);
       } else {
-        await axios.post('/api/land-categories', categoryFormData);
+        await axios.post('/api/land-categories', formData);
       }
       await fetchCategories();
       handleCloseCategoryDialog();
@@ -348,6 +482,13 @@ const LandManagement = () => {
       default:
         return 'warning';
     }
+  };
+
+  const handleReassignmentCategoryChange = (newCategoryId) => {
+    setReassignmentData(prev => ({
+      ...prev,
+      newCategoryId
+    }));
   };
 
   const LandReportDialog = () => (
@@ -587,127 +728,6 @@ const LandManagement = () => {
       </DialogContent>
       <DialogActions sx={{ borderTop: 1, borderColor: 'divider', px: 3, py: 2 }}>
         <Button onClick={handleCloseLandReport} variant="outlined">Close</Button>
-      </DialogActions>
-    </Dialog>
-  );
-
-  // Category Dialog Component
-  const CategoryDialog = () => (
-    <Dialog
-      open={categoryDialog}
-      onClose={handleCloseCategoryDialog}
-      maxWidth="sm"
-      fullWidth
-    >
-      <DialogTitle>
-        {selectedCategory ? 'Edit Category' : 'New Category'}
-      </DialogTitle>
-      <DialogContent>
-        <Grid container spacing={2} sx={{ mt: 1 }}>
-          <Grid item xs={12}>
-            <TextField
-              fullWidth
-              label="Name"
-              name="name"
-              value={categoryFormData.name}
-              onChange={handleCategoryInputChange}
-              required
-            />
-          </Grid>
-          <Grid item xs={12}>
-            <TextField
-              fullWidth
-              label="Description"
-              name="description"
-              value={categoryFormData.description}
-              onChange={handleCategoryInputChange}
-              multiline
-              rows={3}
-            />
-          </Grid>
-          <Grid item xs={12}>
-            <FormControl fullWidth>
-              <InputLabel>Status</InputLabel>
-              <Select
-                name="status"
-                value={categoryFormData.status}
-                onChange={handleCategoryInputChange}
-                label="Status"
-              >
-                <MenuItem value="active">Active</MenuItem>
-                <MenuItem value="inactive">Inactive</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
-        </Grid>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={handleCloseCategoryDialog}>Cancel</Button>
-        <Button variant="contained" onClick={handleCategorySubmit}>
-          {selectedCategory ? 'Update' : 'Create'}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-
-  const ReassignmentDialog = () => (
-    <Dialog
-      open={reassignDialog}
-      onClose={handleReassignmentClose}
-      maxWidth="sm"
-      fullWidth
-    >
-      <DialogTitle>Reassign Lands</DialogTitle>
-      <DialogContent>
-        <Box sx={{ mt: 2 }}>
-          <Alert severity="info" sx={{ mb: 2 }}>
-            This category has lands assigned to it. Please select a new category for these lands before deleting.
-          </Alert>
-
-          <FormControl fullWidth sx={{ mb: 2 }}>
-            <InputLabel>New Category</InputLabel>
-            <Select
-              value={reassignmentData.newCategoryId}
-              onChange={(e) => setReassignmentData(prev => ({
-                ...prev,
-                newCategoryId: e.target.value
-              }))}
-              label="New Category"
-            >
-              {categories
-                .filter(c => c.id !== reassignmentData.oldCategoryId)
-                .map((category) => (
-                  <MenuItem key={category.id} value={category.id}>
-                    {category.name}
-                  </MenuItem>
-                ))}
-            </Select>
-          </FormControl>
-
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>
-            Affected Lands ({reassignmentData.affectedLands.length}):
-          </Typography>
-          <List dense>
-            {reassignmentData.affectedLands.map((land) => (
-              <ListItem key={land.id}>
-                <ListItemText
-                  primary={land.name}
-                  secondary={`${land.land_number} - ${land.size} ha`}
-                />
-              </ListItem>
-            ))}
-          </List>
-        </Box>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={handleReassignmentClose}>Cancel</Button>
-        <Button
-          onClick={handleReassignmentSubmit}
-          color="primary"
-          disabled={!reassignmentData.newCategoryId}
-        >
-          Reassign and Delete
-        </Button>
       </DialogActions>
     </Dialog>
   );
@@ -1238,8 +1258,21 @@ const LandManagement = () => {
       </Dialog>
 
       <LandReportDialog />
-      <CategoryDialog />
-      <ReassignmentDialog />
+      <CategoryDialog
+        open={categoryDialog}
+        onClose={handleCloseCategoryDialog}
+        selectedCategory={selectedCategory}
+        onSubmit={handleCategorySubmit}
+      />
+      <ReassignmentDialog
+        open={reassignDialog}
+        onClose={handleReassignmentClose}
+        reassignmentData={reassignmentData}
+        categories={categories}
+        onReassign={handleReassignmentSubmit}
+        oldCategoryId={reassignmentData.oldCategoryId}
+        onCategoryChange={handleReassignmentCategoryChange}
+      />
     </Box>
   );
 };

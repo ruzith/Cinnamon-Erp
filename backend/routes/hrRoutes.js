@@ -4,6 +4,7 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 const { pool } = require('../config/db');
 const SalaryAdvance = require('../models/domain/SalaryAdvance');
 const Payroll = require('../models/domain/Payroll');
+const hrController = require('../controllers/hrController');
 
 const salaryAdvanceModel = new SalaryAdvance();
 const payrollModel = new Payroll();
@@ -92,6 +93,8 @@ router.put('/payroll/:id/status', [protect, authorize('admin', 'hr')], async (re
     res.status(500).json({ message: error.message });
   }
 });
+
+router.put('/payroll/:id/approve', [protect, authorize('admin', 'hr')], hrController.approvePayroll);
 
 router.get('/reports/payroll', [protect, authorize('admin', 'hr')], async (req, res) => {
   try {

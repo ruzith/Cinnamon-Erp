@@ -4,32 +4,47 @@ class Transaction extends BaseModel {
   constructor() {
     super('transactions');
     this.validStatuses = ['draft', 'posted', 'void'];
-    this.validCategories = ['production', 'maintenance', 'royalty', 'lease'];
+    this.validCategories = [
+      'sales_income',
+      'production_expense',
+      'maintenance_expense',
+      'utility_expense',
+      'other_expense',
+      'credit_contribution',
+      'manufacturing_cost',
+      'raw_material_payment',
+      'salary_payment'
+    ];
   }
 
   async generateReference() {
     const date = new Date();
     const year = date.getFullYear().toString().substr(-2);
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    
+
     const [result] = await this.pool.execute(
       'SELECT COUNT(*) as count FROM transactions WHERE YEAR(created_at) = YEAR(CURRENT_DATE)'
     );
     const count = result[0].count + 1;
-    
+
     return `TRX${year}${month}${count.toString().padStart(4, '0')}`;
   }
 
   async getWithDetails(id) {
     const [transaction] = await this.pool.execute(`
       SELECT t.*,
-             w.name as well_name,
-             l.name as lease_name,
-             u.name as created_by_name
+             u.name as created_by_name,
+             e.name as employee_name,
+             e.id as employee_code,
+             CASE
+               WHEN t.type = 'salary' THEN e.name
+               WHEN t.type = 'manufacturing_payment' THEN mo.order_number
+               ELSE NULL
+             END as reference_details
       FROM transactions t
-      JOIN wells w ON t.well_id = w.id
-      JOIN leases l ON t.lease_id = l.id
       LEFT JOIN users u ON t.created_by = u.id
+      LEFT JOIN employees e ON t.employee_id = e.id
+      LEFT JOIN manufacturing_orders mo ON t.reference = mo.order_number
       WHERE t.id = ?
     `, [id]);
 
@@ -75,7 +90,7 @@ class Transaction extends BaseModel {
       // Create transaction record
       const [result] = await connection.execute(
         `INSERT INTO transactions (
-          date, reference, description, status, 
+          date, reference, description, status,
           type, amount, category,
           well_id, lease_id, created_by
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -98,7 +113,7 @@ class Transaction extends BaseModel {
       for (const entry of entries) {
         await connection.execute(
           `INSERT INTO transactions_entries (
-            transaction_id, account_id, description, 
+            transaction_id, account_id, description,
             debit, credit
           ) VALUES (?, ?, ?, ?, ?)`,
           [
@@ -122,8 +137,8 @@ class Transaction extends BaseModel {
           }
 
           const balanceChange = entry.debit - entry.credit;
-          const amount = ['asset', 'expense'].includes(account[0].type) 
-            ? balanceChange 
+          const amount = ['asset', 'expense'].includes(account[0].type)
+            ? balanceChange
             : -balanceChange;
 
           await connection.execute(
@@ -159,8 +174,8 @@ class Transaction extends BaseModel {
       if (transaction.status === 'posted') {
         for (const entry of transaction.entries) {
           const balanceChange = entry.credit - entry.debit; // Reverse of original
-          const amount = ['asset', 'expense'].includes(entry.account_type) 
-            ? balanceChange 
+          const amount = ['asset', 'expense'].includes(entry.account_type)
+            ? balanceChange
             : -balanceChange;
 
           await this.pool.execute(
@@ -185,4 +200,4 @@ class Transaction extends BaseModel {
   }
 }
 
-module.exports = new Transaction(); 
+module.exports = new Transaction();

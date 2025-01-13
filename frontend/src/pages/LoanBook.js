@@ -78,8 +78,6 @@ const LoanBook = () => {
   const [loanFormData, setLoanFormData] = useState({
     borrower_type: "employee",
     borrower_id: "",
-    borrowerName: "",
-    borrowerContact: "",
     amount: "",
     interestRate: "",
     term: "",
@@ -105,6 +103,7 @@ const LoanBook = () => {
   const [openPayrollDialog, setOpenPayrollDialog] = useState(false);
   const [payrollDetails, setPayrollDetails] = useState(null);
   const [employees, setEmployees] = useState([]);
+  const [contractors, setContractors] = useState([]);
 
   const [reportFilters, setReportFilters] = useState({
     borrowerName: "",
@@ -126,7 +125,13 @@ const LoanBook = () => {
     fetchPayments();
     fetchSummary();
     fetchEmployees();
+    fetchContractors();
+    fetchLoansWithDetails();
   }, []);
+
+  useEffect(() => {
+    fetchLoansWithDetails();
+  }, [loans]);
 
   const fetchLoans = async () => {
     try {
@@ -177,6 +182,23 @@ const LoanBook = () => {
     }
   };
 
+  const fetchContractors = async () => {
+    try {
+      const [cuttingResponse, manufacturingResponse] = await Promise.all([
+        axios.get("/api/cutting/contractors"),
+        axios.get("/api/manufacturing/contractors")
+      ]);
+
+      const allContractors = [
+        ...cuttingResponse.data.map(c => ({...c, contractorType: 'cutting'})),
+        ...manufacturingResponse.data.map(c => ({...c, contractorType: 'manufacturing'}))
+      ];
+      setContractors(allContractors);
+    } catch (error) {
+      console.error("Error fetching contractors:", error);
+    }
+  };
+
   const fetchAllBorrowers = () => {
     try {
       // Extract unique borrowers from loans data
@@ -207,15 +229,16 @@ const LoanBook = () => {
       setLoanFormData({
         borrower_type: loan.borrower_type || "employee",
         borrower_id: loan.borrower_id,
-        borrowerName: loan.borrower_name,
-        borrowerContact: loan.borrower_contact || "",
         amount: loan.amount,
         interestRate: loan.interest_rate,
         term: loan.term_months,
-        startDate: new Date(loan.created_at).toISOString().split("T")[0],
+        paymentFrequency: loan.payment_frequency || "monthly",
+        startDate: new Date(loan.start_date).toISOString().split("T")[0],
         endDate: loan.end_date
           ? new Date(loan.end_date).toISOString().split("T")[0]
           : "",
+        purpose: loan.purpose || "",
+        collateral: loan.collateral || "",
         status: loan.status,
         notes: loan.notes || "",
       });
@@ -224,14 +247,15 @@ const LoanBook = () => {
       setLoanFormData({
         borrower_type: "employee",
         borrower_id: "",
-        borrowerName: "",
-        borrowerContact: "",
         amount: "",
         interestRate: "",
         term: "",
         startDate: "",
         endDate: "",
+        purpose: "",
+        collateral: "",
         status: "active",
+        paymentFrequency: "monthly",
         notes: "",
       });
     }
@@ -289,35 +313,81 @@ const LoanBook = () => {
     e.preventDefault();
     try {
       let response;
+      // Validate required fields
+      const requiredFields = {
+        borrower_type: 'Borrower Type',
+        borrower_id: 'Borrower',
+        amount: 'Loan Amount',
+        interestRate: 'Interest Rate',
+        term: 'Loan Term',
+        paymentFrequency: 'Payment Frequency',
+        startDate: 'Start Date',
+        endDate: 'End Date',
+        status: 'Status'
+      };
+
+      const missingFields = Object.entries(requiredFields)
+        .filter(([key, label]) => {
+          const value = loanFormData[key];
+          return !value && value !== 0;
+        })
+        .map(([_, label]) => label);
+
+      if (missingFields.length > 0) {
+        alert(`Please fill in the following required fields: ${missingFields.join(', ')}`);
+        return;
+      }
+
+      // Calculate remaining balance - initially equal to loan amount
+      const remainingBalance = Number(loanFormData.amount);
+
+      // Prepare loan data object with null for optional fields
+      const loanData = {
+        borrower_type: loanFormData.borrower_type,
+        borrower_id: Number(loanFormData.borrower_id),
+        amount: Number(loanFormData.amount),
+        interest_rate: Number(loanFormData.interestRate),
+        term_months: Number(loanFormData.term),
+        payment_frequency: loanFormData.paymentFrequency,
+        start_date: loanFormData.startDate,
+        end_date: loanFormData.endDate,
+        purpose: loanFormData.purpose || null,
+        collateral: loanFormData.collateral || null,
+        remaining_balance: remainingBalance,
+        status: loanFormData.status,
+        notes: loanFormData.notes || null
+      };
+
       if (selectedLoan) {
         response = await axios.put(
           `/api/loans/${selectedLoan.id}`,
-          loanFormData
+          loanData
         );
       } else {
-        response = await axios.post("/api/loans", {
-          ...loanFormData,
+        // For new loans, send loan data and accounting metadata separately
+        const requestData = {
+          loan: loanData,
           createAccountingEntry: true,
           accountingData: {
             type: "credit_payment",
             category: "loan_disbursement",
-            amount: loanFormData.amount,
-            description: `Loan disbursement to ${
-              loanFormData.borrowerName || "borrower"
-            }`,
+            amount: Number(loanFormData.amount),
+            description: `Loan disbursement to borrower`,
             reference: `LOAN-${Date.now()}`,
             status: "completed",
-            notes: `Loan disbursement - ${
-              loanFormData.purpose || "No purpose specified"
-            }`,
-          },
-        });
+            notes: `Loan disbursement - ${loanFormData.purpose || "No purpose specified"}`
+          }
+        };
+
+        response = await axios.post("/api/loans", requestData);
       }
       fetchLoans();
       fetchSummary();
       handleCloseLoanDialog();
     } catch (error) {
       console.error("Error saving loan:", error);
+      console.error("Error details:", error.response?.data);
+      alert(error.response?.data?.message || "Error saving loan");
     }
   };
 
@@ -718,6 +788,54 @@ const LoanBook = () => {
     fetchAllBorrowers();
   }, [loans]);
 
+  const [loansWithDetails, setLoansWithDetails] = useState([]);
+
+  const fetchLoansWithDetails = async () => {
+    try {
+      const response = await axios.get("/api/loans");
+      const loansData = response.data;
+
+      // Fetch borrower details for each loan
+      const loansWithBorrowerDetails = await Promise.all(
+        loansData.map(async (loan) => {
+          let borrowerDetails = {};
+
+          if (loan.borrower_type === 'employee') {
+            const employeeResponse = await axios.get(`/api/employees/${loan.borrower_id}`);
+            borrowerDetails = {
+              borrowerName: employeeResponse.data.name,
+              borrowerContact: employeeResponse.data.phone
+            };
+          } else if (loan.borrower_type === 'contractor') {
+            // Try both contractor endpoints
+            try {
+              const cuttingResponse = await axios.get(`/api/cutting/contractors/${loan.borrower_id}`);
+              borrowerDetails = {
+                borrowerName: cuttingResponse.data.name,
+                borrowerContact: cuttingResponse.data.phone
+              };
+            } catch {
+              const manufacturingResponse = await axios.get(`/api/manufacturing/contractors/${loan.borrower_id}`);
+              borrowerDetails = {
+                borrowerName: manufacturingResponse.data.name,
+                borrowerContact: manufacturingResponse.data.phone
+              };
+            }
+          }
+
+          return {
+            ...loan,
+            ...borrowerDetails
+          };
+        })
+      );
+
+      setLoansWithDetails(loansWithBorrowerDetails);
+    } catch (error) {
+      console.error("Error fetching loans with details:", error);
+    }
+  };
+
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
       {/* Header */}
@@ -824,10 +942,10 @@ const LoanBook = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {loans.map((loan) => (
+                {loansWithDetails.map((loan) => (
                   <TableRow key={loan.id}>
                     <TableCell>{loan.loan_number}</TableCell>
-                    <TableCell>{loan.borrower_name}</TableCell>
+                    <TableCell>{loan.borrowerName}</TableCell>
                     <TableCell>{formatCurrency(loan.amount)}</TableCell>
                     <TableCell>{loan.interest_rate}%</TableCell>
                     <TableCell>{loan.term_months}</TableCell>
@@ -1214,7 +1332,7 @@ const LoanBook = () => {
         <DialogTitle>{selectedLoan ? "Edit Loan" : "New Loan"}</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={6}>
+            <Grid item xs={12}>
               <FormControl fullWidth>
                 <InputLabel>Borrower Type</InputLabel>
                 <Select
@@ -1225,12 +1343,11 @@ const LoanBook = () => {
                 >
                   <MenuItem value="employee">Employee</MenuItem>
                   <MenuItem value="contractor">Contractor</MenuItem>
-                  <MenuItem value="other">Other</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={6}>
-              {loanFormData.borrower_type === "employee" && (
+            <Grid item xs={12}>
+              {loanFormData.borrower_type === 'employee' && (
                 <FormControl fullWidth>
                   <InputLabel>Select Employee</InputLabel>
                   <Select
@@ -1238,9 +1355,7 @@ const LoanBook = () => {
                     value={loanFormData.borrower_id}
                     label="Select Employee"
                     onChange={handleLoanInputChange}
-                    required
                   >
-                    <MenuItem value="">Select Employee</MenuItem>
                     {employees.map((employee) => (
                       <MenuItem key={employee.id} value={employee.id}>
                         {employee.name} - {employee.nic}
@@ -1249,15 +1364,24 @@ const LoanBook = () => {
                   </Select>
                 </FormControl>
               )}
-            </Grid>
-            <Grid item xs={6}>
-              <TextField
-                name="borrowerContact"
-                label="Contact Information"
-                fullWidth
-                value={loanFormData.borrowerContact}
-                onChange={handleLoanInputChange}
-              />
+
+              {loanFormData.borrower_type === 'contractor' && (
+                <FormControl fullWidth>
+                  <InputLabel>Select Contractor</InputLabel>
+                  <Select
+                    name="borrower_id"
+                    value={loanFormData.borrower_id}
+                    label="Select Contractor"
+                    onChange={handleLoanInputChange}
+                  >
+                    {contractors.map((contractor) => (
+                      <MenuItem key={contractor.id} value={contractor.id}>
+                        {contractor.name} ({contractor.contractorType})
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
             </Grid>
             <Grid item xs={6}>
               <TextField

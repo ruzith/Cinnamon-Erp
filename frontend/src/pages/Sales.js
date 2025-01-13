@@ -25,6 +25,7 @@ import {
   Select,
   MenuItem,
   Autocomplete,
+  Divider,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -46,6 +47,7 @@ import { useCurrencyFormatter } from '../utils/currencyUtils';
 import SummaryCard from '../components/common/SummaryCard';
 import { useDispatch, useSelector } from 'react-redux';
 import { getCustomers, createCustomer, updateCustomer } from '../features/customers/customerSlice';
+import { useTheme } from '@mui/material/styles';
 
 const TabPanel = (props) => {
   const { children, value, index, ...other } = props;
@@ -110,6 +112,8 @@ const Sales = () => {
     sub_total: 0
   }]);
 
+  const theme = useTheme();
+
   useEffect(() => {
     fetchSales();
     dispatch(getCustomers());
@@ -149,47 +153,70 @@ const Sales = () => {
     setTabValue(newValue);
   };
 
-  const handleOpenDialog = (sale = null) => {
+  const handleOpenDialog = async (sale = null) => {
     if (sale) {
       setSelectedSale(sale);
-      const mappedItems = sale.items?.map(item => ({
-        id: item.product_id,
-        productName: item.product_name,
-        quantity: item.quantity,
-        unitPrice: item.unit_price || item.price,
-        unit: item.unit
-      })) || [];
 
-      setSaleFormData({
-        orderNumber: sale.order_number || '',
-        customerId: sale.customer_id || '',
-        items: mappedItems,
-        status: sale.status || 'draft',
-        paymentStatus: sale.payment_status || 'pending',
-        paymentMethod: sale.payment_method || '',
-        notes: sale.notes || '',
-        shippingAddress: sale.shipping_address || '',
-        totalAmount: sale.total_amount || 0,
-        tax: sale.tax || 0,
-        discount: sale.discount || 0,
-        subTotal: sale.sub_total || 0
-      });
+      try {
+        // Fetch sale items when editing
+        const itemsResponse = await axios.get(`/api/sales/${sale.id}/items`);
+        const saleItems = itemsResponse.data;
+
+        // Pre-populate the form data with sale details
+        setSaleFormData({
+          customerId: sale.customer_id || '',  // Set the customer ID
+          status: sale.status || 'draft',
+          paymentStatus: sale.payment_status || 'pending',
+          paymentMethod: sale.payment_method || '',
+          notes: sale.notes || '',
+          shippingAddress: sale.shipping_address || '',
+          tax: sale.tax || 0,
+          discount: sale.discount || 0,
+          totalAmount: sale.total || 0,
+          subTotal: sale.sub_total || 0
+        });
+
+        // Pre-populate product rows with fetched items
+        if (saleItems && Array.isArray(saleItems)) {
+          const mappedRows = saleItems.map(item => ({
+            product_id: item.product_id,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            sub_total: item.sub_total || (item.quantity * item.unit_price)
+          }));
+          setProductRows(mappedRows);
+        }
+      } catch (error) {
+        console.error('Error fetching sale items:', error);
+        // If error fetching items, set empty product row
+        setProductRows([{
+          product_id: '',
+          quantity: 1,
+          unit_price: 0,
+          sub_total: 0
+        }]);
+      }
     } else {
+      // Reset form for new sale
       setSelectedSale(null);
       setSaleFormData({
-        orderNumber: '',
         customerId: '',
-        items: [],
         status: 'draft',
         paymentStatus: 'pending',
         paymentMethod: '',
         notes: '',
         shippingAddress: '',
-        totalAmount: 0,
         tax: 0,
         discount: 0,
+        totalAmount: 0,
         subTotal: 0
       });
+      setProductRows([{
+        product_id: '',
+        quantity: 1,
+        unit_price: 0,
+        sub_total: 0
+      }]);
     }
     setOpenDialog(true);
   };
@@ -307,17 +334,15 @@ const Sales = () => {
     }
 
     try {
-      const transformedItems = productRows.map(row => {
-        return {
-          product_id: row.product_id,
-          quantity: parseFloat(row.quantity),
-          unit_price: parseFloat(row.unit_price),
-          sub_total: row.sub_total,
-          discount: 0
-        };
-      });
+      const transformedItems = productRows.map(row => ({
+        product_id: row.product_id,
+        quantity: parseFloat(row.quantity),
+        unit_price: parseFloat(row.unit_price),
+        sub_total: row.sub_total,
+        discount: 0
+      }));
 
-      const totalAmount = transformedItems.reduce((sum, item) => sum + item.sub_total, 0);
+      const subtotal = transformedItems.reduce((sum, item) => sum + item.sub_total, 0);
 
       const formattedData = {
         customer_id: saleFormData.customerId,
@@ -329,20 +354,27 @@ const Sales = () => {
         shipping_address: saleFormData.shippingAddress,
         tax: parseFloat(saleFormData.tax) || 0,
         discount: parseFloat(saleFormData.discount) || 0,
-        sub_total: totalAmount,
-        total: totalAmount - (parseFloat(saleFormData.discount) || 0) + (parseFloat(saleFormData.tax) || 0),
+        sub_total: subtotal,
+        total: calculateTotal(),
         date: new Date().toISOString().split('T')[0]
       };
 
+      let response;
       if (selectedSale) {
-        await axios.put(`/api/sales/${selectedSale.id}`, formattedData);
+        // Update existing sale
+        response = await axios.put(`/api/sales/${selectedSale.id}`, formattedData);
+        console.log('Updated sale:', response.data);
       } else {
-        await axios.post('/api/sales', formattedData);
+        // Create new sale
+        response = await axios.post('/api/sales', formattedData);
+        console.log('Created sale:', response.data);
       }
+
+      // Refresh sales list and close dialog
       fetchSales();
       handleCloseDialog();
 
-      // Reset product rows
+      // Reset form data
       setProductRows([{
         product_id: '',
         quantity: 1,
@@ -394,13 +426,14 @@ const Sales = () => {
     }
   };
 
-  const handleDelete = async (saleId) => {
+  const handleDelete = async (sale) => {
     if (window.confirm('Are you sure you want to delete this sale?')) {
       try {
-        await axios.delete(`/api/sales/${saleId}`);
-        fetchSales();
+        await axios.delete(`/api/sales/${sale.id}`);
+        fetchSales(); // Refresh the sales list
       } catch (error) {
         console.error('Error deleting sale:', error);
+        alert(error.response?.data?.message || 'Error deleting sale');
       }
     }
   };
@@ -502,6 +535,20 @@ const Sales = () => {
       subTotal: newTotal
     }));
   };
+
+  const calculateTotal = () => {
+    const subtotal = productRows.reduce((sum, row) => sum + (row.sub_total || 0), 0);
+    const tax = parseFloat(saleFormData.tax) || 0;
+    const discount = parseFloat(saleFormData.discount) || 0;
+    return subtotal + tax - discount;
+  };
+
+  const [formData, setFormData] = useState({
+    contractor: '',
+    items: [],
+    status: 'draft',
+    notes: ''
+  });
 
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
@@ -635,10 +682,10 @@ const Sales = () => {
                     {sale.status === 'draft' && (
                       <IconButton
                         size="small"
-                        onClick={() => handleEdit(sale)}
-                        sx={{ color: 'primary.main', ml: 1 }}
+                        onClick={() => handleDelete(sale)}
+                        sx={{ color: 'error.main', ml: 1 }}
                       >
-                        <EditIcon fontSize="small" />
+                        <DeleteIcon fontSize="small" />
                       </IconButton>
                     )}
                   </TableCell>
@@ -653,181 +700,280 @@ const Sales = () => {
       <Dialog
         open={openDialog}
         onClose={handleCloseDialog}
-        maxWidth="md"
+        maxWidth="lg"
         fullWidth
+        PaperProps={{
+          sx: {
+            minHeight: '80vh',
+            maxHeight: '90vh'
+          }
+        }}
       >
-        <DialogTitle>
-          {selectedSale ? 'Edit Sale' : 'New Sale'}
+        <DialogTitle sx={{ py: 1.5 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+            {selectedSale ? 'Edit Sale' : 'New Sale'}
+          </Typography>
         </DialogTitle>
-        <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
+        <Divider />
+        <DialogContent sx={{ p: 2 }}>
+          <Grid container spacing={2} sx={{ mt: 0 }}>
+            {/* Header Section */}
             <Grid item xs={12}>
-              <FormControl fullWidth>
-                <InputLabel>Customer</InputLabel>
-                <Select
-                  name="customerId"
-                  value={saleFormData.customerId}
-                  label="Customer"
-                  onChange={handleSaleInputChange}
-                  required
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <MenuItem value="">Loading customers...</MenuItem>
-                  ) : customers.map((customer) => (
-                    <MenuItem key={customer.id} value={customer.id}>
-                      {customer.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              {isError && (
-                <Typography color="error" variant="caption" sx={{ mt: 1 }}>
-                  Error loading customers: {message}
-                </Typography>
-              )}
+              <Paper elevation={0} variant="outlined" sx={{ p: 2, mb: 2 }}>
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Select Customer</InputLabel>
+                      <Select
+                        name="customerId"
+                        value={saleFormData.customerId}
+                        onChange={handleSaleInputChange}
+                        label="Select Customer"
+                        required
+                      >
+                        {customers.map(customer => (
+                          <MenuItem key={customer.id} value={customer.id}>
+                            {customer.name} ({customer.phone})
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                </Grid>
+              </Paper>
             </Grid>
 
-            {/* Replace product selection with product rows */}
+            {/* Items Section */}
             <Grid item xs={12}>
-              <Typography variant="subtitle1" sx={{ mb: 2 }}>Products</Typography>
-              {productRows.map((row, index) => (
-                <Box key={index} sx={{ display: 'flex', gap: 2, mb: 2 }}>
-                  <FormControl sx={{ flex: 2 }}>
-                    <InputLabel>Product</InputLabel>
-                    <Select
-                      value={row.product_id}
-                      label="Product"
-                      onChange={(e) => {
-                        const product = inventory.find(p => p.id === e.target.value);
-                        handleProductRowChange(index, 'product_id', e.target.value);
-                        handleProductRowChange(index, 'unit_price', product?.selling_price || 0);
-                      }}
-                      required
-                    >
-                      {inventory.map((item) => (
-                        <MenuItem key={item.id} value={item.id}>
-                          {item.product_name || item.productName}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                  <TextField
-                    type="number"
-                    label="Quantity"
-                    value={row.quantity}
-                    onChange={(e) => handleProductRowChange(index, 'quantity', parseFloat(e.target.value) || 0)}
-                    sx={{ flex: 1 }}
-                    InputProps={{ inputProps: { min: 1 } }}
-                  />
-                  <TextField
-                    type="number"
-                    label="Unit Price"
-                    value={row.unit_price}
-                    onChange={(e) => handleProductRowChange(index, 'unit_price', parseFloat(e.target.value) || 0)}
-                    sx={{ flex: 1 }}
-                    InputProps={{ inputProps: { min: 0, step: "0.01" } }}
-                  />
-                  <TextField
-                    type="number"
-                    label="Subtotal"
-                    value={row.sub_total}
-                    disabled
-                    sx={{ flex: 1 }}
-                  />
+              <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+                <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                    Items
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    startIcon={<AddIcon />}
+                    onClick={handleAddProductRow}
+                    size="small"
+                  >
+                    Add Item
+                  </Button>
                 </Box>
-              ))}
-              <Button
-                variant="outlined"
-                startIcon={<AddIcon />}
-                onClick={handleAddProductRow}
-                sx={{ mt: 1 }}
-              >
-                Add Product
-              </Button>
-            </Grid>
 
-            {/* Add accounting connection for payments */}
-            <Grid item xs={12}>
-              <Typography variant="subtitle1" sx={{ mb: 2 }}>Payment Details</Typography>
+                <TableContainer sx={{ mb: 0 }}>
+                  <Table size="small" sx={{ '& .MuiTableCell-root': { py: 1, px: 1 } }}>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ width: '30%', bgcolor: theme.palette.action.hover }}>Product</TableCell>
+                        <TableCell sx={{ width: '15%', bgcolor: theme.palette.action.hover }}>Quantity</TableCell>
+                        <TableCell sx={{ width: '20%', bgcolor: theme.palette.action.hover }}>Unit Price ({formatCurrency(0).split(' ')[0]})</TableCell>
+                        <TableCell sx={{ width: '20%', bgcolor: theme.palette.action.hover }}>Total ({formatCurrency(0).split(' ')[0]})</TableCell>
+                        <TableCell padding="none" sx={{ bgcolor: theme.palette.action.hover }} />
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {productRows.map((row, index) => (
+                        <TableRow key={index} hover>
+                          <TableCell>
+                            <FormControl fullWidth size="small">
+                              <Select
+                                value={row.product_id}
+                                onChange={(e) => {
+                                  const product = inventory.find(p => p.id === e.target.value);
+                                  handleProductRowChange(index, 'product_id', e.target.value);
+                                  handleProductRowChange(index, 'unit_price', product?.selling_price || 0);
+                                }}
+                              >
+                                {inventory.map((item) => (
+                                  <MenuItem key={item.id} value={item.id}>
+                                    {item.product_name}
+                                  </MenuItem>
+                                ))}
+                              </Select>
+                            </FormControl>
+                          </TableCell>
+                          <TableCell>
+                            <TextField
+                              fullWidth
+                              size="small"
+                              type="number"
+                              value={row.quantity}
+                              onChange={(e) => handleProductRowChange(index, 'quantity', Number(e.target.value))}
+                              InputProps={{ inputProps: { min: 1 } }}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <TextField
+                              fullWidth
+                              size="small"
+                              type="number"
+                              value={row.unit_price}
+                              onChange={(e) => handleProductRowChange(index, 'unit_price', Number(e.target.value))}
+                              InputProps={{
+                                inputProps: {
+                                  min: 0,
+                                  step: "1"
+                                }
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell>{formatCurrency(row.sub_total)}</TableCell>
+                          <TableCell padding="none">
+                            <IconButton
+                              size="small"
+                              onClick={() => {
+                                const newRows = productRows.filter((_, i) => i !== index);
+                                setProductRows(newRows);
+                              }}
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Paper>
+
+              {/* Summary and Payment Details Row */}
               <Grid container spacing={2}>
-                <Grid item xs={12}>
-                  <FormControl fullWidth>
-                    <InputLabel>Payment Method</InputLabel>
-                    <Select
-                      name="paymentMethod"
-                      value={saleFormData.paymentMethod}
-                      label="Payment Method"
-                      onChange={handleSaleInputChange}
-                    >
-                      <MenuItem value="cash">Cash</MenuItem>
-                      <MenuItem value="card">Card</MenuItem>
-                      <MenuItem value="bank_transfer">Bank Transfer</MenuItem>
-                      <MenuItem value="check">Check</MenuItem>
-                    </Select>
-                  </FormControl>
+                {/* Invoice Summary Section */}
+                <Grid item xs={12} md={6}>
+                  <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>Summary</Typography>
+                    <Box>
+                      <Box sx={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        bgcolor: theme.palette.action.hover,
+                        py: 1.25,
+                        px: 1
+                      }}>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>Subtotal:</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {formatCurrency(productRows.reduce((sum, row) => sum + (row.sub_total || 0), 0))}
+                        </Typography>
+                      </Box>
+                      <Box sx={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        py: 1,
+                        px: 1
+                      }}>
+                        <Typography variant="body2">Tax:</Typography>
+                        <TextField
+                          size="small"
+                          type="number"
+                          value={saleFormData.tax}
+                          onChange={(e) => handleSaleInputChange({
+                            target: { name: 'tax', value: e.target.value }
+                          })}
+                          sx={{ width: '100px' }}
+                          InputProps={{ inputProps: { min: 0, step: "0.01" } }}
+                        />
+                      </Box>
+                      <Box sx={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        py: 1,
+                        px: 1
+                      }}>
+                        <Typography variant="body2">Discount:</Typography>
+                        <TextField
+                          size="small"
+                          type="number"
+                          value={saleFormData.discount}
+                          onChange={(e) => handleSaleInputChange({
+                            target: { name: 'discount', value: e.target.value }
+                          })}
+                          sx={{ width: '100px' }}
+                          InputProps={{ inputProps: { min: 0, step: "0.01" } }}
+                        />
+                      </Box>
+                      <Box sx={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        bgcolor: 'primary.main',
+                        color: 'primary.contrastText',
+                        p: 1.5,
+                        borderRadius: 1,
+                        mt: 2
+                      }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Total Amount</Typography>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                          {formatCurrency(calculateTotal())}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Paper>
+                </Grid>
+
+                {/* Payment Details Section */}
+                <Grid item xs={12} md={6}>
+                  <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>Payment Details</Typography>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12}>
+                        <FormControl fullWidth size="small">
+                          <InputLabel>Payment Method</InputLabel>
+                          <Select
+                            name="paymentMethod"
+                            value={saleFormData.paymentMethod}
+                            onChange={handleSaleInputChange}
+                            label="Payment Method"
+                          >
+                            <MenuItem value="cash">Cash</MenuItem>
+                            <MenuItem value="card">Card</MenuItem>
+                            <MenuItem value="bank_transfer">Bank Transfer</MenuItem>
+                            <MenuItem value="check">Check</MenuItem>
+                          </Select>
+                        </FormControl>
+                      </Grid>
+                      <Grid item xs={12}>
+                        <FormControl fullWidth size="small">
+                          <InputLabel>Payment Status</InputLabel>
+                          <Select
+                            name="paymentStatus"
+                            value={saleFormData.paymentStatus}
+                            onChange={handleSaleInputChange}
+                            label="Payment Status"
+                          >
+                            <MenuItem value="pending">Pending</MenuItem>
+                            <MenuItem value="partial">Partial</MenuItem>
+                            <MenuItem value="paid">Paid</MenuItem>
+                          </Select>
+                        </FormControl>
+                      </Grid>
+                      <Grid item xs={12}>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          label="Notes"
+                          name="notes"
+                          multiline
+                          rows={3}
+                          value={saleFormData.notes}
+                          onChange={handleSaleInputChange}
+                        />
+                      </Grid>
+                    </Grid>
+                  </Paper>
                 </Grid>
               </Grid>
             </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Status</InputLabel>
-                <Select
-                  name="status"
-                  value={saleFormData.status}
-                  label="Status"
-                  onChange={handleSaleInputChange}
-                >
-                  <MenuItem value="draft">Draft</MenuItem>
-                  <MenuItem value="confirmed">Confirmed</MenuItem>
-                  <MenuItem value="cancelled">Cancelled</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Payment Status</InputLabel>
-                <Select
-                  name="paymentStatus"
-                  value={saleFormData.paymentStatus}
-                  label="Payment Status"
-                  onChange={handleSaleInputChange}
-                >
-                  <MenuItem value="pending">Pending</MenuItem>
-                  <MenuItem value="partial">Partial</MenuItem>
-                  <MenuItem value="paid">Paid</MenuItem>
-                  <MenuItem value="refunded">Refunded</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Shipping Address"
-                name="shippingAddress"
-                multiline
-                rows={2}
-                value={saleFormData.shippingAddress}
-                onChange={handleSaleInputChange}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Notes"
-                name="notes"
-                multiline
-                rows={2}
-                value={saleFormData.notes}
-                onChange={handleSaleInputChange}
-              />
-            </Grid>
           </Grid>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
-          <Button variant="contained" onClick={handleSaleSubmit}>
+        <Divider />
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={handleCloseDialog} color="inherit">
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSaleSubmit}
+            variant="contained"
+            disabled={!saleFormData.customerId || productRows.length === 0}
+          >
             {selectedSale ? 'Update' : 'Create'}
           </Button>
         </DialogActions>

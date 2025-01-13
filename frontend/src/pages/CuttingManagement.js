@@ -78,7 +78,8 @@ const CuttingManagement = () => {
     land_id: '',
     start_date: '',
     end_date: '',
-    status: 'active'
+    status: 'active',
+    isFromContractor: false
   });
   const [lands, setLands] = useState([]);
   const [openPaymentDialog, setOpenPaymentDialog] = useState(false);
@@ -313,8 +314,8 @@ const CuttingManagement = () => {
         return;
       }
 
-      // Remove id from request body
-      const { id, ...submitData } = assignmentFormData;
+      // Remove id and isFromContractor from request body
+      const { id, isFromContractor, ...submitData } = assignmentFormData;
 
       if (assignmentFormData.id) {
         await axios.put(`/api/cutting/assignments/${assignmentFormData.id}`, submitData);
@@ -335,7 +336,8 @@ const CuttingManagement = () => {
         land_id: '',
         start_date: '',
         end_date: '',
-        status: 'active'
+        status: 'active',
+        isFromContractor: false
       });
     } catch (error) {
       console.error('Error saving assignment:', error);
@@ -478,7 +480,8 @@ const CuttingManagement = () => {
           land_id: '',
           start_date: '',
           end_date: '',
-          status: 'active'
+          status: 'active',
+          isFromContractor: !!contractor
         });
         setOpenAssignmentDialog(true);
       })
@@ -495,7 +498,8 @@ const CuttingManagement = () => {
       land_id: '',
       start_date: '',
       end_date: '',
-      status: 'active'
+      status: 'active',
+      isFromContractor: false
     });
   };
 
@@ -1395,7 +1399,7 @@ const CuttingManagement = () => {
         </DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
-            {!assignmentFormData.contractor_id && (
+            {!assignmentFormData.isFromContractor && (
               <Grid item xs={12}>
                 <FormControl fullWidth>
                   <InputLabel>Contractor</InputLabel>
@@ -1431,11 +1435,13 @@ const CuttingManagement = () => {
                     land_id: e.target.value
                   }))}
                 >
-                  {lands.map(land => (
-                    <MenuItem key={land.id} value={land.id}>
-                      {land.name} ({land.land_number}) - {land.location}
-                    </MenuItem>
-                  ))}
+                  {lands
+                    .filter(land => land.status === 'active')
+                    .map(land => (
+                      <MenuItem key={land.id} value={land.id}>
+                        {land.name} ({land.land_number}) - {land.location}
+                      </MenuItem>
+                    ))}
                 </Select>
               </FormControl>
             </Grid>
@@ -1754,24 +1760,22 @@ const CuttingManagement = () => {
           <Grid container spacing={2} sx={{ mt: 1 }}>
             {!cuttingPaymentFormData.isFromAssignment && (
               <Grid item xs={12}>
-                <FormControl fullWidth required>
-                  <InputLabel>Assignment</InputLabel>
+                <FormControl fullWidth>
+                  <InputLabel>Contractor</InputLabel>
                   <Select
-                    value={cuttingPaymentFormData.assignment_id || ''}
-                    label="Assignment"
-                    onChange={(e) => setCuttingPaymentFormData(prev => ({
+                    name="contractor_id"
+                    value={assignmentFormData.contractor_id}
+                    label="Contractor"
+                    onChange={(e) => setAssignmentFormData(prev => ({
                       ...prev,
-                      assignment_id: e.target.value
+                      contractor_id: e.target.value
                     }))}
                   >
-                    {assignments
-                      .filter(a =>
-                        a.contractor_id === cuttingPaymentFormData.contractor_id &&
-                        ['active', 'in_progress', 'completed'].includes(a.status)
-                      )
-                      .map(assignment => (
-                        <MenuItem key={assignment.id} value={assignment.id}>
-                          {`Land ${assignment.land_number} - ${assignment.location} (${assignment.status})`}
+                    {contractors
+                      .filter(c => c.status === 'active')
+                      .map(contractor => (
+                        <MenuItem key={contractor.id} value={contractor.id}>
+                          {contractor.name}
                         </MenuItem>
                       ))}
                   </Select>

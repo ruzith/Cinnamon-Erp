@@ -69,6 +69,62 @@ const TabPanel = (props) => {
   );
 };
 
+const transactionCategories = {
+  revenue: [
+    { value: 'sales_income', label: 'Sales Income' }
+  ],
+  expense: [
+    { value: 'production_expense', label: 'Production Expense' },
+    { value: 'maintenance_expense', label: 'Maintenance Expense' },
+    { value: 'utility_expense', label: 'Utility Expense' },
+    { value: 'other_expense', label: 'Other Expense' }
+  ],
+  credit_payment: [
+    { value: 'credit_contribution', label: 'Company Credit Contribution' }
+  ],
+  manufacturing_payment: [
+    { value: 'manufacturing_cost', label: 'Manufacturing Cost' },
+    { value: 'raw_material_payment', label: 'Raw Material Payment' }
+  ],
+  salary: [
+    { value: 'salary_payment', label: 'Salary Payment' }
+  ]
+};
+
+const accountCategories = {
+  asset: [
+    { value: 'cash_and_equivalents', label: 'Cash & Equivalents' },
+    { value: 'accounts_receivable', label: 'Accounts Receivable' },
+    { value: 'inventory', label: 'Inventory' },
+    { value: 'fixed_assets', label: 'Fixed Assets' },
+    { value: 'other_assets', label: 'Other Assets' }
+  ],
+  liability: [
+    { value: 'accounts_payable', label: 'Accounts Payable' },
+    { value: 'loans_payable', label: 'Loans Payable' },
+    { value: 'accrued_expenses', label: 'Accrued Expenses' },
+    { value: 'other_liabilities', label: 'Other Liabilities' }
+  ],
+  equity: [
+    { value: 'capital_stock', label: 'Capital Stock' },
+    { value: 'retained_earnings', label: 'Retained Earnings' },
+    { value: 'other_equity', label: 'Other Equity' }
+  ],
+  revenue: [
+    { value: 'sales_revenue', label: 'Sales Revenue' },
+    { value: 'service_revenue', label: 'Service Revenue' },
+    { value: 'other_revenue', label: 'Other Revenue' }
+  ],
+  expense: [
+    { value: 'cost_of_goods_sold', label: 'Cost of Goods Sold' },
+    { value: 'operating_expenses', label: 'Operating Expenses' },
+    { value: 'payroll_expenses', label: 'Payroll Expenses' },
+    { value: 'manufacturing_expenses', label: 'Manufacturing Expenses' },
+    { value: 'administrative_expenses', label: 'Administrative Expenses' },
+    { value: 'other_expenses', label: 'Other Expenses' }
+  ]
+};
+
 const Accounting = () => {
   const [tabValue, setTabValue] = useState(0);
   const [transactions, setTransactions] = useState([]);
@@ -110,7 +166,7 @@ const Accounting = () => {
   const [transactionFormData, setTransactionFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     type: 'expense',
-    category: 'production',
+    category: transactionCategories['expense']?.[0]?.value || '',
     amount: '',
     description: '',
     account: '',
@@ -120,12 +176,13 @@ const Accounting = () => {
   });
 
   const [accountFormData, setAccountFormData] = useState({
+    code: '',
     name: '',
     type: 'asset',
-    number: '',
-    description: '',
+    category: '',
     balance: '',
-    status: 'active'
+    status: 'active',
+    description: ''
   });
 
   const [ledgerEntries, setLedgerEntries] = useState([]);
@@ -161,10 +218,33 @@ const Accounting = () => {
     'other_expense'
   ];
 
+  const [manufacturingOrders, setManufacturingOrders] = useState([]);
+  const [employees, setEmployees] = useState([]);
+
+  const fetchManufacturingOrders = async () => {
+    try {
+      const response = await axios.get('/api/manufacturing/orders');
+      setManufacturingOrders(response.data);
+    } catch (error) {
+      console.error('Error fetching manufacturing orders:', error);
+    }
+  };
+
+  const fetchEmployees = async () => {
+    try {
+      const response = await axios.get('/api/employees');
+      setEmployees(response.data);
+    } catch (error) {
+      console.error('Error fetching employees:', error);
+    }
+  };
+
   useEffect(() => {
     fetchTransactions();
     fetchAccounts();
     fetchSummary();
+    fetchManufacturingOrders();
+    fetchEmployees();
   }, []);
 
   useEffect(() => {
@@ -222,55 +302,74 @@ const Accounting = () => {
     if (transaction) {
       setSelectedTransaction(transaction);
       setTransactionFormData({
-        date: transaction.date?.split('T')[0] || '',
-        type: transaction.type,
-        category: transaction.category,
-        amount: transaction.amount,
-        description: transaction.description,
-        account: transaction.account.id,
-        reference: transaction.reference,
-        status: transaction.status,
-        paymentMethod: transaction.paymentMethod,
-        notes: transaction.notes
+        date: transaction.date?.split('T')[0] || new Date().toISOString().split('T')[0],
+        type: transaction.type || 'expense',
+        category: transaction.category || transactionCategories['expense']?.[0]?.value,
+        amount: transaction.amount || '',
+        description: transaction.description || '',
+        account: transaction.account_id || '',
+        reference: transaction.reference || '',
+        status: transaction.status || 'draft',
+        paymentMethod: transaction.payment_method || '',
+        notes: transaction.notes || '',
+        employee: transaction.employee_id || '',
+        manufacturingOrder: transaction.reference_details || ''
       });
     } else {
       setSelectedTransaction(null);
       setTransactionFormData({
-        date: '',
+        date: new Date().toISOString().split('T')[0],
         type: 'expense',
-        category: 'production',
+        category: transactionCategories['expense']?.[0]?.value || '',
         amount: '',
         description: '',
         account: '',
         reference: '',
         status: 'draft',
         paymentMethod: '',
-        notes: ''
+        notes: '',
+        employee: '',
+        manufacturingOrder: ''
       });
     }
     setOpenTransactionDialog(true);
+  };
+
+  // Optional: Add a function to fetch account details if needed
+  const fetchTransactionAccount = async (accountId) => {
+    try {
+      const response = await axios.get(`/api/accounting/accounts/${accountId}`);
+      setTransactionFormData(prev => ({
+        ...prev,
+        account: response.data.id
+      }));
+    } catch (error) {
+      console.error('Error fetching account details:', error);
+    }
   };
 
   const handleOpenAccountDialog = (account = null) => {
     if (account) {
       setSelectedAccount(account);
       setAccountFormData({
+        code: account.code,
         name: account.name,
         type: account.type,
-        number: account.number,
-        description: account.description,
+        category: account.category,
         balance: account.balance,
-        status: account.status
+        status: account.status,
+        description: account.description
       });
     } else {
       setSelectedAccount(null);
       setAccountFormData({
+        code: '',
         name: '',
         type: 'asset',
-        number: '',
-        description: '',
+        category: accountCategories['asset']?.[0]?.value || '',
         balance: '',
-        status: 'active'
+        status: 'active',
+        description: ''
       });
     }
     setOpenAccountDialog(true);
@@ -287,32 +386,64 @@ const Accounting = () => {
   };
 
   const handleTransactionInputChange = (e) => {
-    setTransactionFormData({
-      ...transactionFormData,
-      [e.target.name]: e.target.name === 'amount' ? Number(e.target.value) : e.target.value,
-    });
+    const { name, value } = e.target;
+
+    if (name === 'type') {
+      // Reset category when type changes
+      setTransactionFormData(prev => ({
+        ...prev,
+        [name]: value,
+        category: transactionCategories[value]?.[0]?.value || ''
+      }));
+    } else {
+      setTransactionFormData(prev => ({
+        ...prev,
+        [name]: name === 'amount' ? Number(value) : value,
+      }));
+    }
   };
 
   const handleAccountInputChange = (e) => {
-    setAccountFormData({
-      ...accountFormData,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value } = e.target;
+
+    if (name === 'type') {
+      // Reset category when type changes
+      setAccountFormData(prev => ({
+        ...prev,
+        [name]: value,
+        category: accountCategories[value]?.[0]?.value || ''
+      }));
+    } else {
+      setAccountFormData(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
   };
 
   const handleTransactionSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.post('/api/accounting/transactions', {
-        ...transactionFormData,
-        status: transactionFormData.status || 'draft'
-      });
+      if (selectedTransaction) {
+        // If editing existing transaction
+        const response = await axios.put(`/api/accounting/transactions/${selectedTransaction.id}`, {
+          ...transactionFormData,
+          status: transactionFormData.status || 'draft'
+        });
+      } else {
+        // If creating new transaction
+        const response = await axios.post('/api/accounting/transactions', {
+          ...transactionFormData,
+          status: transactionFormData.status || 'draft'
+        });
+      }
+
       fetchTransactions();
       fetchSummary();
       handleCloseTransactionDialog();
     } catch (error) {
-      console.error('Error creating transaction:', error);
-      alert(error.response?.data?.message || 'Error creating transaction');
+      console.error('Error saving transaction:', error);
+      alert(error.response?.data?.message || 'Error saving transaction');
     }
   };
 
@@ -1058,30 +1189,24 @@ const Accounting = () => {
                 </FormControl>
               </Grid>
               <Grid item xs={12} md={8}>
-                <LocalizationProvider dateAdapter={AdapterDayjs}>
-                  <Box sx={{ display: 'flex', gap: 2 }}>
-                    <DatePicker
-                      label="Start Date"
-                      value={dateRange[0]}
-                      onChange={(newValue) => {
-                        setDateRange([newValue, dateRange[1]]);
-                      }}
-                      slotProps={{
-                        textField: { size: "small", fullWidth: true }
-                      }}
-                    />
-                    <DatePicker
-                      label="End Date"
-                      value={dateRange[1]}
-                      onChange={(newValue) => {
-                        setDateRange([dateRange[0], newValue]);
-                      }}
-                      slotProps={{
-                        textField: { size: "small", fullWidth: true }
-                      }}
-                    />
-                  </Box>
-                </LocalizationProvider>
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                  <TextField
+                    label="Start Date"
+                    type="date"
+                    value={dateRange[0].format('YYYY-MM-DD')}
+                    onChange={(e) => setDateRange([dayjs(e.target.value), dateRange[1]])}
+                    fullWidth
+                    InputLabelProps={{ shrink: true }}
+                  />
+                  <TextField
+                    label="End Date"
+                    type="date"
+                    value={dateRange[1].format('YYYY-MM-DD')}
+                    onChange={(e) => setDateRange([dateRange[0], dayjs(e.target.value)])}
+                    fullWidth
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Box>
               </Grid>
             </Grid>
 
@@ -1125,30 +1250,24 @@ const Accounting = () => {
           <Box sx={{ p: 3 }}>
             <Grid container spacing={2} sx={{ mb: 3 }}>
               <Grid item xs={12} md={8}>
-                <LocalizationProvider dateAdapter={AdapterDayjs}>
-                  <Box sx={{ display: 'flex', gap: 2 }}>
-                    <DatePicker
-                      label="Start Date"
-                      value={dateRange[0]}
-                      onChange={(newValue) => {
-                        setDateRange([newValue, dateRange[1]]);
-                      }}
-                      slotProps={{
-                        textField: { size: "small", fullWidth: true }
-                      }}
-                    />
-                    <DatePicker
-                      label="End Date"
-                      value={dateRange[1]}
-                      onChange={(newValue) => {
-                        setDateRange([dateRange[0], newValue]);
-                      }}
-                      slotProps={{
-                        textField: { size: "small", fullWidth: true }
-                      }}
-                    />
-                  </Box>
-                </LocalizationProvider>
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                  <TextField
+                    label="Start Date"
+                    type="date"
+                    value={dateRange[0].format('YYYY-MM-DD')}
+                    onChange={(e) => setDateRange([dayjs(e.target.value), dateRange[1]])}
+                    fullWidth
+                    InputLabelProps={{ shrink: true }}
+                  />
+                  <TextField
+                    label="End Date"
+                    type="date"
+                    value={dateRange[1].format('YYYY-MM-DD')}
+                    onChange={(e) => setDateRange([dateRange[0], dayjs(e.target.value)])}
+                    fullWidth
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Box>
               </Grid>
             </Grid>
 
@@ -1355,29 +1474,11 @@ const Accounting = () => {
                     label="Category"
                     onChange={handleTransactionInputChange}
                   >
-                    {transactionFormData.type === 'revenue' && (
-                      <MenuItem value="sales_income">Sales Income</MenuItem>
-                    )}
-                    {transactionFormData.type === 'expense' && (
-                      <>
-                        <MenuItem value="production_expense">Production Expense</MenuItem>
-                        <MenuItem value="maintenance_expense">Maintenance Expense</MenuItem>
-                        <MenuItem value="utility_expense">Utility Expense</MenuItem>
-                        <MenuItem value="other_expense">Other Expense</MenuItem>
-                      </>
-                    )}
-                    {transactionFormData.type === 'credit_payment' && (
-                      <MenuItem value="credit_contribution">Company Credit Contribution</MenuItem>
-                    )}
-                    {transactionFormData.type === 'manufacturing_payment' && (
-                      <>
-                        <MenuItem value="manufacturing_cost">Manufacturing Cost</MenuItem>
-                        <MenuItem value="raw_material_payment">Raw Material Payment</MenuItem>
-                      </>
-                    )}
-                    {transactionFormData.type === 'salary' && (
-                      <MenuItem value="salary_payment">Salary Payment</MenuItem>
-                    )}
+                    {transactionCategories[transactionFormData.type]?.map((category) => (
+                      <MenuItem key={category.value} value={category.value}>
+                        {category.label}
+                      </MenuItem>
+                    ))}
                   </Select>
                 </FormControl>
               </Grid>
@@ -1396,10 +1497,11 @@ const Accounting = () => {
                   <InputLabel>Account</InputLabel>
                   <Select
                     name="account"
-                    value={transactionFormData.account}
+                    value={transactionFormData.account || ''}
                     label="Account"
                     onChange={handleTransactionInputChange}
                   >
+                    <MenuItem value="">Select Account</MenuItem>
                     {accounts.map((account) => (
                       <MenuItem key={account.id} value={account.id}>
                         {account.name}
@@ -1409,23 +1511,15 @@ const Accounting = () => {
                 </FormControl>
               </Grid>
               <Grid item xs={6}>
-                <TextField
-                  name="reference"
-                  label="Reference Number"
-                  fullWidth
-                  value={transactionFormData.reference}
-                  onChange={handleTransactionInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
                 <FormControl fullWidth>
                   <InputLabel>Payment Method</InputLabel>
                   <Select
                     name="paymentMethod"
-                    value={transactionFormData.paymentMethod}
+                    value={transactionFormData.paymentMethod || ''}
                     label="Payment Method"
                     onChange={handleTransactionInputChange}
                   >
+                    <MenuItem value="">Select Payment Method</MenuItem>
                     <MenuItem value="cash">Cash</MenuItem>
                     <MenuItem value="bank_transfer">Bank Transfer</MenuItem>
                     <MenuItem value="check">Check</MenuItem>
@@ -1457,24 +1551,50 @@ const Accounting = () => {
               </Grid>
               {transactionFormData.type === 'salary' && (
                 <Grid item xs={12}>
-                  <TextField
-                    name="employee"
-                    label="Employee Name/ID"
-                    fullWidth
-                    value={transactionFormData.employee}
-                    onChange={handleTransactionInputChange}
-                  />
+                  <FormControl fullWidth>
+                    <InputLabel>Employee</InputLabel>
+                    <Select
+                      name="employee"
+                      value={transactionFormData.employee}
+                      label="Employee"
+                      onChange={handleTransactionInputChange}
+                    >
+                      {employees
+                        .filter(employee => employee.status === 'active')
+                        .map((employee) => (
+                          <MenuItem
+                            key={employee.id}
+                            value={employee.id}
+                          >
+                            {`${employee.name} - ${employee.designation_title} (${employee.department})`}
+                          </MenuItem>
+                        ))}
+                    </Select>
+                  </FormControl>
                 </Grid>
               )}
               {transactionFormData.type === 'manufacturing_payment' && (
                 <Grid item xs={12}>
-                  <TextField
-                    name="manufacturingOrder"
-                    label="Manufacturing Order Reference"
-                    fullWidth
-                    value={transactionFormData.manufacturingOrder}
-                    onChange={handleTransactionInputChange}
-                  />
+                  <FormControl fullWidth>
+                    <InputLabel>Manufacturing Order</InputLabel>
+                    <Select
+                      name="reference"
+                      value={transactionFormData.reference}
+                      label="Manufacturing Order"
+                      onChange={handleTransactionInputChange}
+                    >
+                      {manufacturingOrders
+                        .filter(order => order.payment_status === 'pending')
+                        .map((order) => (
+                          <MenuItem
+                            key={order.id}
+                            value={order.order_number}
+                          >
+                            {`${order.order_number} - ${order.product_name} (${order.quantity} units) - ${order.status}`}
+                          </MenuItem>
+                        ))}
+                    </Select>
+                  </FormControl>
                 </Grid>
               )}
             </Grid>
@@ -1501,24 +1621,26 @@ const Accounting = () => {
             <Grid container spacing={2} sx={{ mt: 1 }}>
               <Grid item xs={6}>
                 <TextField
+                  name="code"
+                  label="Account Code"
+                  fullWidth
+                  value={accountFormData.code}
+                  onChange={handleAccountInputChange}
+                  required
+                />
+              </Grid>
+              <Grid item xs={6}>
+                <TextField
                   name="name"
                   label="Account Name"
                   fullWidth
                   value={accountFormData.name}
                   onChange={handleAccountInputChange}
+                  required
                 />
               </Grid>
               <Grid item xs={6}>
-                <TextField
-                  name="number"
-                  label="Account Number"
-                  fullWidth
-                  value={accountFormData.number}
-                  onChange={handleAccountInputChange}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <FormControl fullWidth>
+                <FormControl fullWidth required>
                   <InputLabel>Type</InputLabel>
                   <Select
                     name="type"
@@ -1535,23 +1657,29 @@ const Accounting = () => {
                 </FormControl>
               </Grid>
               <Grid item xs={6}>
+                <FormControl fullWidth required>
+                  <InputLabel>Category</InputLabel>
+                  <Select
+                    name="category"
+                    value={accountFormData.category}
+                    label="Category"
+                    onChange={handleAccountInputChange}
+                  >
+                    {accountCategories[accountFormData.type]?.map((category) => (
+                      <MenuItem key={category.value} value={category.value}>
+                        {category.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={6}>
                 <TextField
                   name="balance"
                   label="Initial Balance"
                   type="number"
                   fullWidth
                   value={accountFormData.balance}
-                  onChange={handleAccountInputChange}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  name="description"
-                  label="Description"
-                  fullWidth
-                  multiline
-                  rows={2}
-                  value={accountFormData.description}
                   onChange={handleAccountInputChange}
                 />
               </Grid>
@@ -1568,6 +1696,17 @@ const Accounting = () => {
                     <MenuItem value="inactive">Inactive</MenuItem>
                   </Select>
                 </FormControl>
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  name="description"
+                  label="Description"
+                  fullWidth
+                  multiline
+                  rows={2}
+                  value={accountFormData.description}
+                  onChange={handleAccountInputChange}
+                />
               </Grid>
             </Grid>
           </DialogContent>

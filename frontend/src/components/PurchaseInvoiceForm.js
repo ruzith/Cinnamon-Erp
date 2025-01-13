@@ -83,16 +83,6 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor, onSuccess, con
     fetchAdvancePayments();
   }, [formData.contractor]);
 
-  useEffect(() => {
-    if (selectedContractor) {
-      setFormData(prev => ({
-        ...prev,
-        contractor: selectedContractor.id,
-        cuttingRate: selectedContractor.latest_manufacturing_contribution || 250.00
-      }));
-    }
-  }, [selectedContractor]);
-
   const handleAddItem = () => {
     setFormData(prev => ({
       ...prev,

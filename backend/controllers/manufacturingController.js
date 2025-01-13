@@ -463,6 +463,8 @@ exports.getAdvancePayments = async (req, res) => {
 // @route   POST /api/manufacturing/advance-payments
 // @access  Private/Admin
 exports.createAdvancePayment = async (req, res) => {
+  const connection = await pool.getConnection();
+
   try {
     // Validate the request body
     const { error } = validateAdvancePayment(req.body);
@@ -472,39 +474,241 @@ exports.createAdvancePayment = async (req, res) => {
 
     const { contractor_id, amount, payment_date, notes } = req.body;
 
+    await connection.beginTransaction();
+
     // Check if contractor exists and is active
-    const contractor = await ManufacturingContractor.findById(contractor_id);
-    if (!contractor || contractor.status !== 'active') {
+    const [contractors] = await connection.execute(
+      'SELECT * FROM manufacturing_contractors WHERE id = ? AND status = "active"',
+      [contractor_id]
+    );
+
+    if (!contractors[0]) {
+      await connection.rollback();
       return res.status(400).json({ message: 'Invalid or inactive contractor' });
     }
+
+    const contractor = contractors[0];
 
     // Generate receipt number
     const date = new Date(payment_date);
     const year = date.getFullYear().toString().substr(-2);
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const [countResult] = await pool.execute('SELECT COUNT(*) as count FROM manufacturing_advance_payments');
+    const [countResult] = await connection.execute(
+      'SELECT COUNT(*) as count FROM manufacturing_advance_payments'
+    );
     const count = countResult[0].count + 1;
     const receipt_number = `ADV${year}${month}${count.toString().padStart(4, '0')}`;
 
-    const [result] = await pool.execute(
+    // Insert the payment record
+    const [result] = await connection.execute(
       `INSERT INTO manufacturing_advance_payments
        (contractor_id, amount, payment_date, receipt_number, notes)
        VALUES (?, ?, ?, ?, ?)`,
       [contractor_id, amount, payment_date, receipt_number, notes]
     );
 
-    const [payment] = await pool.execute(
-      `SELECT ap.*, mc.name as contractor_name, mc.contractor_id as contractor_id
-       FROM manufacturing_advance_payments ap
-       JOIN manufacturing_contractors mc ON ap.contractor_id = mc.id
-       WHERE ap.id = ?`,
-      [result.insertId]
+    // Get company settings
+    const [settings] = await connection.execute(
+      'SELECT * FROM settings WHERE id = 1'
     );
+    const companyInfo = settings[0] || {};
 
-    res.status(201).json(payment[0]);
+    // Generate receipt HTML
+    const receiptHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Advance Payment Receipt - ${receipt_number}</title>
+        <style>
+          @media print {
+            @page { margin: 15mm; }
+          }
+          body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #fff;
+          }
+          .watermark {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-45deg);
+            font-size: 100px;
+            opacity: 0.03;
+            z-index: -1;
+            color: #000;
+            white-space: nowrap;
+          }
+          .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #1976d2;
+          }
+          .company-name {
+            font-size: 28px;
+            font-weight: bold;
+            color: #1976d2;
+            margin: 0;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+          }
+          .company-details {
+            font-size: 14px;
+            color: #666;
+            margin: 5px 0;
+          }
+          .document-title {
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            margin: 30px 0;
+            color: #333;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+          }
+          .info-section {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 30px;
+            margin-bottom: 40px;
+            padding: 25px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+          }
+          .info-group {
+            display: grid;
+            gap: 20px;
+          }
+          .info-item {
+            margin-bottom: 15px;
+          }
+          .info-label {
+            font-weight: 600;
+            color: #666;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 5px;
+          }
+          .info-value {
+            font-size: 15px;
+            color: #333;
+          }
+          .amount-section {
+            margin: 30px 0;
+            padding: 20px;
+            background-color: #1976d2;
+            color: white;
+            border-radius: 8px;
+            text-align: right;
+          }
+          .amount-label {
+            font-size: 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+          }
+          .amount-value {
+            font-size: 24px;
+            font-weight: bold;
+            margin-top: 5px;
+          }
+          .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            text-align: center;
+            font-size: 12px;
+            color: #666;
+          }
+          .receipt-number {
+            font-family: monospace;
+            font-size: 16px;
+            color: #1976d2;
+            font-weight: bold;
+            letter-spacing: 1px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="watermark">ADVANCE PAYMENT</div>
+
+        <div class="header">
+          <h1 class="company-name">${companyInfo.company_name || 'Company Name'}</h1>
+          <div class="company-details">${companyInfo.company_address || 'Company Address'}</div>
+          <div class="company-details">Tel: ${companyInfo.company_phone || 'N/A'}</div>
+        </div>
+
+        <div class="document-title">Advance Payment Receipt</div>
+
+        <div class="info-section">
+          <div class="info-group">
+            <div class="info-item">
+              <div class="info-label">Receipt Number</div>
+              <div class="info-value receipt-number">${receipt_number}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Date</div>
+              <div class="info-value">${new Date(payment_date).toLocaleDateString()}</div>
+            </div>
+          </div>
+          <div class="info-group">
+            <div class="info-item">
+              <div class="info-label">Contractor Details</div>
+              <div class="info-value">${contractor.name}</div>
+              <div class="info-value" style="color: #666; font-size: 13px;">ID: ${contractor.contractor_id}</div>
+              <div class="info-value" style="color: #666; font-size: 13px;">Tel: ${contractor.phone || 'N/A'}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="amount-section">
+          <div class="amount-label">Advance Payment Amount</div>
+          <div class="amount-value">Rs. ${parseFloat(amount).toFixed(2)}</div>
+        </div>
+
+        ${notes ? `
+        <div style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+          <div class="info-label">Notes</div>
+          <div style="margin-top: 5px;">${notes}</div>
+        </div>
+        ` : ''}
+
+        <div class="footer">
+          <p>This is a computer generated receipt</p>
+          <p>Generated on: ${new Date().toLocaleString()}</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    await connection.commit();
+
+    res.json({
+      message: 'Advance payment created successfully',
+      receiptHtml,
+      payment: {
+        id: result.insertId,
+        contractor_name: contractor.name,
+        amount,
+        payment_date,
+        receipt_number,
+        notes
+      }
+    });
+
   } catch (error) {
+    await connection.rollback();
     console.error('Error creating advance payment:', error);
     res.status(500).json({ message: error.message });
+  } finally {
+    connection.release();
   }
 };
 
@@ -543,24 +747,17 @@ exports.generateOrderReceipt = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Get order details with materials and product info
+    // Get order details with product info only
     const [orders] = await connection.execute(`
       SELECT
         mo.*,
         p.name as product_name,
-        mc.name as contractor_name,
-        mc.contractor_id,
-        mc.phone as contractor_phone,
-        mc.address as contractor_address,
-        CAST(COALESCE(
-          (SELECT SUM(mm.quantity_used * mm.unit_cost)
-           FROM manufacturing_materials mm
-           WHERE mm.order_id = mo.id),
-          0
-        ) AS DECIMAL(15,2)) as total_cost
+        p.code as product_code,
+        p.unit_price,
+        u.name as created_by_name
       FROM manufacturing_orders mo
-      LEFT JOIN products p ON mo.product_id = p.id
-      LEFT JOIN manufacturing_contractors mc ON mo.assigned_to = mc.id
+      JOIN products p ON mo.product_id = p.id
+      LEFT JOIN users u ON mo.created_by = u.id
       WHERE mo.id = ?
     `, [id]);
 
@@ -570,41 +767,13 @@ exports.generateOrderReceipt = async (req, res) => {
 
     const order = orders[0];
 
-    // Get materials used with their details
-    const [materials] = await connection.execute(`
-      SELECT
-        mm.*,
-        i.product_name as name,
-        i.unit,
-        i.category,
-        i.description,
-        CAST(mm.unit_cost AS DECIMAL(15,2)) as unit_cost,
-        CAST(mm.quantity_used AS DECIMAL(15,2)) as quantity_used
-      FROM manufacturing_materials mm
-      JOIN inventory i ON mm.material_id = i.id
-      WHERE mm.order_id = ?
-    `, [id]);
-
     // Get company settings
-    const [settingsResult] = await connection.execute(
+    const [settings] = await connection.execute(
       'SELECT * FROM settings WHERE id = 1'
     );
-    const settings = settingsResult[0] || {};
+    const companyInfo = settings[0] || {};
 
-    // Format dates and ensure numbers
-    order.created_at = order.created_at ? new Date(order.created_at) : new Date();
-    order.materials = materials;
-    order.unit = 'kg'; // Default unit for manufacturing orders
-    order.total_cost = Number(order.total_cost) || 0;
-
-    // Process materials to ensure numbers
-    order.materials = materials.map(material => ({
-      ...material,
-      quantity_used: Number(material.quantity_used) || 0,
-      unit_cost: Number(material.unit_cost) || 0
-    }));
-
-    // Generate receipt HTML with similar style to other receipts
+    // Generate receipt HTML without materials section
     const receiptHtml = `
       <!DOCTYPE html>
       <html>
@@ -613,18 +782,16 @@ exports.generateOrderReceipt = async (req, res) => {
         <title>Manufacturing Order Receipt - ${order.order_number}</title>
         <style>
           @media print {
-            @page {
-              size: A4;
-              margin: 20mm;
-            }
+            @page { margin: 15mm; }
           }
           body {
             font-family: Arial, sans-serif;
-            padding: 20px;
+            line-height: 1.6;
+            color: #333;
             max-width: 800px;
             margin: 0 auto;
-            color: #333;
-            line-height: 1.6;
+            padding: 20px;
+            background: #fff;
           }
           .watermark {
             position: fixed;
@@ -632,22 +799,24 @@ exports.generateOrderReceipt = async (req, res) => {
             left: 50%;
             transform: translate(-50%, -50%) rotate(-45deg);
             font-size: 100px;
-            opacity: 0.05;
+            opacity: 0.03;
             z-index: -1;
             color: #000;
             white-space: nowrap;
           }
-          .company-header {
+          .header {
             text-align: center;
-            margin-bottom: 20px;
+            margin-bottom: 40px;
             padding-bottom: 20px;
-            border-bottom: 2px solid #333;
+            border-bottom: 2px solid #1976d2;
           }
           .company-name {
-            font-size: 24px;
+            font-size: 28px;
             font-weight: bold;
-            margin: 0;
             color: #1976d2;
+            margin: 0;
+            text-transform: uppercase;
+            letter-spacing: 2px;
           }
           .company-details {
             font-size: 14px;
@@ -655,164 +824,132 @@ exports.generateOrderReceipt = async (req, res) => {
             margin: 5px 0;
           }
           .document-title {
-            font-size: 20px;
+            font-size: 24px;
             font-weight: bold;
             text-align: center;
-            margin: 20px 0;
+            margin: 30px 0;
             color: #333;
             text-transform: uppercase;
+            letter-spacing: 1px;
           }
-          .slip-header {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 30px;
-            padding: 15px;
-            background-color: #f5f5f5;
-            border-radius: 5px;
+          .info-section {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 30px;
+            margin-bottom: 40px;
+            padding: 25px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
           }
-          .order-info, .contractor-info {
-            flex: 1;
+          .info-group {
+            display: grid;
+            gap: 20px;
+          }
+          .info-item {
+            margin-bottom: 15px;
           }
           .info-label {
-            font-weight: bold;
+            font-weight: 600;
             color: #666;
-            font-size: 12px;
+            font-size: 13px;
             text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 5px;
           }
           .info-value {
-            font-size: 14px;
-            margin-bottom: 10px;
+            font-size: 15px;
+            color: #333;
           }
-          .materials-details {
-            margin: 20px 0;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-          }
-          .materials-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 0;
-          }
-          .materials-table th,
-          .materials-table td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #eee;
-          }
-          .materials-table th {
-            background-color: #f8f9fa;
-            font-weight: bold;
-            color: #666;
-            font-size: 12px;
-            text-transform: uppercase;
-          }
-          .materials-table td {
-            font-size: 14px;
-          }
-          .total-section {
-            margin-top: 20px;
-            padding: 15px 20px;
+          .amount-section {
+            margin: 30px 0;
+            padding: 20px;
             background-color: #1976d2;
             color: white;
-            border-radius: 5px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+            border-radius: 8px;
+            text-align: right;
           }
-          .total-label {
-            font-weight: bold;
-            font-size: 14px;
+          .amount-label {
+            font-size: 16px;
             text-transform: uppercase;
+            letter-spacing: 1px;
           }
-          .total-amount {
-            font-family: monospace;
-            font-size: 18px;
+          .amount-value {
+            font-size: 24px;
+            font-weight: bold;
+            margin-top: 5px;
           }
           .footer {
-            margin-top: 50px;
+            margin-top: 30px;
             padding-top: 20px;
-            border-top: 1px solid #ddd;
-            font-size: 12px;
-            color: #666;
+            border-top: 1px solid #eee;
             text-align: center;
-          }
-          .company-registration {
             font-size: 12px;
             color: #666;
-            margin: 5px 0;
+          }
+          .receipt-number {
+            font-family: monospace;
+            font-size: 16px;
+            color: #1976d2;
+            font-weight: bold;
+            letter-spacing: 1px;
           }
         </style>
       </head>
       <body>
         <div class="watermark">MANUFACTURING RECEIPT</div>
 
-        <div class="company-header">
-          <h1 class="company-name">${settings.company_name}</h1>
-          <p class="company-details">${settings.company_address}</p>
-          <p class="company-details">Phone: ${settings.company_phone}</p>
-          <p class="company-registration">VAT No: ${settings.vat_number} | Tax No: ${settings.tax_number}</p>
+        <div class="header">
+          <h1 class="company-name">${companyInfo.company_name || 'Company Name'}</h1>
+          <div class="company-details">${companyInfo.company_address || 'Company Address'}</div>
+          <div class="company-details">Tel: ${companyInfo.company_phone || 'N/A'}</div>
         </div>
 
         <div class="document-title">Manufacturing Order Receipt</div>
 
-        <div class="slip-header">
-          <div class="order-info">
-            <div class="info-label">Order Number</div>
-            <div class="info-value">${order.order_number}</div>
-            <div class="info-label">Date</div>
-            <div class="info-value">${new Date(order.created_at).toLocaleDateString()}</div>
-            <div class="info-label">Product</div>
-            <div class="info-value">${order.product_name}</div>
-            <div class="info-label">Quantity</div>
-            <div class="info-value">${order.quantity} ${order.unit}</div>
+        <div class="info-section">
+          <div class="info-group">
+            <div class="info-item">
+              <div class="info-label">Order Number</div>
+              <div class="info-value receipt-number">${order.order_number}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Product Details</div>
+              <div class="info-value product-info">
+                ${order.product_name}
+                <span class="product-code">(${order.product_code})</span>
+              </div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Quantity</div>
+              <div class="info-value">${order.quantity} units</div>
+            </div>
           </div>
 
-          <div class="contractor-info">
-            <div class="info-label">Contractor Name</div>
-            <div class="info-value">${order.contractor_name || 'N/A'}</div>
-            <div class="info-label">Contractor ID</div>
-            <div class="info-value">${order.contractor_id || 'N/A'}</div>
-            <div class="info-label">Phone</div>
-            <div class="info-value">${order.contractor_phone || 'N/A'}</div>
-            <div class="info-label">Address</div>
-            <div class="info-value">${order.contractor_address || 'N/A'}</div>
+          <div class="info-group">
+            <div class="info-item">
+              <div class="info-label">Status</div>
+              <div class="info-value">${order.status}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Start Date</div>
+              <div class="info-value">${new Date(order.start_date).toLocaleDateString()}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">End Date</div>
+              <div class="info-value">${order.end_date ? new Date(order.end_date).toLocaleDateString() : 'N/A'}</div>
+            </div>
           </div>
         </div>
 
-        <div class="materials-details">
-          <table class="materials-table">
-            <thead>
-              <tr>
-                <th>Material</th>
-                <th>Quantity</th>
-                <th>Unit</th>
-                <th>Unit Cost</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${order.materials.map(material => `
-                <tr>
-                  <td>${material.name}</td>
-                  <td>${material.quantity_used.toFixed(2)}</td>
-                  <td>${material.unit}</td>
-                  <td>Rs. ${material.unit_cost.toFixed(2)}</td>
-                  <td>Rs. ${(material.quantity_used * material.unit_cost).toFixed(2)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-
-        <div class="total-section">
-          <span class="total-label">Total Cost</span>
-          <span class="total-amount">Rs. ${order.total_cost.toFixed(2)}</span>
+        <div class="amount-section">
+          <div class="amount-label">Total Amount</div>
+          <div class="amount-value">Rs. ${order.total_amount.toFixed(2)}</div>
         </div>
 
         <div class="footer">
-          <p>Generated on ${new Date().toLocaleString()} IST</p>
-          <p>For any queries, please contact us at ${settings.company_phone}</p>
-          <p>${settings.company_name}</p>
+          <p>Created by: ${order.created_by_name || 'System'} | Generated on: ${new Date().toLocaleString()}</p>
+          <p>This is a computer generated receipt</p>
         </div>
       </body>
       </html>
@@ -821,10 +958,7 @@ exports.generateOrderReceipt = async (req, res) => {
     res.json({ receiptHtml });
   } catch (error) {
     console.error('Error generating order receipt:', error);
-    res.status(500).json({
-      message: 'Error generating receipt',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    res.status(500).json({ message: 'Error generating receipt' });
   } finally {
     connection.release();
   }
@@ -839,7 +973,7 @@ exports.markOrderAsPaid = async (req, res) => {
 
     // Check if order exists and is completed
     const [orders] = await connection.execute(
-      `SELECT mo.*, p.name as product_name
+      `SELECT mo.*, p.name as product_name, p.id as product_id
        FROM manufacturing_orders mo
        JOIN products p ON mo.product_id = p.id
        WHERE mo.id = ?`,
@@ -865,32 +999,126 @@ exports.markOrderAsPaid = async (req, res) => {
 
     // Update payment status
     await connection.execute(
-      'UPDATE manufacturing_orders SET payment_status = "paid", payment_date = NOW() WHERE id = ?',
+      `UPDATE manufacturing_orders
+       SET payment_status = 'paid',
+           payment_date = CURRENT_TIMESTAMP(),
+           updated_at = CURRENT_TIMESTAMP()
+       WHERE id = ?`,
       [id]
     );
 
     // Add to finished goods inventory if not already added
-    if (order.product_id && !order.inventory_updated) {
-      await Inventory.addFinishedGood(connection, {
-        product_id: order.product_id,
-        quantity: order.quantity,
-        manufacturing_order_id: order.id,
-        notes: `Production completed from MO-${order.order_number}`
-      });
+    if (!order.inventory_updated) {
+      // First get the inventory item ID for this product
+      const [inventoryItems] = await connection.execute(
+        `SELECT i.id, i.product_name, i.quantity
+         FROM inventory i
+         JOIN products p ON p.name = i.product_name
+         WHERE i.category = 'finished_good'
+         AND p.id = ?`,
+        [order.product_id]
+      );
+
+      if (!inventoryItems[0]) {
+        // If no inventory item exists, create one
+        const [result] = await connection.execute(
+          `INSERT INTO inventory
+           (product_name, category, quantity, unit, min_stock_level, max_stock_level,
+            purchase_price, selling_price, status)
+           SELECT
+             name as product_name,
+             'finished_good' as category,
+             0 as quantity,
+             'kg' as unit,
+             100 as min_stock_level,
+             1000 as max_stock_level,
+             0 as purchase_price,
+             unit_price as selling_price,
+             'active' as status
+           FROM products
+           WHERE id = ?`,
+          [order.product_id]
+        );
+
+        const inventoryItemId = result.insertId;
+
+        // Create inventory transaction
+        await connection.execute(
+          `INSERT INTO inventory_transactions
+           (item_id, type, quantity, reference, notes)
+           VALUES (?, ?, ?, ?, ?)`,
+          [
+            inventoryItemId,
+            'IN',
+            order.quantity,
+            `MO-${order.order_number}`,
+            `Production completed from manufacturing order ${order.order_number}`
+          ]
+        );
+
+        // Update inventory quantity
+        await connection.execute(
+          `UPDATE inventory
+           SET quantity = quantity + ?,
+               updated_at = CURRENT_TIMESTAMP()
+           WHERE id = ?`,
+          [order.quantity, inventoryItemId]
+        );
+      } else {
+        // Use existing inventory item
+        const inventoryItemId = inventoryItems[0].id;
+
+        // Create inventory transaction
+        await connection.execute(
+          `INSERT INTO inventory_transactions
+           (item_id, type, quantity, reference, notes)
+           VALUES (?, ?, ?, ?, ?)`,
+          [
+            inventoryItemId,
+            'IN',
+            order.quantity,
+            `MO-${order.order_number}`,
+            `Production completed from manufacturing order ${order.order_number}`
+          ]
+        );
+
+        // Update inventory quantity
+        await connection.execute(
+          `UPDATE inventory
+           SET quantity = quantity + ?,
+               updated_at = CURRENT_TIMESTAMP()
+           WHERE id = ?`,
+          [order.quantity, inventoryItemId]
+        );
+      }
 
       // Mark inventory as updated
       await connection.execute(
-        'UPDATE manufacturing_orders SET inventory_updated = TRUE WHERE id = ?',
+        `UPDATE manufacturing_orders
+         SET inventory_updated = TRUE,
+             updated_at = CURRENT_TIMESTAMP()
+         WHERE id = ?`,
         [id]
       );
     }
 
     await connection.commit();
-    res.json({ message: 'Order marked as paid successfully' });
+    res.json({
+      message: 'Order marked as paid successfully',
+      order: {
+        ...order,
+        payment_status: 'paid',
+        payment_date: new Date(),
+        inventory_updated: true
+      }
+    });
   } catch (error) {
     await connection.rollback();
     console.error('Error marking order as paid:', error);
-    res.status(500).json({ message: 'Error marking order as paid' });
+    res.status(500).json({
+      message: 'Error marking order as paid',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   } finally {
     connection.release();
   }
@@ -1148,7 +1376,7 @@ const generatePurchaseInvoice = (invoice, settings) => {
       <div class="company-header">
         <h1 class="company-name">${settings.company_name || 'Company Name'}</h1>
         <p class="company-details">${settings.company_address || 'Company Address'}</p>
-        <p class="company-details">Tel: ${settings.company_phone || 'N/A'} | VAT No: ${settings.vat_number || 'N/A'} | Tax No: ${settings.tax_number || 'N/A'}</p>
+        <p class="company-details">Tel: ${settings.company_phone || 'N/A'}</p>
       </div>
 
       <div class="document-title">Purchase Invoice</div>
@@ -1491,21 +1719,9 @@ exports.printAssignmentReport = async (req, res) => {
           </div>
           ` : ''}
 
-          <div class="section" style="margin-top: 50px;">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 100px;">
-              <div style="text-align: center;">
-                <div style="margin-bottom: 5px;">_____________________</div>
-                <div>Contractor Signature</div>
-              </div>
-              <div style="text-align: center;">
-                <div style="margin-bottom: 5px;">_____________________</div>
-                <div>Manager Signature</div>
-              </div>
-            </div>
-          </div>
-
-          <div style="margin-top: 30px; text-align: center; color: #666; font-size: 12px;">
-            Generated on ${new Date().toLocaleString()}
+          <div class="footer">
+            <p>Created by: ${assignment.created_by_name || 'System'} | Generated on: ${new Date().toLocaleString()}</p>
+            <p>This is a computer generated receipt</p>
           </div>
         </body>
       </html>
@@ -1742,47 +1958,44 @@ exports.createPurchaseInvoice = async (req, res) => {
 // @route   GET /api/manufacturing/invoices
 // @access  Private
 exports.getManufacturingInvoices = async (req, res) => {
+  const connection = await pool.getConnection();
   try {
-    const [rows] = await pool.execute(`
+    const [invoices] = await connection.query(`
       SELECT
         pi.id,
         pi.invoice_number,
-        c.name as supplier_name,
+        pi.invoice_date,
+        pi.due_date,
         pi.subtotal,
-        pi.tax_amount,
+        pi.cutting_charges,
+        pi.advance_payment,
+        pi.final_amount,
         pi.total_amount,
-        pi.paid_amount,
         pi.status,
         pi.notes,
         pi.created_at,
-        pi.updated_at,
-        pi.invoice_date,
-        pi.due_date,
-        GROUP_CONCAT(
-          CONCAT(
-            i.product_name, ' (',
-            pit.net_weight, ' kg @ Rs.',
-            pit.rate, '/kg)'
-          )
-          SEPARATOR '; '
-        ) as items_detail
+        s.name as supplier_name,
+        cc.name as contractor_name,
+        u.name as created_by_name
       FROM purchase_invoices pi
-      JOIN customers c ON pi.supplier_id = c.id
-      LEFT JOIN purchase_items pit ON pi.id = pit.invoice_id
-      LEFT JOIN inventory i ON pit.grade_id = i.id
-      WHERE pi.status != 'draft'
-      GROUP BY pi.id
+      LEFT JOIN customers s ON pi.supplier_id = s.id
+      LEFT JOIN cutting_contractors cc ON pi.contractor_id = cc.id
+      LEFT JOIN users u ON pi.created_by = u.id
       ORDER BY pi.created_at DESC
     `);
 
-    console.log('Fetched manufacturing invoices:', rows);
-    res.json(rows);
+    res.json({
+      success: true,
+      data: invoices
+    });
   } catch (error) {
-    console.error('Detailed error in getManufacturingInvoices:', error);
+    console.error('Error in getManufacturingInvoices:', error);
     res.status(500).json({
       message: 'Error fetching manufacturing invoices',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error: error.message
     });
+  } finally {
+    connection.release();
   }
 };
 
@@ -1917,5 +2130,131 @@ exports.getPurchases = async (req, res) => {
       message: 'Error fetching purchases',
       error: error.message
     });
+  }
+};
+
+exports.markPurchaseAsPaid = async (req, res) => {
+  const { id } = req.params;
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    // Update the purchase_invoices status to paid
+    const [updatedRows] = await connection.query(
+      `UPDATE purchase_invoices
+       SET status = 'paid',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [id]
+    );
+
+    if (updatedRows.affectedRows === 0) {
+      await connection.rollback();
+      return res.status(404).json({ message: 'Purchase not found' });
+    }
+
+    // Get the updated purchase details
+    const [purchases] = await connection.query(
+      `SELECT pi.*, c.name as supplier_name, cc.name as contractor_name
+       FROM purchase_invoices pi
+       JOIN customers c ON pi.supplier_id = c.id
+       LEFT JOIN cutting_contractors cc ON pi.contractor_id = cc.id
+       WHERE pi.id = ?`,
+      [id]
+    );
+
+    await connection.commit();
+
+    res.json({
+      message: 'Purchase marked as paid successfully',
+      purchase: purchases[0]
+    });
+
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error in markPurchaseAsPaid:', {
+      error: error.message,
+      stack: error.stack,
+      purchaseId: id
+    });
+    res.status(500).json({
+      message: 'Error marking purchase as paid',
+      error: error.message
+    });
+  } finally {
+    connection.release();
+  }
+};
+
+exports.updateAssignmentStatus = async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    // Validate status
+    if (!['active', 'completed', 'cancelled'].includes(status)) {
+      return res.status(400).json({ message: 'Invalid status value' });
+    }
+
+    // Get the current assignment to check if status update is allowed
+    const [assignments] = await connection.execute(
+      'SELECT * FROM cinnamon_assignments WHERE id = ?',
+      [id]
+    );
+
+    if (!assignments.length) {
+      await connection.rollback();
+      return res.status(404).json({ message: 'Assignment not found' });
+    }
+
+    const assignment = assignments[0];
+
+    if (assignment.status !== 'active' && status !== 'active') {
+      await connection.rollback();
+      return res.status(400).json({
+        message: 'Only active assignments can be marked as completed or cancelled'
+      });
+    }
+
+    // Update the assignment status
+    await connection.execute(
+      'UPDATE cinnamon_assignments SET status = ?, updated_at = NOW() WHERE id = ?',
+      [status, id]
+    );
+
+    // If marking as cancelled, return raw materials to inventory
+    if (status === 'cancelled' && assignment.raw_material_id && assignment.raw_material_quantity) {
+      // Return raw materials to inventory
+      await connection.execute(
+        'UPDATE inventory SET quantity = quantity + ? WHERE id = ?',
+        [assignment.raw_material_quantity, assignment.raw_material_id]
+      );
+
+      // Record inventory transaction
+      await connection.execute(
+        'INSERT INTO inventory_transactions (item_id, type, quantity, reference, notes) VALUES (?, ?, ?, ?, ?)',
+        [
+          assignment.raw_material_id,
+          'IN',
+          assignment.raw_material_quantity,
+          `CA-${id}`,
+          'Returned from cancelled assignment'
+        ]
+      );
+    }
+
+    await connection.commit();
+    res.json({ message: 'Assignment status updated successfully' });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error updating assignment status:', error);
+    res.status(500).json({ message: 'Error updating assignment status' });
+  } finally {
+    connection.release();
   }
 };

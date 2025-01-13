@@ -140,9 +140,13 @@ const Inventory = () => {
   const fetchManufacturingPurchases = async () => {
     try {
       const response = await axios.get('/api/manufacturing/invoices');
-      setManufacturingPurchases(response.data);
+      console.log('Manufacturing Purchases Response:', response.data);
+      const purchases = Array.isArray(response.data) ? response.data :
+                       (response.data?.invoices || response.data?.data || []);
+      setManufacturingPurchases(purchases);
     } catch (error) {
       console.error('Error fetching manufacturing purchases:', error);
+      setManufacturingPurchases([]);
     }
   };
 
@@ -154,21 +158,26 @@ const Inventory = () => {
     if (item) {
       setSelectedItem(item);
       setFormData({
-        product_name: item.product_name,
-        category: item.category,
-        quantity: item.quantity,
-        unit: item.unit,
-        min_stock_level: item.min_stock_level,
-        max_stock_level: item.max_stock_level,
-        location: item.location,
-        purchase_price: item.purchase_price,
-        selling_price: item.selling_price,
-        description: item.description,
-        status: item.status,
-        cutting_assignment_id: item.cutting_assignment_id,
-        purchase_assignment_id: item.purchase_assignment_id,
-        manufacturing_id: item.manufacturing_id
+        product_name: item.product_name || '',
+        category: item.category || 'raw_material',
+        quantity: item.quantity || '',
+        unit: item.unit || '',
+        min_stock_level: item.min_stock_level || '',
+        max_stock_level: item.max_stock_level || '',
+        location: item.location || '',
+        purchase_price: item.purchase_price || '',
+        selling_price: item.selling_price || '',
+        description: item.description || '',
+        status: item.status || 'active',
+        cutting_assignment_id: item.cutting_assignment_id || '',
+        purchase_assignment_id: item.purchase_assignment_id || '',
+        manufacturing_id: item.manufacturing_id || ''
       });
+
+      if (item.category === 'raw_material') {
+        fetchCuttingTasks();
+        fetchCinnamonAssignments();
+      }
     } else {
       setSelectedItem(null);
       setFormData({
@@ -241,10 +250,16 @@ const Inventory = () => {
   };
 
   const handleInputChange = (e) => {
+    const { name, value } = e.target;
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value,
+      [name]: value,
     });
+
+    // Fetch manufacturing purchases when category changes to finished_good
+    if (name === 'category' && value === 'finished_good') {
+      fetchManufacturingPurchases();
+    }
   };
 
   const handleTransactionInputChange = (e) => {
@@ -497,7 +512,8 @@ const Inventory = () => {
                         ? (
                             <>
                               {formatCurrency(item.purchase_price)}
-                              {item.manufacturing_id && manufacturingPurchases.find(p => p.id === item.manufacturing_id) &&
+                              {item.manufacturing_id && Array.isArray(manufacturingPurchases) &&
+                                manufacturingPurchases.find(p => p.id === item.manufacturing_id) &&
                                 ` (Invoice: ${manufacturingPurchases.find(p => p.id === item.manufacturing_id).invoice_number})`}
                             </>
                           )
@@ -656,15 +672,6 @@ const Inventory = () => {
               />
             </Grid>
             <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Category"
-                name="category"
-                value={formData.category}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
               <FormControl fullWidth>
                 <InputLabel>Category</InputLabel>
                 <Select
@@ -786,16 +793,20 @@ const Inventory = () => {
                   <InputLabel>Manufacturing Purchase</InputLabel>
                   <Select
                     name="manufacturing_id"
-                    value={formData.manufacturing_id}
+                    value={formData.manufacturing_id || ''}
                     onChange={handleInputChange}
                     label="Manufacturing Purchase"
                   >
                     <MenuItem value="">None</MenuItem>
-                    {manufacturingPurchases.map((purchase) => (
-                      <MenuItem key={purchase.id} value={purchase.id}>
-                        {`Invoice: ${purchase.invoice_number} - ${purchase.supplier_name} - ${formatCurrency(purchase.total_amount)}`}
-                      </MenuItem>
-                    ))}
+                    {Array.isArray(manufacturingPurchases) && manufacturingPurchases.length > 0 ? (
+                      manufacturingPurchases.map((purchase) => (
+                        <MenuItem key={purchase.id} value={purchase.id}>
+                          {`Invoice: ${purchase.invoice_number || 'N/A'} - ${purchase.supplier_name || 'Unknown'} - ${formatCurrency(purchase.total_amount || 0)}`}
+                        </MenuItem>
+                      ))
+                    ) : (
+                      <MenuItem disabled>No manufacturing purchases available</MenuItem>
+                    )}
                   </Select>
                 </FormControl>
               </Grid>

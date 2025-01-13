@@ -3,11 +3,12 @@ const router = express.Router();
 const { protect, authorize } = require('../middleware/authMiddleware');
 const Loan = require('../models/domain/Loan');
 const LoanPayment = require('../models/domain/LoanPayment');
+const pool = require('../config/db').pool;
 
 // Get all loans
 router.get('/', protect, async (req, res) => {
   try {
-    const [rows] = await Loan.pool.execute(`
+    const [rows] = await pool.execute(`
       SELECT l.*,
              b.name as borrower_name,
              u.name as created_by_name
@@ -25,20 +26,47 @@ router.get('/', protect, async (req, res) => {
 // Create new loan
 router.post('/', protect, authorize('admin', 'accountant'), async (req, res) => {
   try {
-    const loanData = {
-      ...req.body,
-      created_by: req.user.id,
-      remaining_balance: req.body.amount, // Set initial remaining balance
-      status: 'active'
-    };
-    
-    const loan = await Loan.createWithSchedule(loanData);
-    res.status(201).json(loan);
+    const { loan, createAccountingEntry, accountingData } = req.body;
+
+    // Validate required fields
+    const requiredFields = ['borrower_type', 'borrower_id', 'amount', 'interest_rate',
+                           'term_months', 'payment_frequency', 'start_date', 'end_date'];
+
+    const missingFields = requiredFields.filter(field => !loan[field]);
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        message: `Missing required fields: ${missingFields.join(', ')}`
+      });
+    }
+
+    const loanModel = new Loan();
+    const createdLoan = await loanModel.createWithSchedule({
+      borrower_type: loan.borrower_type,
+      borrower_id: loan.borrower_id,
+      amount: loan.amount,
+      interest_rate: loan.interest_rate,
+      term_months: loan.term_months,
+      payment_frequency: loan.payment_frequency,
+      start_date: loan.start_date,
+      end_date: loan.end_date,
+      purpose: loan.purpose || null,
+      collateral: loan.collateral || null,
+      status: loan.status || 'active',
+      notes: loan.notes || null,
+      created_by: req.user.id
+    });
+
+    // Handle accounting entry if requested
+    if (createAccountingEntry && accountingData) {
+      // Create accounting entry logic here
+    }
+
+    res.status(201).json(createdLoan);
   } catch (error) {
     console.error('Error creating loan:', error);
-    res.status(400).json({ 
-      message: error.message || 'Error creating loan',
-      error: error.toString()
+    res.status(400).json({
+      message: 'Error creating loan',
+      error: error.message
     });
   }
 });
@@ -115,11 +143,62 @@ router.get('/payments', protect, async (req, res) => {
   }
 });
 
+// Create loan payment
+router.post('/payments', protect, authorize('admin', 'accountant'), async (req, res) => {
+  try {
+    const { loan_id, amount, payment_date, reference, status, notes, createAccountingEntry, accountingData } = req.body;
+
+    // Validate required fields
+    if (!loan_id || !amount || !payment_date) {
+      return res.status(400).json({
+        message: 'Missing required fields: loan_id, amount, payment_date'
+      });
+    }
+
+    // Get loan details
+    const [loan] = await pool.execute(
+      'SELECT * FROM loans WHERE id = ?',
+      [loan_id]
+    );
+
+    if (!loan[0]) {
+      return res.status(404).json({ message: 'Loan not found' });
+    }
+
+    const paymentData = {
+      loan_id,
+      amount,
+      payment_date,
+      reference,
+      status: status || 'completed',
+      notes,
+      created_by: req.user.id
+    };
+
+    // Create payment using LoanPayment model
+    const payment = await LoanPayment.create(paymentData);
+
+    // Handle accounting entry if requested
+    if (createAccountingEntry && accountingData) {
+      // Create accounting entry logic here
+      // This would typically involve creating a transaction record
+    }
+
+    res.status(201).json(payment);
+  } catch (error) {
+    console.error('Error creating payment:', error);
+    res.status(400).json({
+      message: 'Error creating payment',
+      error: error.message
+    });
+  }
+});
+
 // Get loan summary statistics
 router.get('/summary', protect, async (req, res) => {
   try {
     const [loans] = await Loan.pool.execute(`
-      SELECT 
+      SELECT
         COALESCE(SUM(amount), 0) as total_loaned,
         COALESCE(SUM(remaining_balance), 0) as total_outstanding,
         COUNT(CASE WHEN status = 'active' THEN 1 END) as active_loans,
@@ -129,7 +208,7 @@ router.get('/summary', protect, async (req, res) => {
     `);
 
     const [payments] = await Loan.pool.execute(`
-      SELECT COALESCE(SUM(amount), 0) as total_repaid 
+      SELECT COALESCE(SUM(amount), 0) as total_repaid
       FROM loan_payments
       WHERE status = 'completed'
     `);
@@ -161,6 +240,158 @@ router.get('/:id', protect, async (req, res) => {
   }
 });
 
+// Update loan details
+router.put('/:id', protect, authorize('admin', 'accountant'), async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    const loanId = req.params.id;
+    const updateData = req.body;
+
+    // Validate required fields
+    const requiredFields = ['borrower_type', 'borrower_id', 'amount', 'interest_rate',
+                           'term_months', 'payment_frequency', 'start_date', 'end_date'];
+
+    const missingFields = requiredFields.filter(field => !updateData[field]);
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        message: `Missing required fields: ${missingFields.join(', ')}`
+      });
+    }
+
+    await connection.beginTransaction();
+
+    try {
+      // Update loan record
+      const [result] = await connection.execute(`
+        UPDATE loans
+        SET borrower_type = ?,
+            borrower_id = ?,
+            amount = ?,
+            interest_rate = ?,
+            term_months = ?,
+            payment_frequency = ?,
+            start_date = ?,
+            end_date = ?,
+            purpose = ?,
+            collateral = ?,
+            status = ?,
+            notes = ?
+        WHERE id = ?`,
+        [
+          updateData.borrower_type,
+          updateData.borrower_id,
+          updateData.amount,
+          updateData.interest_rate,
+          updateData.term_months,
+          updateData.payment_frequency,
+          updateData.start_date,
+          updateData.end_date,
+          updateData.purpose || null,
+          updateData.collateral || null,
+          updateData.status || 'active',
+          updateData.notes || null,
+          loanId
+        ]
+      );
+
+      if (result.affectedRows === 0) {
+        await connection.rollback();
+        connection.release();
+        return res.status(404).json({ message: 'Loan not found' });
+      }
+
+      // Delete existing schedule
+      await connection.execute('DELETE FROM loan_schedule WHERE loan_id = ?', [loanId]);
+
+      // Calculate and insert new schedule
+      const loan = new Loan();
+      const schedule = loan.calculatePaymentSchedule({
+        amount: updateData.amount,
+        interest_rate: updateData.interest_rate,
+        term: updateData.term_months,
+        payment_frequency: updateData.payment_frequency,
+        start_date: updateData.start_date
+      });
+
+      // Insert new schedule records
+      for (const item of schedule) {
+        await connection.execute(`
+          INSERT INTO loan_schedule (
+            loan_id, period_number, due_date, payment_amount,
+            principal_amount, interest_amount, status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            loanId,
+            item.period_number,
+            item.due_date,
+            item.payment_amount,
+            item.principal_amount,
+            item.interest_amount,
+            'pending'
+          ]
+        );
+      }
+
+      await connection.commit();
+      connection.release();
+
+      // Get updated loan details
+      const [updatedLoan] = await pool.execute(`
+        SELECT l.*,
+               CASE
+                 WHEN l.borrower_type = 'employee' THEN e.name
+                 WHEN l.borrower_type = 'contractor' THEN COALESCE(mc.name, cc.name)
+               END as borrower_name,
+               u.name as created_by_name
+        FROM loans l
+        LEFT JOIN employees e ON l.borrower_type = 'employee' AND l.borrower_id = e.id
+        LEFT JOIN manufacturing_contractors mc ON l.borrower_type = 'contractor' AND l.borrower_id = mc.id
+        LEFT JOIN cutting_contractors cc ON l.borrower_type = 'contractor' AND l.borrower_id = cc.id
+        LEFT JOIN users u ON l.created_by = u.id
+        WHERE l.id = ?
+      `, [loanId]);
+
+      // Get loan schedule
+      const [schedule_items] = await pool.execute(`
+        SELECT * FROM loan_schedule
+        WHERE loan_id = ?
+        ORDER BY period_number ASC
+      `, [loanId]);
+
+      // Get loan payments
+      const [payments] = await pool.execute(`
+        SELECT lp.*,
+               u.name as created_by_name
+        FROM loan_payments lp
+        LEFT JOIN users u ON lp.created_by = u.id
+        WHERE lp.loan_id = ?
+        ORDER BY lp.payment_date DESC
+      `, [loanId]);
+
+      const loanWithDetails = {
+        ...updatedLoan[0],
+        schedule: schedule_items,
+        payments: payments
+      };
+
+      res.json(loanWithDetails);
+    } catch (error) {
+      await connection.rollback();
+      connection.release();
+      throw error;
+    }
+  } catch (error) {
+    if (connection) {
+      connection.release();
+    }
+    console.error('Error updating loan:', error);
+    res.status(400).json({
+      message: 'Error updating loan',
+      error: error.message
+    });
+  }
+});
+
 // Update loan status
 router.patch('/:id/status', protect, authorize('admin'), async (req, res) => {
   try {
@@ -185,19 +416,19 @@ router.get('/borrowers', protect, async (req, res) => {
   try {
     const { type } = req.query;
     let borrowers = [];
-    
+
     if (type === 'employee') {
       const [rows] = await pool.execute('SELECT id, name FROM employees WHERE status = "active"');
       borrowers = rows;
     } else if (type === 'contractor') {
       const [rows] = await pool.execute(`
-        SELECT id, name FROM manufacturing_contractors 
-        UNION 
+        SELECT id, name FROM manufacturing_contractors
+        UNION
         SELECT id, name FROM cutting_contractors
       `);
       borrowers = rows;
     }
-    
+
     res.json(borrowers);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -208,15 +439,76 @@ router.get('/borrowers', protect, async (req, res) => {
 router.get('/:id/schedule', protect, async (req, res) => {
   try {
     const [rows] = await pool.execute(`
-      SELECT * FROM loan_schedule 
+      SELECT * FROM loan_schedule
       WHERE loan_id = ?
       ORDER BY period_number ASC
     `, [req.params.id]);
-    
+
     res.json(rows);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-module.exports = router; 
+// Delete loan
+router.delete('/:id', protect, authorize('admin'), async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const loanId = req.params.id;
+
+    // Check if loan exists
+    const [loan] = await connection.execute(
+      'SELECT * FROM loans WHERE id = ?',
+      [loanId]
+    );
+
+    if (!loan[0]) {
+      await connection.rollback();
+      connection.release();
+      return res.status(404).json({ message: 'Loan not found' });
+    }
+
+    // Check if loan has any payments
+    const [payments] = await connection.execute(
+      'SELECT COUNT(*) as count FROM loan_payments WHERE loan_id = ?',
+      [loanId]
+    );
+
+    if (payments[0].count > 0) {
+      await connection.rollback();
+      connection.release();
+      return res.status(400).json({
+        message: 'Cannot delete loan with existing payments. Please void the loan instead.'
+      });
+    }
+
+    // Delete loan schedule
+    await connection.execute(
+      'DELETE FROM loan_schedule WHERE loan_id = ?',
+      [loanId]
+    );
+
+    // Delete loan record
+    await connection.execute(
+      'DELETE FROM loans WHERE id = ?',
+      [loanId]
+    );
+
+    await connection.commit();
+    connection.release();
+
+    res.json({ message: 'Loan deleted successfully' });
+  } catch (error) {
+    await connection.rollback();
+    connection.release();
+    console.error('Error deleting loan:', error);
+    res.status(500).json({
+      message: 'Error deleting loan',
+      error: error.message
+    });
+  }
+});
+
+module.exports = router;

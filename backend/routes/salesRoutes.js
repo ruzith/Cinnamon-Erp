@@ -7,6 +7,7 @@ const { validateSalesInvoice } = require('../validators/salesValidator');
 const PDFDocument = require('pdfkit');
 const Customer = require('../models/domain/Customer');
 const pool = require('../config/database');
+const db = require('../config/database');
 
 // Get all sales invoices
 router.get('/', protect, async (req, res) => {
@@ -420,6 +421,181 @@ router.get('/:id/print', protect, async (req, res) => {
       message: 'Error generating invoice',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
+  }
+});
+
+// Update a sale
+router.put('/:id', protect, async (req, res) => {
+  const connection = await db.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const {
+      customer_id,
+      items,
+      status,
+      payment_status,
+      payment_method,
+      notes,
+      shipping_address,
+      tax,
+      discount,
+      sub_total,
+      total,
+      date
+    } = req.body;
+
+    // First update the sales_invoice
+    const [invoice] = await connection.query(
+      `UPDATE sales_invoices
+       SET customer_name = (SELECT name FROM customers WHERE id = ?),
+           customer_address = (SELECT address FROM customers WHERE id = ?),
+           customer_phone = (SELECT phone FROM customers WHERE id = ?),
+           customer_email = (SELECT email FROM customers WHERE id = ?),
+           sub_total = ?,
+           discount = ?,
+           tax = ?,
+           total = ?,
+           payment_method = ?,
+           payment_status = ?,
+           notes = ?,
+           status = ?,
+           date = ?
+       WHERE id = ?`,
+      [
+        customer_id, customer_id, customer_id, customer_id,
+        sub_total,
+        discount,
+        tax,
+        total,
+        payment_method,
+        payment_status,
+        notes,
+        status,
+        date,
+        req.params.id
+      ]
+    );
+
+    // Delete existing items
+    await connection.query(
+      'DELETE FROM sales_items WHERE invoice_id = ?',
+      [req.params.id]
+    );
+
+    // Insert new items
+    for (const item of items) {
+      await connection.query(
+        `INSERT INTO sales_items
+         (invoice_id, product_id, quantity, unit_price, discount, sub_total)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          req.params.id,
+          item.product_id,
+          item.quantity,
+          item.unit_price,
+          item.discount || 0,
+          item.sub_total
+        ]
+      );
+
+      // Update inventory quantity
+      await connection.query(
+        `UPDATE inventory
+         SET quantity = quantity - ?
+         WHERE id = ?`,
+        [item.quantity, item.product_id]
+      );
+    }
+
+    await connection.commit();
+
+    res.json({
+      message: 'Sale updated successfully',
+      id: req.params.id
+    });
+
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error updating sale:', error);
+    res.status(500).json({
+      message: 'Error updating sale',
+      error: error.message
+    });
+  } finally {
+    connection.release();
+  }
+});
+
+// Get sale items
+router.get('/:id/items', protect, async (req, res) => {
+  try {
+    const [items] = await db.query(
+      `SELECT si.*, i.product_name
+       FROM sales_items si
+       JOIN inventory i ON si.product_id = i.id
+       WHERE si.invoice_id = ?`,
+      [req.params.id]
+    );
+
+    res.json(items);
+  } catch (error) {
+    console.error('Error fetching sale items:', error);
+    res.status(500).json({
+      message: 'Error fetching sale items',
+      error: error.message
+    });
+  }
+});
+
+// Add this route handler for deleting sales
+router.delete('/:id', protect, async (req, res) => {
+  const connection = await db.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    // First get the sale items to restore inventory quantities
+    const [items] = await connection.query(
+      'SELECT product_id, quantity FROM sales_items WHERE invoice_id = ?',
+      [req.params.id]
+    );
+
+    // Restore inventory quantities
+    for (const item of items) {
+      await connection.query(
+        `UPDATE inventory
+         SET quantity = quantity + ?
+         WHERE id = ?`,
+        [item.quantity, item.product_id]
+      );
+    }
+
+    // Delete sale items
+    await connection.query(
+      'DELETE FROM sales_items WHERE invoice_id = ?',
+      [req.params.id]
+    );
+
+    // Delete the sale invoice
+    await connection.query(
+      'DELETE FROM sales_invoices WHERE id = ?',
+      [req.params.id]
+    );
+
+    await connection.commit();
+    res.json({ message: 'Sale deleted successfully' });
+
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error deleting sale:', error);
+    res.status(500).json({
+      message: 'Error deleting sale',
+      error: error.message
+    });
+  } finally {
+    connection.release();
   }
 });
 

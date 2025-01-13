@@ -54,30 +54,69 @@ class Loan extends BaseModel {
     try {
       await connection.beginTransaction();
 
-      // Generate loan number if not provided
-      if (!loanData.loan_number) {
-        loanData.loan_number = await this.generateLoanNumber();
-      }
+      // Generate loan number first
+      const loanNumber = await this.generateLoanNumber();
 
-      // Calculate payment schedule
-      const schedule = this.calculatePaymentSchedule(loanData);
-      
-      // Create loan record - Convert object to array of values
-      const columns = Object.keys(loanData).join(', ');
-      const placeholders = Object.keys(loanData).map(() => '?').join(', ');
-      const values = Object.values(loanData);
+      // Ensure all required fields have values or null
+      const loan = {
+        borrower_type: loanData.borrower_type,
+        borrower_id: loanData.borrower_id,
+        amount: Number(loanData.amount),
+        interest_rate: Number(loanData.interest_rate),
+        term_months: Number(loanData.term_months),
+        payment_frequency: loanData.payment_frequency,
+        start_date: loanData.start_date,
+        end_date: loanData.end_date,
+        purpose: loanData.purpose || null,
+        collateral: loanData.collateral || null,
+        status: loanData.status || 'active',
+        notes: loanData.notes || null,
+        remaining_balance: Number(loanData.amount),
+        loan_number: loanNumber,
+        created_by: loanData.created_by
+      };
 
+      // Insert loan record
       const [result] = await connection.execute(
-        `INSERT INTO loans (${columns}) VALUES (${placeholders})`,
-        values
+        `INSERT INTO loans (
+          borrower_type, borrower_id, amount, interest_rate,
+          term_months, payment_frequency, start_date, end_date,
+          purpose, collateral, status, notes, remaining_balance,
+          loan_number, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          loan.borrower_type,
+          loan.borrower_id,
+          loan.amount,
+          loan.interest_rate,
+          loan.term_months,
+          loan.payment_frequency,
+          loan.start_date,
+          loan.end_date,
+          loan.purpose,
+          loan.collateral,
+          loan.status,
+          loan.notes,
+          loan.remaining_balance,
+          loan.loan_number,
+          loan.created_by
+        ]
       );
       const loanId = result.insertId;
 
+      // Calculate payment schedule
+      const schedule = this.calculatePaymentSchedule(loan);
+
       // Create schedule records
       for (const item of schedule) {
+        const scheduleItem = {
+          ...item,
+          loan_id: loanId,
+          created_by: loan.created_by
+        };
         const scheduleColumns = Object.keys(item).join(', ');
         const schedulePlaceholders = Object.keys(item).map(() => '?').join(', ');
-        const scheduleValues = Object.values({ ...item, loan_id: loanId });
+        const scheduleValues = Object.values(scheduleItem);
 
         await connection.execute(
           `INSERT INTO loan_schedule (${scheduleColumns}) VALUES (${schedulePlaceholders})`,
@@ -113,7 +152,7 @@ class Loan extends BaseModel {
 
     const totalPeriods = term * periodsPerYear;
     const periodicRate = interest_rate / 100 / periodsPerYear;
-    const paymentAmount = (amount * periodicRate * Math.pow(1 + periodicRate, totalPeriods)) / 
+    const paymentAmount = (amount * periodicRate * Math.pow(1 + periodicRate, totalPeriods)) /
                          (Math.pow(1 + periodicRate, totalPeriods) - 1);
 
     const schedule = [];
@@ -156,4 +195,4 @@ class Loan extends BaseModel {
   }
 }
 
-module.exports = new Loan(); 
+module.exports = Loan;

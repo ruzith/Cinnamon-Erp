@@ -42,6 +42,7 @@ import {
   Clear as ClearIcon,
   Timeline as TimelineIcon,
   Delete as DeleteIcon,
+  ThumbUp as ApproveIcon,
 } from '@mui/icons-material';
 import axios from '../app/axios';
 import { format } from 'date-fns';
@@ -976,6 +977,17 @@ export default function HRManagement() {
     </Dialog>
   );
 
+  const handlePayrollApproval = async (payrollId) => {
+    try {
+      await axios.put(`/api/hr/payroll/${payrollId}/approve`);
+      // Refresh payroll data after approval
+      fetchPayrolls();
+    } catch (error) {
+      console.error('Error approving payroll:', error);
+      alert(error.response?.data?.message || 'Error approving payroll');
+    }
+  };
+
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
       {/* Header */}
@@ -1085,10 +1097,21 @@ export default function HRManagement() {
                       />
                     </TableCell>
                     <TableCell align="right">
+                      {(payroll.status?.toLowerCase() === 'pending' || payroll.status?.toLowerCase() === 'draft') && (
+                        <IconButton
+                          size="small"
+                          onClick={() => handlePayrollApproval(payroll.id)}
+                          sx={{ color: 'success.main', mr: 1 }}
+                          title="Approve Payroll"
+                        >
+                          <ApproveIcon />
+                        </IconButton>
+                      )}
                       <IconButton
                         size="small"
                         onClick={() => handlePrintPayroll(payroll)}
-                        sx={{ color: 'success.main' }}
+                        sx={{ color: 'primary.main' }}
+                        title="Print Payroll"
                       >
                         <PrintIcon />
                       </IconButton>

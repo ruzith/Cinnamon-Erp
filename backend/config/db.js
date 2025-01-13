@@ -15,4 +15,4 @@ const connectDB = async () => {
   }
 };
 
-module.exports = { pool, connectDB }; 
+module.exports = { pool, connectDB };

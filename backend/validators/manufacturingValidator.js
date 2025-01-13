@@ -5,7 +5,6 @@ const contractorSchema = Joi.object({
   contractor_id: Joi.string().required().trim(),
   phone: Joi.string().required().trim(),
   address: Joi.string().required().trim(),
-  cutting_rate: Joi.number().positive().required().default(250),
   status: Joi.string().valid('active', 'inactive').default('active')
 });
 
@@ -23,7 +22,7 @@ const assignmentSchema = Joi.object({
 const orderSchema = Joi.object({
   product_id: Joi.number().integer().required(),
   quantity: Joi.number().integer().positive().required(),
-  assigned_to: Joi.number().integer().required(),
+  assigned_to: Joi.number().integer().allow(null),
   status: Joi.string().valid('planned', 'in_progress', 'completed', 'cancelled').default('planned'),
   priority: Joi.string().valid('low', 'normal', 'high', 'urgent').default('normal'),
   start_date: Joi.date().required(),

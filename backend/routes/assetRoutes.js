@@ -4,6 +4,8 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 const Asset = require('../models/domain/Asset');
 const AssetCategory = require('../models/domain/AssetCategory');
 const AssetMaintenance = require('../models/domain/AssetMaintenance');
+const { getAssets, deleteAsset } = require('../controllers/assetController');
+const { authenticateToken } = require('../middleware/auth');
 
 // Category routes
 router.get('/categories', protect, async (req, res) => {
@@ -43,7 +45,7 @@ router.post('/', protect, authorize('admin'), async (req, res) => {
     // Validate type - make case-insensitive
     const validTypes = ['equipment', 'vehicle', 'tool'];
     if (!validTypes.includes(req.body.type.toLowerCase())) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: "Invalid asset type. Must be one of: 'equipment', 'vehicle', or 'tool'"
       });
     }
@@ -63,18 +65,18 @@ router.post('/', protect, authorize('admin'), async (req, res) => {
 
     // Generate code if not provided
     assetData.code = req.body.code || await Asset.generateAssetNumber(req.body.type.toLowerCase());
-    
+
     const [result] = await Asset.pool.execute(`
       INSERT INTO assets (
-        code, 
-        asset_number, 
-        name, 
-        category_id, 
-        type, 
-        purchase_date, 
-        purchase_price, 
-        current_value, 
-        status, 
+        code,
+        asset_number,
+        name,
+        category_id,
+        type,
+        purchase_date,
+        purchase_price,
+        current_value,
+        status,
         created_by
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
@@ -89,7 +91,7 @@ router.post('/', protect, authorize('admin'), async (req, res) => {
       assetData.status,
       assetData.created_by
     ]);
-    
+
     const asset = await Asset.getWithDetails(result.insertId);
     res.status(201).json(asset);
   } catch (error) {
@@ -118,7 +120,7 @@ router.put('/:id', protect, authorize('admin'), async (req, res) => {
     };
 
     const [result] = await Asset.pool.execute(`
-      UPDATE assets 
+      UPDATE assets
       SET asset_number = ?,
           name = ?,
           category_id = ?,
@@ -228,7 +230,7 @@ router.get('/report/depreciation', protect, async (req, res) => {
         depreciationRate: asset.depreciation_rate
       };
     });
-    
+
     res.json(report);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -252,7 +254,7 @@ router.get('/:id/depreciation', protect, async (req, res) => {
 router.get('/report/values', protect, async (req, res) => {
   try {
     const [rows] = await Asset.pool.execute(`
-      SELECT 
+      SELECT
         ac.name as category_name,
         COUNT(*) as asset_count,
         SUM(a.purchase_price) as total_purchase_value,
@@ -274,7 +276,7 @@ router.get('/report/values', protect, async (req, res) => {
 router.get('/report/usage', protect, async (req, res) => {
   try {
     const [rows] = await Asset.pool.execute(`
-      SELECT 
+      SELECT
         a.*,
         ac.name as category_name,
         COUNT(am.id) as maintenance_count,
@@ -291,4 +293,7 @@ router.get('/report/usage', protect, async (req, res) => {
   }
 });
 
-module.exports = router; 
+// Delete an asset
+router.delete('/:id', protect, authorize('admin'), deleteAsset);
+
+module.exports = router;

@@ -22,10 +22,10 @@ class Account extends BaseModel {
 
   async getTrialBalance() {
     const [rows] = await this.pool.execute(`
-      SELECT 
+      SELECT
         type,
         category,
-        SUM(CASE 
+        SUM(CASE
           WHEN type IN ('asset', 'expense') THEN balance
           ELSE -balance
         END) as balance
@@ -39,7 +39,7 @@ class Account extends BaseModel {
 
   async getBalanceSheet() {
     const [rows] = await this.pool.execute(`
-      SELECT 
+      SELECT
         type,
         category,
         SUM(balance) as total
@@ -47,7 +47,7 @@ class Account extends BaseModel {
       WHERE status = 'active'
         AND type IN ('asset', 'liability', 'equity')
       GROUP BY type, category
-      ORDER BY 
+      ORDER BY
         FIELD(type, 'asset', 'liability', 'equity'),
         FIELD(category, 'current', 'fixed', 'current-liability', 'long-term-liability', 'capital', 'operational')
     `);
@@ -56,9 +56,9 @@ class Account extends BaseModel {
 
   async getIncomeStatement(startDate, endDate) {
     const [rows] = await this.pool.execute(`
-      SELECT 
+      SELECT
         a.type,
-        SUM(CASE 
+        SUM(CASE
           WHEN t.type = 'revenue' THEN t.amount
           ELSE -t.amount
         END) as amount
@@ -76,9 +76,9 @@ class Account extends BaseModel {
 
   async getCashFlow(startDate, endDate) {
     const [rows] = await this.pool.execute(`
-      SELECT 
+      SELECT
         a.category,
-        SUM(CASE 
+        SUM(CASE
           WHEN a.type IN ('asset', 'expense') THEN te.debit - te.credit
           ELSE te.credit - te.debit
         END) as amount
@@ -96,14 +96,14 @@ class Account extends BaseModel {
 
   async getLedgerEntries(accountId, startDate, endDate) {
     const [rows] = await this.pool.execute(`
-      SELECT 
+      SELECT
         t.date,
         t.reference,
         t.description,
         te.debit,
         te.credit,
         t.status,
-        CASE 
+        CASE
           WHEN a.type IN ('asset', 'expense') THEN @balance := @balance + (te.debit - te.credit)
           ELSE @balance := @balance + (te.credit - te.debit)
         END as running_balance
@@ -116,13 +116,13 @@ class Account extends BaseModel {
         AND t.status = 'posted'
       ORDER BY t.date, t.id
     `, [accountId, startDate, endDate]);
-    
+
     return rows;
   }
 
   async getCashBook(startDate, endDate) {
     const [rows] = await this.pool.execute(`
-      SELECT 
+      SELECT
         t.date,
         t.reference,
         t.description,
@@ -138,9 +138,9 @@ class Account extends BaseModel {
         AND t.status = 'posted'
       ORDER BY t.date, t.id
     `, [startDate, endDate]);
-    
+
     return rows;
   }
 }
 
-module.exports = new Account(); 
+module.exports = new Account();

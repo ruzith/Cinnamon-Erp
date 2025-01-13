@@ -50,6 +50,111 @@ const TabPanel = (props) => {
   );
 };
 
+const MaintenanceDialog = ({
+  open,
+  onClose,
+  formData,
+  onChange,
+  onSubmit
+}) => (
+  <Dialog
+    open={open}
+    onClose={onClose}
+    maxWidth="md"
+    fullWidth
+  >
+    <DialogTitle>Add Maintenance Record</DialogTitle>
+    <DialogContent>
+      <Grid container spacing={2} sx={{ mt: 1 }}>
+        <Grid item xs={12} sm={6}>
+          <FormControl fullWidth>
+            <InputLabel>Type</InputLabel>
+            <Select
+              name="type"
+              value={formData.type}
+              label="Type"
+              onChange={onChange}
+            >
+              <MenuItem value="routine">Routine</MenuItem>
+              <MenuItem value="repair">Repair</MenuItem>
+              <MenuItem value="upgrade">Upgrade</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth
+            label="Date"
+            name="date"
+            type="date"
+            value={formData.date}
+            onChange={onChange}
+            InputLabelProps={{ shrink: true }}
+          />
+        </Grid>
+        <Grid item xs={12}>
+          <TextField
+            fullWidth
+            label="Description"
+            name="description"
+            multiline
+            rows={2}
+            value={formData.description}
+            onChange={onChange}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth
+            label="Cost"
+            name="cost"
+            type="number"
+            value={formData.cost}
+            onChange={onChange}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth
+            label="Performed By"
+            name="performedBy"
+            value={formData.performedBy}
+            onChange={onChange}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth
+            label="Next Maintenance Date"
+            name="nextMaintenanceDate"
+            type="date"
+            value={formData.nextMaintenanceDate}
+            onChange={onChange}
+            InputLabelProps={{ shrink: true }}
+          />
+        </Grid>
+        <Grid item xs={12}>
+          <TextField
+            fullWidth
+            label="Notes"
+            name="notes"
+            multiline
+            rows={2}
+            value={formData.notes}
+            onChange={onChange}
+          />
+        </Grid>
+      </Grid>
+    </DialogContent>
+    <DialogActions>
+      <Button onClick={onClose}>Cancel</Button>
+      <Button variant="contained" onClick={onSubmit}>
+        Save
+      </Button>
+    </DialogActions>
+  </Dialog>
+);
+
 const AssetManagement = () => {
   const [tabValue, setTabValue] = useState(0);
   const [assets, setAssets] = useState([]);
@@ -203,10 +308,11 @@ const AssetManagement = () => {
   };
 
   const handleMaintenanceInputChange = (e) => {
-    setMaintenanceFormData({
-      ...maintenanceFormData,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value } = e.target;
+    setMaintenanceFormData(prev => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
   const handleAssetSubmit = async (e) => {
@@ -291,106 +397,6 @@ const AssetManagement = () => {
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString();
   };
-
-  // Add maintenance dialog
-  const MaintenanceDialog = () => (
-    <Dialog
-      open={openMaintenanceDialog}
-      onClose={handleCloseMaintenanceDialog}
-      maxWidth="md"
-      fullWidth
-    >
-      <DialogTitle>Add Maintenance Record</DialogTitle>
-      <DialogContent>
-        <Grid container spacing={2} sx={{ mt: 1 }}>
-          <Grid item xs={12} sm={6}>
-            <FormControl fullWidth>
-              <InputLabel>Type</InputLabel>
-              <Select
-                name="type"
-                value={maintenanceFormData.type}
-                label="Type"
-                onChange={handleMaintenanceInputChange}
-              >
-                <MenuItem value="routine">Routine</MenuItem>
-                <MenuItem value="repair">Repair</MenuItem>
-                <MenuItem value="upgrade">Upgrade</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              label="Date"
-              name="date"
-              type="date"
-              value={maintenanceFormData.date}
-              onChange={handleMaintenanceInputChange}
-              InputLabelProps={{ shrink: true }}
-            />
-          </Grid>
-          <Grid item xs={12}>
-            <TextField
-              fullWidth
-              label="Description"
-              name="description"
-              multiline
-              rows={2}
-              value={maintenanceFormData.description}
-              onChange={handleMaintenanceInputChange}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              label="Cost"
-              name="cost"
-              type="number"
-              value={maintenanceFormData.cost}
-              onChange={handleMaintenanceInputChange}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              label="Performed By"
-              name="performedBy"
-              value={maintenanceFormData.performedBy}
-              onChange={handleMaintenanceInputChange}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              label="Next Maintenance Date"
-              name="nextMaintenanceDate"
-              type="date"
-              value={maintenanceFormData.nextMaintenanceDate}
-              onChange={handleMaintenanceInputChange}
-              InputLabelProps={{ shrink: true }}
-            />
-          </Grid>
-          <Grid item xs={12}>
-            <TextField
-              fullWidth
-              label="Notes"
-              name="notes"
-              multiline
-              rows={2}
-              value={maintenanceFormData.notes}
-              onChange={handleMaintenanceInputChange}
-            />
-          </Grid>
-        </Grid>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={handleCloseMaintenanceDialog}>Cancel</Button>
-        <Button variant="contained" onClick={handleMaintenanceSubmit}>
-          Save
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
 
   // Add history dialog
   const HistoryDialog = () => (
@@ -776,7 +782,13 @@ const AssetManagement = () => {
       </Dialog>
 
       {/* Add these dialogs to your return statement */}
-      <MaintenanceDialog />
+      <MaintenanceDialog
+        open={openMaintenanceDialog}
+        onClose={handleCloseMaintenanceDialog}
+        formData={maintenanceFormData}
+        onChange={handleMaintenanceInputChange}
+        onSubmit={handleMaintenanceSubmit}
+      />
       <HistoryDialog />
     </Box>
   );

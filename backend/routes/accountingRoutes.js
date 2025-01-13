@@ -30,38 +30,6 @@ router.post('/accounts', protect, authorize('admin', 'accountant'), async (req, 
       });
     }
 
-    // Define valid categories for each type
-    const validCategories = {
-      asset: ['current', 'fixed'],
-      liability: ['current-liability', 'long-term-liability'],
-      equity: ['capital', 'operational'],
-      revenue: ['operational'],
-      expense: ['operational']
-    };
-
-    // Set default category based on type
-    let category;
-    switch (req.body.type) {
-      case 'asset':
-        category = req.body.category || 'current';
-        break;
-      case 'liability':
-        category = req.body.category || 'current-liability';
-        break;
-      case 'equity':
-        category = req.body.category || 'capital';
-        break;
-      default:
-        category = 'operational';
-    }
-
-    // Validate the category
-    if (!validCategories[req.body.type].includes(category)) {
-      return res.status(400).json({
-        message: `Invalid category for ${req.body.type}. Must be one of: ${validCategories[req.body.type].join(', ')}`
-      });
-    }
-
     // Create account with explicit field names
     const [result] = await Account.pool.execute(
       `INSERT INTO accounts (
@@ -74,10 +42,10 @@ router.post('/accounts', protect, authorize('admin', 'accountant'), async (req, 
         status
       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
-        req.body.number,
+        req.body.code,
         req.body.name,
         req.body.type,
-        category,
+        req.body.category || '',
         req.body.description || '',
         req.body.balance || 0,
         req.body.status || 'active'
@@ -96,75 +64,238 @@ router.post('/accounts', protect, authorize('admin', 'accountant'), async (req, 
 });
 
 // Transaction routes
-router.post('/transactions', protect, authorize('admin', 'accountant'), async (req, res) => {
+router.get('/transactions', protect, async (req, res) => {
   try {
-    // Validate status
-    const validStatuses = ['draft', 'posted', 'void'];
-    const status = req.body.status || 'draft';
+    const [transactions] = await Transaction.pool.execute(`
+      SELECT
+        t.*,
+        u.name as created_by_name,
+        te.account_id as account_id,
+        a.name as account_name,
+        CASE
+          WHEN t.type = 'salary' THEN e.name
+          WHEN t.type = 'manufacturing_payment' THEN t.reference
+          ELSE NULL
+        END as reference_details,
+        e.name as employee_name,
+        e.id as employee_code
+      FROM transactions t
+      LEFT JOIN users u ON t.created_by = u.id
+      LEFT JOIN transactions_entries te ON t.id = te.transaction_id
+      LEFT JOIN accounts a ON te.account_id = a.id
+      LEFT JOIN employees e ON t.employee_id = e.id
+      ORDER BY t.date DESC
+    `);
 
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({
-        message: `Invalid status. Must be one of: ${validStatuses.join(', ')}`
-      });
+    res.json(transactions);
+  } catch (error) {
+    console.error('Error fetching transactions:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.get('/transactions/:id', protect, async (req, res) => {
+  try {
+    const transaction = await Transaction.getWithDetails(req.params.id);
+    if (!transaction) {
+      return res.status(404).json({ message: 'Transaction not found' });
     }
+    res.json(transaction);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
 
-    // Validate category
-    const validCategories = ['production', 'maintenance', 'royalty', 'lease'];
-    const category = req.body.category || 'production';
+router.post('/transactions', protect, async (req, res) => {
+  const connection = await Transaction.pool.getConnection();
+  try {
+    await connection.beginTransaction();
 
-    if (!validCategories.includes(category)) {
-      return res.status(400).json({
-        message: `Invalid category. Must be one of: ${validCategories.join(', ')}`
-      });
-    }
-
-    // Create transaction with entries
-    const transactionData = {
-      date: req.body.date,
-      reference: req.body.reference,
-      description: req.body.description,
-      status: status,
-      type: req.body.type,
-      amount: req.body.amount,
-      category: category,
-      well_id: req.body.well_id || 1,
-      lease_id: req.body.lease_id || 1,
-      created_by: req.user.id
-    };
+    const {
+      date,
+      type,
+      category,
+      amount,
+      description,
+      account,
+      reference,
+      employee,
+      notes,
+      paymentMethod,
+      status = 'draft'
+    } = req.body;
 
     // Validate required fields
-    if (!transactionData.date) {
-      return res.status(400).json({ message: 'Transaction date is required' });
-    }
-    if (!transactionData.amount) {
-      return res.status(400).json({ message: 'Transaction amount is required' });
-    }
-    if (!transactionData.type) {
-      return res.status(400).json({ message: 'Transaction type is required' });
-    }
-    if (!transactionData.description) {
-      return res.status(400).json({ message: 'Transaction description is required' });
+    if (!date || !type || !category || !amount || !description || !account) {
+      return res.status(400).json({ message: 'Please provide all required fields' });
     }
 
-    const entries = [
-      {
-        account_id: req.body.account,
-        description: req.body.description,
-        debit: req.body.type === 'expense' ? req.body.amount : 0,
-        credit: req.body.type === 'revenue' ? req.body.amount : 0
-      },
-      {
-        account_id: 1000, // Cash/Bank account
-        description: req.body.description,
-        debit: req.body.type === 'revenue' ? req.body.amount : 0,
-        credit: req.body.type === 'expense' ? req.body.amount : 0
-      }
-    ];
+    // Generate transaction reference if not provided
+    const transactionReference = reference || await Transaction.generateReference();
 
-    const transaction = await Transaction.createWithEntries(transactionData, entries);
-    res.status(201).json(transaction);
+    // Create the main transaction record
+    const [result] = await connection.execute(
+      `INSERT INTO transactions (
+        date, type, category, amount, description,
+        reference, employee_id, notes, payment_method,
+        status, created_by
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        date,
+        type,
+        category,
+        amount,
+        description,
+        transactionReference,
+        employee || null,
+        notes,
+        paymentMethod,
+        status,
+        req.user.id
+      ]
+    );
+
+    const transactionId = result.insertId;
+
+    // Create the corresponding transaction entry
+    await connection.execute(
+      `INSERT INTO transactions_entries (
+        transaction_id, account_id, description,
+        debit, credit
+      ) VALUES (?, ?, ?, ?, ?)`,
+      [
+        transactionId,
+        account,
+        description,
+        type === 'expense' || type === 'manufacturing_payment' || type === 'salary' ? amount : 0,
+        type === 'revenue' || type === 'credit_payment' ? amount : 0
+      ]
+    );
+
+    // If status is posted, update account balance
+    if (status === 'posted') {
+      const balanceChange = type === 'revenue' || type === 'credit_payment' ? amount : -amount;
+      await connection.execute(
+        'UPDATE accounts SET balance = balance + ? WHERE id = ?',
+        [balanceChange, account]
+      );
+    }
+
+    await connection.commit();
+
+    // Fetch the created transaction with details
+    const newTransaction = await Transaction.getWithDetails(transactionId);
+    res.status(201).json(newTransaction);
+
   } catch (error) {
+    await connection.rollback();
+    console.error('Error creating transaction:', error);
     res.status(400).json({ message: error.message });
+  } finally {
+    connection.release();
+  }
+});
+
+router.put('/transactions/:id', protect, async (req, res) => {
+  const connection = await Transaction.pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const transaction = await Transaction.getWithDetails(req.params.id);
+    if (!transaction) {
+      return res.status(404).json({ message: 'Transaction not found' });
+    }
+
+    // Update main transaction record
+    await connection.execute(
+      `UPDATE transactions
+       SET date = ?, type = ?, category = ?, amount = ?,
+           description = ?, reference = ?, employee_id = ?,
+           notes = ?, payment_method = ?, status = ?
+       WHERE id = ?`,
+      [
+        req.body.date,
+        req.body.type,
+        req.body.category,
+        req.body.amount,
+        req.body.description,
+        req.body.reference,
+        req.body.employee || null,
+        req.body.notes,
+        req.body.paymentMethod,
+        req.body.status,
+        req.params.id
+      ]
+    );
+
+    // Update transaction entry
+    await connection.execute(
+      `UPDATE transactions_entries
+       SET account_id = ?, description = ?,
+           debit = ?, credit = ?
+       WHERE transaction_id = ?`,
+      [
+        req.body.account,
+        req.body.description,
+        req.body.type === 'expense' || req.body.type === 'manufacturing_payment' || req.body.type === 'salary' ? req.body.amount : 0,
+        req.body.type === 'revenue' || req.body.type === 'credit_payment' ? req.body.amount : 0,
+        req.params.id
+      ]
+    );
+
+    // If status changed to posted, update account balance
+    if (req.body.status === 'posted' && transaction.status !== 'posted') {
+      const balanceChange = req.body.type === 'revenue' || req.body.type === 'credit_payment' ? req.body.amount : -req.body.amount;
+      await connection.execute(
+        'UPDATE accounts SET balance = balance + ? WHERE id = ?',
+        [balanceChange, req.body.account]
+      );
+    }
+
+    await connection.commit();
+
+    const updatedTransaction = await Transaction.getWithDetails(req.params.id);
+    res.json(updatedTransaction);
+
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error updating transaction:', error);
+    res.status(400).json({ message: error.message });
+  } finally {
+    connection.release();
+  }
+});
+
+router.delete('/transactions/:id', protect, async (req, res) => {
+  const connection = await Transaction.pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const transaction = await Transaction.getWithDetails(req.params.id);
+    if (!transaction) {
+      return res.status(404).json({ message: 'Transaction not found' });
+    }
+
+    // Delete transaction entries first
+    await connection.execute(
+      'DELETE FROM transactions_entries WHERE transaction_id = ?',
+      [req.params.id]
+    );
+
+    // Then delete the main transaction
+    await connection.execute(
+      'DELETE FROM transactions WHERE id = ?',
+      [req.params.id]
+    );
+
+    await connection.commit();
+    res.json({ message: 'Transaction deleted successfully' });
+
+  } catch (error) {
+    await connection.rollback();
+    res.status(500).json({ message: error.message });
+  } finally {
+    connection.release();
   }
 });
 
@@ -760,6 +891,109 @@ router.post('/reports/:type/export', async (req, res) => {
   } catch (error) {
     console.error('Export error:', error);
     res.status(500).json({ message: 'Error exporting report' });
+  }
+});
+
+// Add this PUT endpoint for updating accounts
+router.put('/accounts/:id', protect, authorize('admin', 'accountant'), async (req, res) => {
+  const connection = await Account.pool.getConnection();
+  try {
+    // First check if account exists
+    const [existingAccount] = await connection.execute(
+      'SELECT * FROM accounts WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (existingAccount.length === 0) {
+      return res.status(404).json({ message: 'Account not found' });
+    }
+
+    // Validate account type
+    const validTypes = ['asset', 'liability', 'equity', 'revenue', 'expense'];
+    if (!validTypes.includes(req.body.type)) {
+      return res.status(400).json({
+        message: `Invalid account type. Must be one of: ${validTypes.join(', ')}`
+      });
+    }
+
+    // Update the account
+    await connection.execute(
+      `UPDATE accounts
+       SET code = ?,
+           name = ?,
+           type = ?,
+           category = ?,
+           description = ?,
+           balance = ?,
+           status = ?
+       WHERE id = ?`,
+      [
+        req.body.code,
+        req.body.name,
+        req.body.type,
+        req.body.category || '',
+        req.body.description || '',
+        req.body.balance || 0,
+        req.body.status || 'active',
+        req.params.id
+      ]
+    );
+
+    // Fetch the updated account
+    const [updatedAccount] = await connection.execute(
+      'SELECT * FROM accounts WHERE id = ?',
+      [req.params.id]
+    );
+
+    res.json(updatedAccount[0]);
+
+  } catch (error) {
+    console.error('Error updating account:', error);
+    res.status(400).json({ message: error.message });
+  } finally {
+    connection.release();
+  }
+});
+
+// Add this DELETE endpoint for accounts
+router.delete('/accounts/:id', protect, authorize('admin', 'accountant'), async (req, res) => {
+  const connection = await Account.pool.getConnection();
+  try {
+    // First check if account exists
+    const [existingAccount] = await connection.execute(
+      'SELECT * FROM accounts WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (existingAccount.length === 0) {
+      return res.status(404).json({ message: 'Account not found' });
+    }
+
+    // Check if account has any transactions
+    const [transactions] = await connection.execute(
+      'SELECT COUNT(*) as count FROM transactions_entries WHERE account_id = ?',
+      [req.params.id]
+    );
+
+    if (transactions[0].count > 0) {
+      return res.status(400).json({
+        message: 'Cannot delete account with existing transactions. Consider deactivating it instead.'
+      });
+    }
+
+    // Delete the account
+    await connection.execute(
+      'DELETE FROM accounts WHERE id = ?',
+      [req.params.id]
+    );
+
+    res.json({ message: 'Account deleted successfully' });
+
+  } catch (error) {
+    console.error('Error deleting account:', error);
+    res.status(400).json({ message: error.message });
+  } finally {
+    connection.release();
   }
 });
 

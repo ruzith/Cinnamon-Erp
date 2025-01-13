@@ -24,7 +24,9 @@ const {
   printAssignmentReport,
   getManufacturingInvoices,
   getPurchases,
-  createPurchaseInvoice
+  createPurchaseInvoice,
+  markPurchaseAsPaid,
+  updateAssignmentStatus
 } = require('../controllers/manufacturingController');
 const ManufacturingOrder = require('../models/domain/ManufacturingOrder');
 const { validateOrder } = require('../validators/manufacturingValidator');
@@ -113,6 +115,7 @@ router.put('/assignments/:id', protect, authorize('admin', 'manager'), updateAss
 router.delete('/assignments/:id', protect, authorize('admin', 'manager'), deleteAssignment);
 router.get('/assignments/:id/report', protect, printAssignmentReport);
 router.get('/reports/assignments', protect, getAssignmentReports);
+router.put('/assignments/:id/status', protect, authorize('admin', 'manager'), updateAssignmentStatus);
 
 // Advance payment routes
 router.get('/advance-payments', protect, getAdvancePayments);
@@ -131,5 +134,6 @@ router.get('/invoices/:id/print', protect, printInvoice);
 // Purchases routes
 router.get('/purchases', protect, getPurchases);
 router.post('/purchase-invoices', protect, authorize('admin', 'manager'), createPurchaseInvoice);
+router.put('/purchases/:id/mark-paid', protect, authorize('admin', 'accountant'), markPurchaseAsPaid);
 
 module.exports = router;

@@ -36,22 +36,34 @@ const generateAssetCategories = () => [
 ];
 
 // Helper function to generate assets
-const generateAssets = async (connection, count = 15) => {
-  const [categories] = await connection.query('SELECT id FROM asset_categories');
-  const [users] = await connection.query('SELECT id FROM users WHERE role = "admin"');
-
-  return Array.from({ length: count }, () => ({
-    code: faker.string.alphanumeric(6).toUpperCase(),
-    asset_number: `AST-${faker.string.numeric(6)}`,
-    name: faker.commerce.productName(),
-    category_id: faker.helpers.arrayElement(categories).id,
-    type: faker.helpers.arrayElement(['equipment', 'vehicle', 'tool']),
-    purchase_date: faker.date.past({ years: 3 }).toISOString().split('T')[0],
-    purchase_price: faker.number.float({ min: 1000, max: 100000, multipleOf: 0.01 }),
-    current_value: faker.number.float({ min: 500, max: 90000, multipleOf: 0.01 }),
-    status: faker.helpers.arrayElement(['active', 'maintenance', 'retired']),
-    created_by: users[0].id
-  }));
+const generateAssets = () => {
+  return [
+    {
+      code: 'A001',
+      asset_number: '342',
+      name: 'Asset One',
+      category: 'Equipment', // Change from category_id to category
+      type: 'equipment',
+      purchase_date: '2023-01-01',
+      purchase_price: 1000.00,
+      current_value: 800.00,
+      status: 'active',
+      created_by: 1 // Assuming the admin user has ID 1
+    },
+    {
+      code: 'A002',
+      asset_number: '343',
+      name: 'Asset Two',
+      category: 'Vehicle', // Change from category_id to category
+      type: 'vehicle',
+      purchase_date: '2023-02-01',
+      purchase_price: 20000.00,
+      current_value: 18000.00,
+      status: 'active',
+      created_by: 1
+    },
+    // Add more assets as needed
+  ];
 };
 
 const generateEmployees = async (connection, count = 10) => {
@@ -61,7 +73,7 @@ const generateEmployees = async (connection, count = 10) => {
   return Array.from({ length: count }, () => {
     const designation_id = faker.helpers.arrayElement(designations).id;
 
-    // Generate a phone number in the format: 077XXXXXXX (10 digits)
+    // Generate a phone number using string.numeric instead
     const phone = `077${faker.string.numeric(7)}`;
 
     // Generate salary based on employment type
@@ -159,7 +171,7 @@ const generateLands = async (connection, count = 10) => {
       lease_start_date: faker.date.past({ years: 1 }).toISOString().split('T')[0],
       lease_end_date: faker.date.future({ years: 2 }).toISOString().split('T')[0],
       lessor_name: faker.person.fullName(),
-      lessor_contact: faker.phone.number()
+      lessor_contact: faker.string.numeric(10) // Replace any phone number generation with string.numeric
     }) : null;
 
     return {
@@ -227,7 +239,8 @@ const generateManufacturingContractors = (count = 10) => {
   return Array.from({ length: count }, () => ({
     name: faker.person.fullName(),
     contractor_id: `MC${faker.string.numeric(4)}`,
-    phone: faker.phone.number('+94 ## ### ####'),
+    // Replace deprecated phone.number with string.numeric
+    phone: `+94${faker.string.numeric(9)}`,
     address: faker.location.streetAddress(true),
     status: faker.helpers.arrayElement(['active', 'inactive'])
   }));
@@ -575,7 +588,8 @@ const generateSalesInvoices = async (connection, count = 20) => {
       date: faker.date.past({ years: 1 }).toISOString().split('T')[0],
       customer_name: faker.company.name(),
       customer_address: faker.location.streetAddress(),
-      customer_phone: faker.phone.number('+94 7# ### ####'),
+      // Replace deprecated phone.number with string.numeric
+      customer_phone: `+94 7${faker.string.numeric(8)}`,
       customer_email: faker.internet.email().toLowerCase(),
       sub_total: subTotal,
       discount: discount,
@@ -690,6 +704,7 @@ const generateCustomers = async (connection, count = 20) => {
   return Array.from({ length: count }, () => ({
     name: faker.company.name(),
     email: faker.internet.email().toLowerCase(),
+    // Replace deprecated phone.number with string.numeric
     phone: `077${faker.string.numeric(7)}`,
     address: faker.location.streetAddress(),
     credit_limit: faker.number.float({ min: 50000, max: 1000000, multipleOf: 1000 }),
@@ -1959,7 +1974,7 @@ const seedData = async () => {
 
     // Seed assets
     console.log('Seeding assets...');
-    const assets = await generateAssets(connection);
+    const assets = generateAssets();
     for (const asset of assets) {
       await connection.query('INSERT INTO assets SET ?', asset);
     }

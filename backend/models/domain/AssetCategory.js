@@ -15,24 +15,16 @@ class AssetCategory extends BaseModel {
 
   async getActiveCategories() {
     const [rows] = await this.pool.execute(`
-      SELECT ac.*,
-             COUNT(a.id) as asset_count
-      FROM asset_categories ac
-      LEFT JOIN assets a ON ac.id = a.category_id
-      WHERE ac.status = 'active'
-      GROUP BY ac.id
-      ORDER BY ac.name ASC
+      SELECT DISTINCT category as name,
+             COUNT(*) as asset_count
+      FROM assets
+      GROUP BY category
+      ORDER BY category ASC
     `);
     return rows;
   }
 
-  async getWithAssets(id) {
-    const [category] = await this.pool.execute(`
-      SELECT * FROM asset_categories WHERE id = ?
-    `, [id]);
-
-    if (!category[0]) return null;
-
+  async getWithAssets(category) {
     const [assets] = await this.pool.execute(`
       SELECT a.*,
              u.name as created_by_name,
@@ -40,12 +32,14 @@ class AssetCategory extends BaseModel {
       FROM assets a
       LEFT JOIN users u ON a.created_by = u.id
       LEFT JOIN wells w ON a.assigned_to = w.id
-      WHERE a.category_id = ?
+      WHERE a.category = ?
       ORDER BY a.name ASC
-    `, [id]);
+    `, [category]);
+
+    if (!assets.length) return null;
 
     return {
-      ...category[0],
+      name: category,
       assets
     };
   }
@@ -65,7 +59,7 @@ class AssetCategory extends BaseModel {
       const age = asset.age;
       const depreciationRate = asset.depreciation_rate / 100;
       const usefulLife = asset.useful_life;
-      
+
       // Calculate depreciation using straight-line method
       const annualDepreciation = asset.purchase_price * depreciationRate;
       const totalDepreciation = Math.min(age * annualDepreciation, asset.purchase_price);
@@ -85,4 +79,4 @@ class AssetCategory extends BaseModel {
   }
 }
 
-module.exports = new AssetCategory(); 
+module.exports = new AssetCategory();

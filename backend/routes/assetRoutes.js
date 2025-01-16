@@ -10,8 +10,14 @@ const { authenticateToken } = require('../middleware/auth');
 // Category routes
 router.get('/categories', protect, async (req, res) => {
   try {
-    const categories = await AssetCategory.getActiveCategories();
-    res.json(categories);
+    const [rows] = await Asset.pool.execute(`
+      SELECT DISTINCT category as name,
+             COUNT(*) as asset_count
+      FROM assets
+      GROUP BY category
+      ORDER BY category ASC
+    `);
+    res.json(rows);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -19,12 +25,12 @@ router.get('/categories', protect, async (req, res) => {
 
 router.post('/categories', protect, authorize('admin'), async (req, res) => {
   try {
-    const [result] = await AssetCategory.pool.execute(
-      'INSERT INTO asset_categories SET ?',
-      [req.body]
-    );
-    const category = await AssetCategory.getWithAssets(result.insertId);
-    res.status(201).json(category);
+    // Instead of creating a category, just return success
+    // Categories are now just strings in the assets table
+    res.status(201).json({
+      message: 'Categories are now managed directly through assets',
+      category: req.body.name
+    });
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
@@ -42,21 +48,28 @@ router.get('/', protect, async (req, res) => {
 
 router.post('/', protect, authorize('admin'), async (req, res) => {
   try {
-    // Validate type - make case-insensitive
-    const validTypes = ['equipment', 'vehicle', 'tool'];
-    if (!validTypes.includes(req.body.type.toLowerCase())) {
+    // Validate required fields
+    if (!req.body.purchaseDate) {
       return res.status(400).json({
-        message: "Invalid asset type. Must be one of: 'equipment', 'vehicle', or 'tool'"
+        message: "Purchase date is required"
+      });
+    }
+
+    // Validate date format
+    const purchaseDate = new Date(req.body.purchaseDate);
+    if (isNaN(purchaseDate.getTime())) {
+      return res.status(400).json({
+        message: "Invalid purchase date format"
       });
     }
 
     // Transform the incoming data to match database fields
     const assetData = {
-      asset_number: req.body.assetNumber || await Asset.generateAssetNumber(req.body.type.toLowerCase()),
+      asset_number: req.body.assetNumber || await Asset.generateAssetNumber(req.body.type),
       name: req.body.name,
-      category_id: req.body.category,
-      type: req.body.type.toLowerCase(), // Ensure lowercase to match enum
-      purchase_date: req.body.purchaseDate,
+      category: req.body.category,
+      type: req.body.type,
+      purchase_date: purchaseDate,
       purchase_price: req.body.purchasePrice,
       current_value: req.body.currentValue,
       status: req.body.status || 'active',
@@ -64,14 +77,14 @@ router.post('/', protect, authorize('admin'), async (req, res) => {
     };
 
     // Generate code if not provided
-    assetData.code = req.body.code || await Asset.generateAssetNumber(req.body.type.toLowerCase());
+    assetData.code = req.body.code || await Asset.generateAssetNumber(req.body.type);
 
     const [result] = await Asset.pool.execute(`
       INSERT INTO assets (
         code,
         asset_number,
         name,
-        category_id,
+        category,
         type,
         purchase_date,
         purchase_price,
@@ -83,7 +96,7 @@ router.post('/', protect, authorize('admin'), async (req, res) => {
       assetData.code,
       assetData.asset_number,
       assetData.name,
-      assetData.category_id,
+      assetData.category,
       assetData.type,
       assetData.purchase_date,
       assetData.purchase_price,
@@ -95,7 +108,11 @@ router.post('/', protect, authorize('admin'), async (req, res) => {
     const asset = await Asset.getWithDetails(result.insertId);
     res.status(201).json(asset);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    console.error('Error creating asset:', error);
+    res.status(400).json({
+      message: error.message || 'Error creating asset',
+      details: error.sqlMessage // Include SQL error message if available
+    });
   }
 });
 

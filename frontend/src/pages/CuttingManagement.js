@@ -802,19 +802,26 @@ const CuttingManagement = () => {
         const response = await axios.delete(`/api/cutting/contractors/${contractorId}`);
         if (response.status === 200) {
           fetchContractors();
+          enqueueSnackbar('Contractor deleted successfully', { variant: 'success' });
         }
       } catch (error) {
-        if (error.response?.data?.hasAdvancePayments || error.response?.data?.hasAssignments) {
+        if (error.response?.data?.hasAdvancePayments ||
+            error.response?.data?.hasAssignments ||
+            error.response?.data?.hasPurchaseInvoices) {
+          // Set the reassignment data and open the dialog
           setReassignmentData({
             oldContractorId: contractorId,
             newContractorId: '',
             advancePayments: error.response.data.advancePayments || [],
-            assignments: error.response.data.assignments || []
+            assignments: error.response.data.assignments || [],
+            purchaseInvoices: error.response.data.purchaseInvoices || 0
           });
           setReassignDialog(true);
         } else {
           console.error('Error deleting contractor:', error);
-          alert(error.response?.data?.message || 'Error deleting contractor');
+          enqueueSnackbar(error.response?.data?.message || 'Error deleting contractor', {
+            variant: 'error'
+          });
         }
       }
     }
@@ -860,7 +867,8 @@ const CuttingManagement = () => {
       <DialogContent>
         <Box sx={{ mt: 2 }}>
           <Alert severity="info" sx={{ mb: 2 }}>
-            This contractor has active assignments or advance payments. Please select a new contractor to transfer these to before deleting.
+            This contractor has related data that needs to be reassigned before deletion.
+            Please select a new contractor to transfer these to.
           </Alert>
 
           <FormControl fullWidth sx={{ mb: 2 }}>
@@ -917,6 +925,12 @@ const CuttingManagement = () => {
                 ))}
               </List>
             </>
+          )}
+
+          {reassignmentData.purchaseInvoices > 0 && (
+            <Typography variant="subtitle2" sx={{ mb: 1, color: 'warning.main' }}>
+              Purchase Invoices to be reassigned: {reassignmentData.purchaseInvoices}
+            </Typography>
           )}
         </Box>
       </DialogContent>

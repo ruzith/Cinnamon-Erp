@@ -8,6 +8,7 @@ const Settings = require('../models/domain/Settings');
 const { authorize } = require('../middleware/authMiddleware');
 const reportTemplates = require('../data/reportTemplates');
 const { pool } = require('../config/db');
+const { SINHALA_FONT, containsSinhala } = require('../utils/fontUtils');
 
 let ExcelJS, PDFDocument, moment;
 try {
@@ -233,6 +234,7 @@ router.post('/generate/:code', protect, async (req, res) => {
       case 'EMPLOYEE_SUMMARY': {
         const departmentFilter = filters.department ? `AND d.department = ?` : '';
         const employmentTypeFilter = filters.employmentType ? `AND e.employment_type = ?` : '';
+        const statusFilter = filters.status ? `AND e.status = ?` : '';
 
         const query = `
           SELECT
@@ -243,18 +245,22 @@ router.post('/generate/:code', protect, async (req, res) => {
             e.status
           FROM employees e
           JOIN designations d ON e.designation_id = d.id
-          WHERE e.status = 'active'
+          WHERE 1=1
             ${departmentFilter}
             ${employmentTypeFilter}
+            ${statusFilter}
           ORDER BY e.name ASC
         `;
 
         const params = [
           ...(filters.department ? [filters.department] : []),
-          ...(filters.employmentType ? [filters.employmentType] : [])
+          ...(filters.employmentType ? [filters.employmentType] : []),
+          ...(filters.status ? [filters.status] : [])
         ];
 
+        console.log('Executing EMPLOYEE_SUMMARY query:', query, 'with params:', params);
         const rows = await executeQuery(query, params);
+        console.log('EMPLOYEE_SUMMARY results:', rows);
 
         results = rows.map(row => ({
           name: row.name,
@@ -268,8 +274,9 @@ router.post('/generate/:code', protect, async (req, res) => {
 
       case 'TASK_SUMMARY': {
         const { dateRangeStart, dateRangeEnd } = filters;
-        const statusFilter = filters.status ? `AND t.status = ?` : '';
-        const priorityFilter = filters.priority ? `AND t.priority = ?` : '';
+        const statusFilter = filters.status ? 'AND t.status = ?' : '';
+        const priorityFilter = filters.priority ? 'AND t.priority = ?' : '';
+        const dateFilter = (dateRangeStart && dateRangeEnd) ? 'AND t.due_date BETWEEN ? AND ?' : '';
 
         const query = `
           SELECT
@@ -283,20 +290,23 @@ router.post('/generate/:code', protect, async (req, res) => {
             t.description
           FROM tasks t
           LEFT JOIN users u ON t.assigned_to = u.id
-          WHERE t.due_date BETWEEN ? AND ?
+          WHERE 1=1
+            ${dateFilter}
             ${statusFilter}
             ${priorityFilter}
           ORDER BY t.due_date ASC
         `;
 
+        // Only add parameters that are actually defined
         const params = [
-          dateRangeStart,
-          dateRangeEnd,
+          ...(dateRangeStart && dateRangeEnd ? [dateRangeStart, dateRangeEnd] : []),
           ...(filters.status ? [filters.status] : []),
           ...(filters.priority ? [filters.priority] : [])
         ];
 
+        console.log('Executing TASK_SUMMARY query:', query, 'with params:', params);
         const rows = await executeQuery(query, params);
+        console.log('TASK_SUMMARY results:', rows);
 
         results = rows.map(row => ({
           taskId: row.taskId,
@@ -315,35 +325,42 @@ router.post('/generate/:code', protect, async (req, res) => {
         const startDate = filters.dateRangeStart ? new Date(filters.dateRangeStart) : null;
         const endDate = filters.dateRangeEnd ? new Date(filters.dateRangeEnd) : null;
         const contractorFilter = filters.contractor ? 'AND cc.id = ?' : '';
+        const statusFilter = filters.status ? 'AND la.status = ?' : '';
 
         const query = `
           SELECT
             cc.name as contractorName,
             SUM(ct.area_covered) as areaCovered,
-            AVG(ct.progress) as efficiency
+            AVG(ct.progress) as efficiency,
+            la.status
           FROM cutting_tasks ct
           JOIN land_assignments la ON ct.assignment_id = la.id
           JOIN cutting_contractors cc ON la.contractor_id = cc.id
-          WHERE la.status = 'completed'
+          WHERE 1=1
             ${startDate ? 'AND ct.date >= ?' : ''}
             ${endDate ? 'AND ct.date <= ?' : ''}
             ${contractorFilter}
-          GROUP BY cc.id, cc.name
+            ${statusFilter}
+          GROUP BY cc.id, cc.name, la.status
           ORDER BY efficiency DESC
         `;
 
         const params = [
           ...(startDate ? [startDate.toISOString().split('T')[0]] : []),
           ...(endDate ? [endDate.toISOString().split('T')[0]] : []),
-          ...(filters.contractor ? [filters.contractor] : [])
+          ...(filters.contractor ? [filters.contractor] : []),
+          ...(filters.status ? [filters.status] : [])
         ];
 
-        const [rows] = await pool.execute(query, params);
+        console.log('Executing CUTTING_PERFORMANCE query:', query, 'with params:', params);
+        const rows = await executeQuery(query, params);
+        console.log('CUTTING_PERFORMANCE results:', rows);
 
         results = rows.map(row => ({
           contractorName: row.contractorName,
           areaCovered: Number(row.areaCovered || 0),
-          efficiency: Number(row.efficiency || 0)
+          efficiency: Number(row.efficiency || 0),
+          status: row.status
         }));
         break;
       }
@@ -352,7 +369,6 @@ router.post('/generate/:code', protect, async (req, res) => {
         const dateFilter = filters.dateRange ? new Date(filters.dateRange) : null;
         const query = `
           SELECT
-            p.id,
             p.name as productLine,
             SUM(mo.quantity) as outputQuantity,
             AVG(mo.defect_rate) as defectRate,
@@ -361,29 +377,32 @@ router.post('/generate/:code', protect, async (req, res) => {
             AVG(mo.cost_per_unit) as costPerUnit
           FROM manufacturing_orders mo
           JOIN products p ON mo.product_id = p.id
-          WHERE mo.status = 'completed'
-          ${dateFilter ? 'AND DATE(mo.production_date) = ?' : ''}
-          ${filters.productLine ? 'AND p.id = ?' : ''}
-          ${filters.efficiency ?
-            filters.efficiency === 'high' ? 'AND mo.efficiency > 0.9' :
-            filters.efficiency === 'medium' ? 'AND mo.efficiency BETWEEN 0.7 AND 0.9' :
-            filters.efficiency === 'low' ? 'AND mo.efficiency < 0.7' : ''
-          : ''}
-          GROUP BY p.id, p.name
-          ORDER BY p.name`;
+          WHERE 1=1
+            ${dateFilter ? 'AND DATE(mo.production_date) = ?' : ''}
+            ${filters.productLine ? 'AND p.id = ?' : ''}
+            ${filters.efficiency ?
+              filters.efficiency === 'high' ? 'AND mo.efficiency > 0.9' :
+              filters.efficiency === 'medium' ? 'AND mo.efficiency BETWEEN 0.7 AND 0.9' :
+              filters.efficiency === 'low' ? 'AND mo.efficiency < 0.7' : ''
+            : ''}
+          GROUP BY p.name
+          ORDER BY p.name
+        `;
 
         const params = [
           ...(dateFilter ? [dateFilter.toISOString().split('T')[0]] : []),
           ...(filters.productLine ? [filters.productLine] : [])
         ];
 
+        console.log('Executing MANUFACTURING_ADVANCED query:', query, 'with params:', params);
         const rows = await executeQuery(query, params);
+        console.log('MANUFACTURING_ADVANCED results:', rows);
 
         results = rows.map(row => ({
           productLine: row.productLine,
           outputQuantity: Number(row.outputQuantity || 0),
-          defectRate: Number(row.defectRate || 0),
-          efficiency: Number(row.efficiency || 0),
+          defectRate: Number(row.defectRate || 0) / 100,
+          efficiency: Number(row.efficiency || 0) / 100,
           downtime: Number(row.downtime || 0),
           costPerUnit: Number(row.costPerUnit || 0)
         }));
@@ -459,40 +478,64 @@ router.post('/generate/:code', protect, async (req, res) => {
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet(template.name[language]);
 
-        // Set up columns based on template
+        // Set default font for the worksheet
+        worksheet.properties.defaultRowHeight = 20;
+
+        // Configure columns with proper encoding
         worksheet.columns = template.columns.map(col => ({
           header: col.header[language],
           key: col.field,
-          width: 15,
+          width: 20,
           style: {
+            font: {
+              name: containsSinhala(col.header[language]) ? 'Noto Sans Sinhala' : 'Arial',
+              size: 11
+            },
+            alignment: {
+              vertical: 'middle',
+              horizontal: 'left',
+              wrapText: true
+            },
             numFmt: getExcelFormat(col.format, currency)
           }
         }));
 
-        // Add data rows
+        // Add data rows with proper font handling
         results.forEach(row => {
           const formattedRow = {};
           template.columns.forEach(col => {
-            formattedRow[col.field] = formatValue(row[col.field], col.format, currency);
+            const value = formatValue(row[col.field], col.format, currency);
+            formattedRow[col.field] = value;
+
+            // Set Sinhala font for cells containing Sinhala text
+            const cellRef = `${col.field}${worksheet.rowCount + 1}`;
+            if (containsSinhala(String(value))) {
+              worksheet.getCell(cellRef).font = {
+                name: 'Noto Sans Sinhala',
+                size: 11
+              };
+            }
           });
           worksheet.addRow(formattedRow);
         });
 
-        // Style the header row
-        worksheet.getRow(1).font = { bold: true };
-        worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+        // Style header row
+        worksheet.getRow(1).font = {
+          bold: true,
+          size: 12,
+          name: language === 'si' ? 'Noto Sans Sinhala' : 'Arial'
+        };
 
-        // Set response headers
+        // Set response headers with UTF-8 encoding
         res.setHeader(
           'Content-Type',
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         );
         res.setHeader(
           'Content-Disposition',
-          `attachment; filename=${code}_${Date.now()}.xlsx`
+          `attachment; filename*=UTF-8''${encodeURIComponent(code)}_${Date.now()}.xlsx`
         );
 
-        // Write to response
         await workbook.xlsx.write(res);
         return res.end();
       }
@@ -502,71 +545,280 @@ router.post('/generate/:code', protect, async (req, res) => {
           throw new Error('PDF export is not available');
         }
 
-        const doc = new PDFDocument();
+        // Add these helper functions for table styling
+        function drawTableHeader(doc, headers, columnWidths, startX, startY) {
+          // Calculate header height based on content
+          const padding = 8;
+          let maxHeaderLines = 1;
 
-        // Set response headers
+          // Calculate required height for each header
+          headers.forEach((header, i) => {
+            const width = columnWidths[i] - (padding * 2);
+            const font = containsSinhala(header) ? 'SinhalaFont' : 'Helvetica-Bold';
+
+            // Calculate how many lines the text will wrap to
+            doc.font(font).fontSize(10);
+            const words = header.split(' ');
+            let currentLine = '';
+            let lines = 1;
+
+            words.forEach(word => {
+              const testLine = currentLine + (currentLine ? ' ' : '') + word;
+              if (doc.widthOfString(testLine) > width) {
+                currentLine = word;
+                lines++;
+              } else {
+                currentLine = testLine;
+              }
+            });
+
+            maxHeaderLines = Math.max(maxHeaderLines, lines);
+          });
+
+          // Calculate final header height based on content
+          const lineHeight = 14; // Increased line height for headers
+          const headerHeight = (maxHeaderLines * lineHeight) + (padding * 2);
+
+          // Draw header background
+          doc.fillColor('#f4f4f4')
+             .rect(startX, startY, doc.page.width - (startX * 2), headerHeight)
+             .fill();
+
+          // Draw header text
+          doc.fillColor('#000000');
+          let currentX = startX;
+
+          headers.forEach((header, i) => {
+            const font = containsSinhala(header) ? 'SinhalaFont' : 'Helvetica-Bold';
+
+            doc.font(font)
+               .fontSize(10)
+               .text(
+                 header,
+                 currentX + padding,
+                 startY + padding,
+                 {
+                   width: columnWidths[i] - (padding * 2),
+                   height: headerHeight - (padding * 2),
+                   align: getColumnAlignment(i, headers.length),
+                   lineBreak: true,
+                   baseline: 'top'
+                 }
+               );
+            currentX += columnWidths[i];
+          });
+
+          // Draw header borders
+          doc.strokeColor('#e0e0e0');
+          headers.forEach((_, i) => {
+            const x = startX + columnWidths.slice(0, i).reduce((sum, w) => sum + w, 0);
+            doc.moveTo(x, startY)
+               .lineTo(x, startY + headerHeight)
+               .stroke();
+          });
+
+          // Draw right border
+          doc.moveTo(startX + columnWidths.reduce((sum, w) => sum + w, 0), startY)
+             .lineTo(startX + columnWidths.reduce((sum, w) => sum + w, 0), startY + headerHeight)
+             .stroke();
+
+          // Draw bottom border
+          doc.moveTo(startX, startY + headerHeight)
+             .lineTo(startX + columnWidths.reduce((sum, w) => sum + w, 0), startY + headerHeight)
+             .stroke();
+
+          return startY + headerHeight;
+        }
+
+        function drawTableRow(doc, row, columns, columnWidths, startX, startY, isAlternate = false) {
+          // Calculate row height based on content
+          const lineHeight = 12;
+          const padding = 8;
+          let maxLines = 1;
+
+          // Calculate required height for each cell
+          columns.forEach((col, i) => {
+            const value = col.format === 'currency'
+              ? formatPDFCurrency(row[col.field], currency)
+              : formatValue(row[col.field], col.format, currency);
+
+            const text = String(value);
+            const width = columnWidths[i] - (padding * 2);
+            const lines = doc.font(containsSinhala(text) ? 'SinhalaFont' : 'Helvetica')
+                            .fontSize(9)
+                            .widthOfString(text) / width;
+            maxLines = Math.max(maxLines, Math.ceil(lines));
+          });
+
+          const rowHeight = (maxLines * lineHeight) + (padding * 2);
+
+          // Draw row background for alternate rows
+          if (isAlternate) {
+            doc.fillColor('#f9f9f9')
+               .rect(startX, startY, doc.page.width - (startX * 2), rowHeight)
+               .fill();
+          }
+
+          // Draw row data
+          doc.fillColor('#000000');
+          let currentX = startX;
+
+          columns.forEach((col, i) => {
+            const value = col.format === 'currency'
+              ? formatPDFCurrency(row[col.field], currency)
+              : formatValue(row[col.field], col.format, currency);
+
+            const text = String(value);
+            const font = containsSinhala(text) ? 'SinhalaFont' : 'Helvetica';
+
+            doc.font(font)
+               .fontSize(9)
+               .text(
+                 text,
+                 currentX + padding,
+                 startY + padding,
+                 {
+                   width: columnWidths[i] - (padding * 2),
+                   height: rowHeight - (padding * 2),
+                   align: getColumnAlignment(i, columns.length),
+                   lineBreak: true
+                 }
+               );
+
+            currentX += columnWidths[i];
+          });
+
+          // Draw cell borders
+          doc.strokeColor('#e0e0e0');
+          columns.forEach((col, i) => {
+            const x = startX + columnWidths.slice(0, i).reduce((sum, w) => sum + w, 0);
+            doc.moveTo(x, startY)
+               .lineTo(x, startY + rowHeight)
+               .stroke();
+          });
+
+          // Draw right border
+          doc.moveTo(startX + columnWidths.reduce((sum, w) => sum + w, 0), startY)
+             .lineTo(startX + columnWidths.reduce((sum, w) => sum + w, 0), startY + rowHeight)
+             .stroke();
+
+          return startY + rowHeight;
+        }
+
+        function getColumnAlignment(index, totalColumns) {
+          if (index === 0) return 'left'; // First column left-aligned
+          if (index === totalColumns - 1) return 'right'; // Last column right-aligned
+          return 'center'; // Middle columns center-aligned
+        }
+
+        function calculateColumnWidths(doc, columns, margins) {
+          const availableWidth = doc.page.width - (margins.left + margins.right);
+
+          // Define relative weights for different types of columns
+          const weights = columns.map(col => {
+            switch (col.field) {
+              case 'productLine':
+              case 'title':
+              case 'description':
+              case 'contractorName':
+                return 4; // Extra wide columns
+              case 'name':
+              case 'designation':
+              case 'department':
+                return 3; // Wide columns
+              case 'date':
+              case 'status':
+              case 'priority':
+                return 1.5; // Narrow columns
+              default:
+                return 2; // Medium columns
+            }
+          });
+
+          const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+          return weights.map(weight => (weight / totalWeight) * availableWidth);
+        }
+
+        const doc = new PDFDocument({
+          margin: 50,
+          size: 'A4',
+          bufferPages: true
+        });
+
+        // Set up fonts
+        doc.registerFont('SinhalaFont', SINHALA_FONT);
+        doc.registerFont('Helvetica-Bold', 'Helvetica-Bold');
+
+        // Define margins
+        const margins = { top: 50, bottom: 50, left: 40, right: 40 };
+
+        // Calculate column widths
+        const columnWidths = calculateColumnWidths(doc, template.columns, margins);
+
+        // Add title and date
+        const titleText = template.name[language];
+        doc.font(containsSinhala(titleText) ? 'SinhalaFont' : 'Helvetica-Bold')
+           .fontSize(16)
+           .text(titleText, { align: 'center' });
+        doc.moveDown();
+
+        doc.font('Helvetica')
+           .fontSize(10)
+           .text(
+             `Generated on: ${new Date().toLocaleDateString()}`,
+             { align: 'right' }
+           );
+        doc.moveDown();
+
+        // Draw table
+        let currentY = doc.y;
+        const headers = template.columns.map(col => col.header[language]);
+
+        // Draw header
+        currentY = drawTableHeader(doc, headers, columnWidths, margins.left, currentY);
+
+        // Draw rows
+        results.forEach((row, index) => {
+          // Add new page if needed
+          if (currentY > doc.page.height - margins.bottom) {
+            doc.addPage();
+            currentY = margins.top;
+            currentY = drawTableHeader(doc, headers, columnWidths, margins.left, currentY);
+          }
+
+          currentY = drawTableRow(
+            doc,
+            row,
+            template.columns,
+            columnWidths,
+            margins.left,
+            currentY,
+            index % 2 === 1
+          );
+        });
+
+        // Add page numbers
+        const totalPages = doc.bufferedPageRange().count;
+        for (let i = 0; i < totalPages; i++) {
+          doc.switchToPage(i);
+          doc.font('Helvetica')
+             .fontSize(8)
+             .text(
+               `Page ${i + 1} of ${totalPages}`,
+               margins.left,
+               doc.page.height - 20,
+               { align: 'center' }
+             );
+        }
+
+        // Set response headers and send
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader(
           'Content-Disposition',
-          `attachment; filename=${code}_${new Date().toISOString().split('T')[0]}.pdf`
+          `attachment; filename*=UTF-8''${encodeURIComponent(code)}_${Date.now()}.pdf`
         );
 
-        // Pipe the PDF to the response
         doc.pipe(res);
-
-        // Add title
-        doc.fontSize(16).text(template.name[language], { align: 'center' });
-        doc.moveDown();
-
-        // Add date
-        doc.fontSize(10).text(
-          `Generated on: ${new Date().toLocaleDateString()}`,
-          { align: 'right' }
-        );
-        doc.moveDown();
-
-        // Create table header
-        const headers = template.columns.map(col => col.header[language]);
-        const tableTop = doc.y;
-        let currentY = tableTop;
-
-        // Calculate column widths
-        const pageWidth = doc.page.width - 100; // margins
-        const columnWidth = pageWidth / headers.length;
-
-        // Draw headers
-        headers.forEach((header, i) => {
-          doc.fontSize(10)
-             .text(header,
-                  50 + (i * columnWidth),
-                  currentY,
-                  { width: columnWidth, align: 'left' });
-        });
-
-        currentY += 20;
-        doc.moveTo(50, currentY).lineTo(50 + pageWidth, currentY).stroke();
-        currentY += 10;
-
-        // Add data rows
-        results.forEach(row => {
-          template.columns.forEach((col, i) => {
-            const value = formatValue(row[col.field], col.format, currency);
-            doc.fontSize(10)
-               .text(value.toString(),
-                    50 + (i * columnWidth),
-                    currentY,
-                    { width: columnWidth, align: 'left' });
-          });
-          currentY += 20;
-
-          // Add new page if needed
-          if (currentY > doc.page.height - 50) {
-            doc.addPage();
-            currentY = 50;
-          }
-        });
-
-        // Finalize PDF
         doc.end();
         return;
       }
@@ -584,11 +836,11 @@ router.post('/generate/:code', protect, async (req, res) => {
 function getExcelFormat(format, currency) {
   switch (format) {
     case 'currency':
-      return `"${currency.symbol} "#,##0.00_);("${currency.symbol} "#,##0.00)`;
+      return `"${currency.symbol}"#,##0.00;[Red]"${currency.symbol}"-#,##0.00`;
     case 'number':
-      return '#,##0_);(#,##0)';
+      return '#,##0.00;[Red]-#,##0.00';
     case 'percentage':
-      return '0.00%';
+      return '0.0%;[Red]-0.0%';
     case 'date':
       return 'yyyy-mm-dd';
     default:
@@ -603,37 +855,58 @@ function formatValue(value, format, currency) {
     case 'currency': {
       if (typeof value !== 'number') return value;
 
-      const absValue = Math.abs(value);
-      let formattedValue;
+      // Format amount exactly like frontend currencyUtils.js
+      const formattedAmount = new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(value || 0);
 
-      if (absValue >= 1000000) {
-        formattedValue = (value / 1000000).toFixed(2) + 'M';
-      } else if (absValue >= 1000) {
-        formattedValue = (value / 1000).toFixed(1) + 'K';
-      } else {
-        formattedValue = new Intl.NumberFormat('en-US', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        }).format(value);
-      }
-
-      return `${currency.symbol}${formattedValue}`;
+      return `${currency.symbol} ${formattedAmount}`;
     }
+
     case 'number':
       return typeof value === 'number' ?
-        new Intl.NumberFormat('en-US').format(value) :
+        new Intl.NumberFormat('en-US', {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 2,
+        }).format(value) :
         value;
+
     case 'percentage':
-      return typeof value === 'number' ?
-        `${(value * 100).toFixed(2)}%` :
-        value;
+      if (typeof value !== 'number') return value;
+      // Convert decimal to percentage (e.g., 0.46 -> 46%)
+      const percentage = value * 100;
+      return new Intl.NumberFormat('en-US', {
+        style: 'percent',
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      }).format(value);
+
     case 'date':
-      return value instanceof Date ?
-        value.toISOString().split('T')[0] :
-        value;
+      if (value instanceof Date) {
+        return value.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        });
+      }
+      return value;
+
     default:
       return value;
   }
+}
+
+// Add this helper function for PDF currency formatting
+function formatPDFCurrency(value, currency) {
+  if (typeof value !== 'number') return value;
+
+  const formattedAmount = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value || 0);
+
+  return `${currency.symbol} ${formattedAmount}`;
 }
 
 // Get financial reports
@@ -827,8 +1100,8 @@ router.post('/generate/MANUFACTURING_ADVANCED', protect, async (req, res) => {
     const results = rows.map(row => ({
       productLine: row.productLine,
       outputQuantity: Number(row.outputQuantity || 0),
-      defectRate: Number(row.defectRate || 0),
-      efficiency: Number(row.efficiency || 0),
+      defectRate: Number(row.defectRate || 0) / 100,
+      efficiency: Number(row.efficiency || 0) / 100,
       downtime: Number(row.downtime || 0),
       costPerUnit: Number(row.costPerUnit || 0)
     }));
@@ -965,6 +1238,7 @@ router.post('/preview/:code', protect, async (req, res) => {
       case 'EMPLOYEE_SUMMARY': {
         const departmentFilter = filters.department ? `AND d.department = ?` : '';
         const employmentTypeFilter = filters.employmentType ? `AND e.employment_type = ?` : '';
+        const statusFilter = filters.status ? `AND e.status = ?` : '';
 
         const query = `
           SELECT
@@ -978,13 +1252,14 @@ router.post('/preview/:code', protect, async (req, res) => {
           WHERE 1=1
             ${departmentFilter}
             ${employmentTypeFilter}
+            ${statusFilter}
           ORDER BY e.name ASC
-          LIMIT 10
         `;
 
         const params = [
           ...(filters.department ? [filters.department] : []),
-          ...(filters.employmentType ? [filters.employmentType] : [])
+          ...(filters.employmentType ? [filters.employmentType] : []),
+          ...(filters.status ? [filters.status] : [])
         ];
 
         console.log('Executing EMPLOYEE_SUMMARY query:', query, 'with params:', params);
@@ -1003,8 +1278,9 @@ router.post('/preview/:code', protect, async (req, res) => {
 
       case 'TASK_SUMMARY': {
         const { dateRangeStart, dateRangeEnd } = filters;
-        const statusFilter = filters.status ? `AND t.status = ?` : '';
-        const priorityFilter = filters.priority ? `AND t.priority = ?` : '';
+        const statusFilter = filters.status ? 'AND t.status = ?' : '';
+        const priorityFilter = filters.priority ? 'AND t.priority = ?' : '';
+        const dateFilter = (dateRangeStart && dateRangeEnd) ? 'AND t.due_date BETWEEN ? AND ?' : '';
 
         const query = `
           SELECT
@@ -1019,13 +1295,13 @@ router.post('/preview/:code', protect, async (req, res) => {
           FROM tasks t
           LEFT JOIN users u ON t.assigned_to = u.id
           WHERE 1=1
-            ${dateRangeStart && dateRangeEnd ? 'AND t.due_date BETWEEN ? AND ?' : ''}
+            ${dateFilter}
             ${statusFilter}
             ${priorityFilter}
           ORDER BY t.due_date ASC
-          LIMIT 10
         `;
 
+        // Only add parameters that are actually defined
         const params = [
           ...(dateRangeStart && dateRangeEnd ? [dateRangeStart, dateRangeEnd] : []),
           ...(filters.status ? [filters.status] : []),
@@ -1053,12 +1329,14 @@ router.post('/preview/:code', protect, async (req, res) => {
         const startDate = filters.dateRangeStart ? new Date(filters.dateRangeStart) : null;
         const endDate = filters.dateRangeEnd ? new Date(filters.dateRangeEnd) : null;
         const contractorFilter = filters.contractor ? 'AND cc.id = ?' : '';
+        const statusFilter = filters.status ? 'AND la.status = ?' : '';
 
         const query = `
           SELECT
             cc.name as contractorName,
             SUM(ct.area_covered) as areaCovered,
-            AVG(ct.progress) as efficiency
+            AVG(ct.progress) as efficiency,
+            la.status
           FROM cutting_tasks ct
           JOIN land_assignments la ON ct.assignment_id = la.id
           JOIN cutting_contractors cc ON la.contractor_id = cc.id
@@ -1066,15 +1344,16 @@ router.post('/preview/:code', protect, async (req, res) => {
             ${startDate ? 'AND ct.date >= ?' : ''}
             ${endDate ? 'AND ct.date <= ?' : ''}
             ${contractorFilter}
-          GROUP BY cc.id, cc.name
+            ${statusFilter}
+          GROUP BY cc.id, cc.name, la.status
           ORDER BY efficiency DESC
-          LIMIT 10
         `;
 
         const params = [
           ...(startDate ? [startDate.toISOString().split('T')[0]] : []),
           ...(endDate ? [endDate.toISOString().split('T')[0]] : []),
-          ...(filters.contractor ? [filters.contractor] : [])
+          ...(filters.contractor ? [filters.contractor] : []),
+          ...(filters.status ? [filters.status] : [])
         ];
 
         console.log('Executing CUTTING_PERFORMANCE query:', query, 'with params:', params);
@@ -1084,7 +1363,8 @@ router.post('/preview/:code', protect, async (req, res) => {
         results = rows.map(row => ({
           contractorName: row.contractorName,
           areaCovered: Number(row.areaCovered || 0),
-          efficiency: Number(row.efficiency || 0)
+          efficiency: Number(row.efficiency || 0),
+          status: row.status
         }));
         break;
       }
@@ -1093,7 +1373,6 @@ router.post('/preview/:code', protect, async (req, res) => {
         const dateFilter = filters.dateRange ? new Date(filters.dateRange) : null;
         const query = `
           SELECT
-            p.id,
             p.name as productLine,
             SUM(mo.quantity) as outputQuantity,
             AVG(mo.defect_rate) as defectRate,
@@ -1110,9 +1389,8 @@ router.post('/preview/:code', protect, async (req, res) => {
               filters.efficiency === 'medium' ? 'AND mo.efficiency BETWEEN 0.7 AND 0.9' :
               filters.efficiency === 'low' ? 'AND mo.efficiency < 0.7' : ''
             : ''}
-          GROUP BY p.id, p.name
+          GROUP BY p.name
           ORDER BY p.name
-          LIMIT 10
         `;
 
         const params = [
@@ -1127,8 +1405,8 @@ router.post('/preview/:code', protect, async (req, res) => {
         results = rows.map(row => ({
           productLine: row.productLine,
           outputQuantity: Number(row.outputQuantity || 0),
-          defectRate: Number(row.defectRate || 0),
-          efficiency: Number(row.efficiency || 0),
+          defectRate: Number(row.defectRate || 0) / 100,
+          efficiency: Number(row.efficiency || 0) / 100,
           downtime: Number(row.downtime || 0),
           costPerUnit: Number(row.costPerUnit || 0)
         }));

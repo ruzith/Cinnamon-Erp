@@ -4,6 +4,7 @@ const { pool } = require('../../config/db');
 class Loan extends BaseModel {
   constructor() {
     super('loans');
+    this.pool = pool;
   }
 
   async generateLoanNumber() {
@@ -17,7 +18,7 @@ class Loan extends BaseModel {
   }
 
   async getWithDetails(id) {
-    const [loan] = await this.pool.execute(`
+    const [loan] = await pool.execute(`
       SELECT l.*,
              u.name as created_by_name
       FROM loans l
@@ -27,7 +28,7 @@ class Loan extends BaseModel {
 
     if (!loan[0]) return null;
 
-    const [payments] = await this.pool.execute(`
+    const [payments] = await pool.execute(`
       SELECT lp.*,
              u.name as created_by_name
       FROM loan_payments lp
@@ -36,7 +37,7 @@ class Loan extends BaseModel {
       ORDER BY lp.payment_date DESC
     `, [id]);
 
-    const [schedule] = await this.pool.execute(`
+    const [schedule] = await pool.execute(`
       SELECT * FROM loan_schedule
       WHERE loan_id = ?
       ORDER BY due_date ASC
@@ -195,4 +196,4 @@ class Loan extends BaseModel {
   }
 }
 
-module.exports = Loan;
+module.exports = new Loan();

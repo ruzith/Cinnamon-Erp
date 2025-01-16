@@ -164,6 +164,8 @@ const AssetManagement = () => {
   const [openHistoryDialog, setOpenHistoryDialog] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [categories, setCategories] = useState([]);
+  const [touched, setTouched] = useState({});
+  const [formErrors, setFormErrors] = useState({});
 
   const [assetFormData, setAssetFormData] = useState({
     assetNumber: '',
@@ -287,7 +289,18 @@ const AssetManagement = () => {
 
   const handleCloseDialog = () => {
     setOpenDialog(false);
-    setSelectedAsset(null);
+    setTouched({});
+    setFormErrors({});
+    setAssetFormData({
+      assetNumber: '',
+      name: '',
+      category: '',
+      type: '',
+      purchaseDate: '',
+      purchasePrice: '',
+      currentValue: '',
+      status: 'active'
+    });
   };
 
   const handleCloseMaintenanceDialog = () => {
@@ -315,18 +328,48 @@ const AssetManagement = () => {
     }));
   };
 
-  const handleAssetSubmit = async (e) => {
-    e.preventDefault();
+  const handleBlur = (event) => {
+    const { name } = event.target;
+    setTouched(prev => ({ ...prev, [name]: true }));
+  };
+
+  const validateField = (name, value) => {
+    switch (name) {
+      case 'purchaseDate':
+        return !value ? "Purchase date is required" : "";
+      case 'name':
+        return !value?.trim() ? "Name is required" : "";
+      case 'assetNumber':
+        return !value?.trim() ? "Asset number is required" : "";
+      default:
+        return "";
+    }
+  };
+
+  const handleAssetSubmit = async () => {
+    const errors = {};
+    Object.keys(assetFormData).forEach(field => {
+      const error = validateField(field, assetFormData[field]);
+      if (error) errors[field] = error;
+    });
+
+    const newTouched = {};
+    Object.keys(assetFormData).forEach(field => {
+      newTouched[field] = true;
+    });
+    setTouched(newTouched);
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      return;
+    }
+
     try {
-      if (selectedAsset) {
-        await axios.put(`/api/assets/${selectedAsset.id}`, assetFormData);
-      } else {
-        await axios.post('/api/assets', assetFormData);
-      }
-      fetchAssets();
+      const response = await axios.post('/api/assets', assetFormData);
       handleCloseDialog();
+      fetchAssets();
     } catch (error) {
-      console.error('Error saving asset:', error);
+      console.error('Error creating asset:', error);
     }
   };
 
@@ -675,64 +718,60 @@ const AssetManagement = () => {
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
+                required
                 label="Asset Number"
                 name="assetNumber"
                 value={assetFormData.assetNumber}
                 onChange={handleAssetInputChange}
-                required
+                onBlur={handleBlur}
+                error={touched.assetNumber && !assetFormData.assetNumber}
+                helperText={touched.assetNumber && !assetFormData.assetNumber ? "Asset number is required" : ""}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
+                required
                 label="Asset Name"
                 name="name"
                 value={assetFormData.name}
                 onChange={handleAssetInputChange}
-                required
+                onBlur={handleBlur}
+                error={touched.name && !assetFormData.name}
+                helperText={touched.name && !assetFormData.name ? "Name is required" : ""}
               />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Category</InputLabel>
-                <Select
-                  name="category"
-                  value={assetFormData.category}
-                  label="Category"
-                  onChange={handleAssetInputChange}
-                >
-                  {categories.map((category) => (
-                    <MenuItem key={category.id} value={category.id}>
-                      {category.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Type</InputLabel>
-                <Select
-                  name="type"
-                  value={assetFormData.type}
-                  label="Type"
-                  onChange={handleAssetInputChange}
-                >
-                  <MenuItem value="equipment">Equipment</MenuItem>
-                  <MenuItem value="vehicle">Vehicle</MenuItem>
-                  <MenuItem value="tool">Tool</MenuItem>
-                </Select>
-              </FormControl>
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
+                label="Category"
+                name="category"
+                value={assetFormData.category}
+                onChange={handleAssetInputChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Type"
+                name="type"
+                value={assetFormData.type}
+                onChange={handleAssetInputChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                required
                 label="Purchase Date"
                 name="purchaseDate"
                 type="date"
                 value={assetFormData.purchaseDate}
                 onChange={handleAssetInputChange}
+                onBlur={handleBlur}
                 InputLabelProps={{ shrink: true }}
+                error={touched.purchaseDate && !assetFormData.purchaseDate}
+                helperText={touched.purchaseDate && !assetFormData.purchaseDate ? "Purchase date is required" : ""}
               />
             </Grid>
             <Grid item xs={12} sm={6}>

@@ -33,6 +33,7 @@ import {
   Warning as AlertIcon,
   Factory as ManufacturingIcon,
   AttachMoney as ValueIcon,
+  Clear as ClearIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 import { useCurrencyFormatter } from '../utils/currencyUtils';
@@ -88,6 +89,12 @@ const Inventory = () => {
     lease_id: '',
     status: 'draft',
     entries: []
+  });
+
+  const [productFilter, setProductFilter] = useState('');
+  const [dateFilters, setDateFilters] = useState({
+    start_date: '',
+    end_date: ''
   });
 
   const { formatCurrency } = useCurrencyFormatter();
@@ -400,6 +407,26 @@ const Inventory = () => {
     activeTransactions: transactions.filter(t => t.type === 'IN' || t.type === 'OUT').length
   };
 
+  const filteredTransactions = React.useMemo(() => {
+    return transactions.filter(transaction => {
+      const matchesProduct = !productFilter ||
+        transaction.product_name?.toLowerCase().includes(productFilter.toLowerCase());
+
+      const transactionDate = new Date(transaction.created_at);
+      const matchesStartDate = !dateFilters.start_date ||
+        transactionDate >= new Date(dateFilters.start_date);
+      const matchesEndDate = !dateFilters.end_date ||
+        transactionDate <= new Date(dateFilters.end_date);
+
+      return matchesProduct && matchesStartDate && matchesEndDate;
+    });
+  }, [transactions, productFilter, dateFilters]);
+
+  const uniqueProducts = React.useMemo(() => {
+    const products = new Set(transactions.map(t => t.product_name));
+    return Array.from(products).filter(Boolean).sort();
+  }, [transactions]);
+
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
       {/* Header */}
@@ -560,6 +587,105 @@ const Inventory = () => {
         </TabPanel>
 
         <TabPanel value={tabValue} index={1}>
+          <Paper sx={{ p: 2, mb: 3 }}>
+            <Grid container spacing={2} alignItems="center">
+              <Grid item xs={12} sm={4}>
+                <FormControl fullWidth size="small">
+                  <InputLabel id="product-filter-label">Product</InputLabel>
+                  <Select
+                    labelId="product-filter-label"
+                    value={productFilter}
+                    label="Product"
+                    onChange={(e) => setProductFilter(e.target.value)}
+                    endAdornment={
+                      productFilter && (
+                        <IconButton
+                          size="small"
+                          sx={{ mr: 2 }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setProductFilter('');
+                          }}
+                        >
+                          <ClearIcon fontSize="small" />
+                        </IconButton>
+                      )
+                    }
+                  >
+                    <MenuItem value="">
+                      <em>All Products</em>
+                    </MenuItem>
+                    {uniqueProducts.map((product) => (
+                      <MenuItem key={product} value={product}>
+                        {product}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
+                  label="Start Date"
+                  type="date"
+                  size="small"
+                  value={dateFilters.start_date}
+                  onChange={(e) => setDateFilters(prev => ({
+                    ...prev,
+                    start_date: e.target.value
+                  }))}
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                  InputProps={{
+                    endAdornment: dateFilters.start_date && (
+                      <IconButton
+                        size="small"
+                        onClick={() => setDateFilters(prev => ({
+                          ...prev,
+                          start_date: ''
+                        }))}
+                      >
+                        <ClearIcon fontSize="small" />
+                      </IconButton>
+                    )
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
+                  label="End Date"
+                  type="date"
+                  size="small"
+                  value={dateFilters.end_date}
+                  onChange={(e) => setDateFilters(prev => ({
+                    ...prev,
+                    end_date: e.target.value
+                  }))}
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                  InputProps={{
+                    endAdornment: dateFilters.end_date && (
+                      <IconButton
+                        size="small"
+                        onClick={() => setDateFilters(prev => ({
+                          ...prev,
+                          end_date: ''
+                        }))}
+                      >
+                        <ClearIcon fontSize="small" />
+                      </IconButton>
+                    ),
+                    inputProps: {
+                      min: dateFilters.start_date || undefined
+                    }
+                  }}
+                />
+              </Grid>
+            </Grid>
+          </Paper>
           <TableContainer>
             <Table>
               <TableHead>
@@ -574,7 +700,7 @@ const Inventory = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {transactions.map((transaction) => (
+                {filteredTransactions.map((transaction) => (
                   <TableRow key={transaction.id} hover>
                     <TableCell>{new Date(transaction.created_at).toLocaleDateString()}</TableCell>
                     <TableCell>{transaction.product_name}</TableCell>
@@ -605,6 +731,105 @@ const Inventory = () => {
         </TabPanel>
 
         <TabPanel value={tabValue} index={2}>
+          <Paper sx={{ p: 2, mb: 3 }}>
+            <Grid container spacing={2} alignItems="center">
+              <Grid item xs={12} sm={4}>
+                <FormControl fullWidth size="small">
+                  <InputLabel id="product-filter-label-2">Product</InputLabel>
+                  <Select
+                    labelId="product-filter-label-2"
+                    value={productFilter}
+                    label="Product"
+                    onChange={(e) => setProductFilter(e.target.value)}
+                    endAdornment={
+                      productFilter && (
+                        <IconButton
+                          size="small"
+                          sx={{ mr: 2 }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setProductFilter('');
+                          }}
+                        >
+                          <ClearIcon fontSize="small" />
+                        </IconButton>
+                      )
+                    }
+                  >
+                    <MenuItem value="">
+                      <em>All Products</em>
+                    </MenuItem>
+                    {uniqueProducts.map((product) => (
+                      <MenuItem key={product} value={product}>
+                        {product}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
+                  label="Start Date"
+                  type="date"
+                  size="small"
+                  value={dateFilters.start_date}
+                  onChange={(e) => setDateFilters(prev => ({
+                    ...prev,
+                    start_date: e.target.value
+                  }))}
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                  InputProps={{
+                    endAdornment: dateFilters.start_date && (
+                      <IconButton
+                        size="small"
+                        onClick={() => setDateFilters(prev => ({
+                          ...prev,
+                          start_date: ''
+                        }))}
+                      >
+                        <ClearIcon fontSize="small" />
+                      </IconButton>
+                    )
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
+                  label="End Date"
+                  type="date"
+                  size="small"
+                  value={dateFilters.end_date}
+                  onChange={(e) => setDateFilters(prev => ({
+                    ...prev,
+                    end_date: e.target.value
+                  }))}
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                  InputProps={{
+                    endAdornment: dateFilters.end_date && (
+                      <IconButton
+                        size="small"
+                        onClick={() => setDateFilters(prev => ({
+                          ...prev,
+                          end_date: ''
+                        }))}
+                      >
+                        <ClearIcon fontSize="small" />
+                      </IconButton>
+                    ),
+                    inputProps: {
+                      min: dateFilters.start_date || undefined
+                    }
+                  }}
+                />
+              </Grid>
+            </Grid>
+          </Paper>
           <TableContainer>
             <Table>
               <TableHead>
@@ -618,7 +843,7 @@ const Inventory = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {transactions.map((transaction) => {
+                {filteredTransactions.map((transaction) => {
                   const isIncrease = transaction.type === 'IN';
                   return (
                     <TableRow key={transaction.id} hover>

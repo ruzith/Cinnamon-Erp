@@ -428,15 +428,41 @@ const LoanBook = () => {
     }
   };
 
-  const handleDeleteLoan = async (loanId) => {
-    if (window.confirm("Are you sure you want to delete this loan?")) {
+  const handleDeleteLoan = async (loan) => {
+    if (loan.status !== 'voided' && loan.remaining_balance > 0) {
+      const shouldVoid = window.confirm(
+        'This loan has existing payments. Would you like to void it instead?'
+      );
+      if (shouldVoid) {
+        handleVoidLoan(loan);
+        return;
+      }
+      return;
+    }
+
+    if (window.confirm('Are you sure you want to delete this loan?')) {
       try {
-        await axios.delete(`/api/loans/${loanId}`);
+        await axios.delete(`/api/loans/${loan.id}`);
         fetchLoans();
         fetchSummary();
       } catch (error) {
-        console.error("Error deleting loan:", error);
+        console.error('Error deleting loan:', error);
+        alert(error.response?.data?.message || 'Error deleting loan');
       }
+    }
+  };
+
+  const handleVoidLoan = async (loan) => {
+    const reason = window.prompt('Please enter a reason for voiding this loan:');
+    if (!reason) return;
+
+    try {
+      await axios.patch(`/api/loans/${loan.id}/void`, { reason });
+      fetchLoans();
+      fetchSummary();
+    } catch (error) {
+      console.error('Error voiding loan:', error);
+      alert(error.response?.data?.message || 'Error voiding loan');
     }
   };
 
@@ -450,6 +476,8 @@ const LoanBook = () => {
         return "info";
       case "defaulted":
         return "warning";
+      case "voided":
+        return "error";
       default:
         return "default";
     }
@@ -986,7 +1014,7 @@ const LoanBook = () => {
                       </IconButton>
                       <IconButton
                         size="small"
-                        onClick={() => handleDeleteLoan(loan.id)}
+                        onClick={() => handleDeleteLoan(loan)}
                         sx={{ color: "error.main", ml: 1 }}
                       >
                         <DeleteIcon />
@@ -1486,6 +1514,7 @@ const LoanBook = () => {
                   <MenuItem value="completed">Completed</MenuItem>
                   <MenuItem value="overdue">Overdue</MenuItem>
                   <MenuItem value="defaulted">Defaulted</MenuItem>
+                  <MenuItem value="voided">Voided</MenuItem>
                 </Select>
               </FormControl>
             </Grid>

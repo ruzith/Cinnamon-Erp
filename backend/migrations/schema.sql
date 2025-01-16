@@ -401,8 +401,8 @@ CREATE TABLE assets (
   code VARCHAR(50) UNIQUE NOT NULL,
   asset_number VARCHAR(50) UNIQUE NOT NULL,
   name VARCHAR(255) NOT NULL,
-  category_id INT NOT NULL,
-  type ENUM('equipment', 'vehicle', 'tool') NOT NULL,
+  category VARCHAR(100) NOT NULL,
+  type VARCHAR(50) NOT NULL,
   purchase_date DATE NOT NULL,
   purchase_price DECIMAL(10, 2) NOT NULL,
   current_value DECIMAL(10, 2) NOT NULL,
@@ -411,7 +411,6 @@ CREATE TABLE assets (
   created_by INT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (category_id) REFERENCES asset_categories(id),
   FOREIGN KEY (assigned_to) REFERENCES wells(id),
   FOREIGN KEY (created_by) REFERENCES users(id)
 );
@@ -588,7 +587,7 @@ CREATE TABLE loans (
   collateral TEXT,
   remaining_balance DECIMAL(15, 2) NOT NULL,
   notes TEXT,
-  status ENUM('active', 'completed', 'overdue', 'defaulted') DEFAULT 'active',
+  status ENUM('active', 'completed', 'overdue', 'defaulted', 'voided') DEFAULT 'active',
   created_by INT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -604,7 +603,7 @@ CREATE TABLE loan_schedule (
   principal_amount DECIMAL(15, 2) NOT NULL,
   interest_amount DECIMAL(15, 2) NOT NULL,
   paid_amount DECIMAL(15, 2) DEFAULT 0,
-  status ENUM('pending', 'partial', 'paid', 'overdue') DEFAULT 'pending',
+  status ENUM('pending', 'partial', 'paid', 'overdue', 'voided') DEFAULT 'pending',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (loan_id) REFERENCES loans(id)

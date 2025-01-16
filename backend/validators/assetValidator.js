@@ -14,16 +14,6 @@ const validateAssetId = (id) => {
 };
 
 /**
- * Validate asset type
- * @param {string} type - The asset type to validate
- * @returns {boolean} - True if valid, false otherwise
- */
-const validateAssetType = (type) => {
-  const validTypes = ['equipment', 'vehicle', 'tool'];
-  return validTypes.includes(type?.toLowerCase());
-};
-
-/**
  * Validate asset status
  * @param {string} status - The asset status to validate
  * @returns {boolean} - True if valid, false otherwise
@@ -46,12 +36,12 @@ const validateAssetData = (assetData) => {
     errors.name = 'Asset name is required';
   }
 
-  if (!assetData.category) {
+  if (!assetData.category?.trim()) {
     errors.category = 'Category is required';
   }
 
-  if (!validateAssetType(assetData.type)) {
-    errors.type = 'Invalid asset type';
+  if (!assetData.type?.trim()) {
+    errors.type = 'Type is required';
   }
 
   if (!assetData.purchaseDate) {
@@ -78,7 +68,6 @@ const validateAssetData = (assetData) => {
 
 module.exports = {
   validateAssetId,
-  validateAssetType,
   validateAssetStatus,
   validateAssetData
 };

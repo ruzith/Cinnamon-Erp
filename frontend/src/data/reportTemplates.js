@@ -190,6 +190,15 @@ const reportTemplates = [
           { value: 'permanent', label: { en: 'Permanent', si: 'ස්ථිර' } },
           { value: 'temporary', label: { en: 'Temporary', si: 'තාවකාලික' } }
         ]
+      },
+      {
+        field: 'status',
+        type: 'select',
+        label: { en: 'Status', si: 'තත්ත්වය' },
+        options: [
+          { value: 'active', label: { en: 'Active', si: 'ක්‍රියාත්මක' } },
+          { value: 'inactive', label: { en: 'Inactive', si: 'අක්‍රිය' } }
+        ]
       }
     ],
     columns: [
@@ -200,6 +209,14 @@ const reportTemplates = [
       {
         field: 'designation',
         header: { en: 'Designation', si: 'තනතුර' }
+      },
+      {
+        field: 'department',
+        header: { en: 'Department', si: 'දෙපාර්තමේන්තුව' }
+      },
+      {
+        field: 'employmentType',
+        header: { en: 'Employment Type', si: 'සේවා වර්ගය' }
       },
       {
         field: 'status',
@@ -229,6 +246,16 @@ const reportTemplates = [
         field: 'contractor',
         type: 'select',
         label: { en: 'Contractor', si: 'කොන්ත්‍රාත්කරු' }
+      },
+      {
+        field: 'status',
+        type: 'select',
+        label: { en: 'Status', si: 'තත්ත්වය' },
+        options: [
+          { value: 'pending', label: { en: 'Pending', si: 'විසඳීමට ඇති' } },
+          { value: 'in_progress', label: { en: 'In Progress', si: 'ක්‍රියාත්මක වෙමින්' } },
+          { value: 'completed', label: { en: 'Completed', si: 'සම්පූර්ණයි' } }
+        ]
       }
     ],
     columns: [
@@ -245,6 +272,10 @@ const reportTemplates = [
         field: 'efficiency',
         header: { en: 'Efficiency', si: 'කාර්යක්ෂමතාව' },
         format: 'percentage'
+      },
+      {
+        field: 'status',
+        header: { en: 'Status', si: 'තත්ත්වය' }
       }
     ]
   },
@@ -392,6 +423,68 @@ const reportTemplates = [
         field: 'averageOrderValue',
         header: { en: 'Average Order Value', si: 'සාමාන්‍ය ඇණවුම් වටිනාකම' },
         format: 'currency'
+      }
+    ]
+  },
+  // Task Summary Report
+  {
+    code: 'TASK_SUMMARY',
+    name: {
+      en: 'Task Summary Report',
+      si: 'කාර්ය සාරාංශ වාර්තාව'
+    },
+    category: 'hr',
+    description: {
+      en: 'Overview of tasks and their status',
+      si: 'කාර්ය සහ තත්ත්වය පිළිබඳ දළ විශ්ලේෂණය'
+    },
+    filters: [
+      {
+        field: 'dateRange',
+        type: 'date',
+        label: { en: 'Date Range', si: 'කාල සීමාව' }
+      },
+      {
+        field: 'status',
+        type: 'select',
+        label: { en: 'Status', si: 'තත්ත්වය' },
+        options: [
+          { value: 'pending', label: { en: 'Pending', si: 'විසඳීමට ඇති' } },
+          { value: 'in_progress', label: { en: 'In Progress', si: 'ක්‍රියාත්මක වෙමින්' } },
+          { value: 'completed', label: { en: 'Completed', si: 'සම්පූර්ණයි' } }
+        ]
+      }
+    ],
+    columns: [
+      {
+        field: 'taskId',
+        header: { en: 'Task ID', si: 'කාර්ය හැඳුනුම' }
+      },
+      {
+        field: 'title',
+        header: { en: 'Title', si: 'මාතෘකාව' }
+      },
+      {
+        field: 'assignee',
+        header: { en: 'Assignee', si: 'භාරකරු' }
+      },
+      {
+        field: 'dueDate',
+        header: { en: 'Due Date', si: 'නියමිත දිනය' },
+        format: 'date'
+      },
+      {
+        field: 'status',
+        header: { en: 'Status', si: 'තත්ත්වය' }
+      },
+      {
+        field: 'priority',
+        header: { en: 'Priority', si: 'ප්‍රමුඛතාව' }
+      },
+      {
+        field: 'estimatedHours',
+        header: { en: 'Estimated Hours', si: 'ඇස්තමේන්තුගත පැය' },
+        format: 'number'
       }
     ]
   }

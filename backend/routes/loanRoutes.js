@@ -3,7 +3,7 @@ const router = express.Router();
 const { protect, authorize } = require('../middleware/authMiddleware');
 const Loan = require('../models/domain/Loan');
 const LoanPayment = require('../models/domain/LoanPayment');
-const pool = require('../config/db').pool;
+const { pool } = require('../config/db');
 
 // Get all loans
 router.get('/', protect, async (req, res) => {
@@ -74,7 +74,7 @@ router.post('/', protect, authorize('admin', 'accountant'), async (req, res) => 
 // Record loan payment
 router.post('/:id/payments', protect, authorize('admin', 'accountant'), async (req, res) => {
   try {
-    const [loan] = await Loan.pool.execute(
+    const [loan] = await pool.execute(
       'SELECT * FROM loans WHERE id = ?',
       [req.params.id]
     );
@@ -93,26 +93,26 @@ router.post('/:id/payments', protect, authorize('admin', 'accountant'), async (r
     };
 
     // Begin transaction
-    await Loan.pool.beginTransaction();
+    await pool.beginTransaction();
     try {
       // Create payment record
-      const [result] = await Loan.pool.execute(
+      const [result] = await pool.execute(
         'INSERT INTO loan_payments SET ?',
         [paymentData]
       );
 
       // Update loan remaining balance
-      await Loan.pool.execute(
+      await pool.execute(
         'UPDATE loans SET remaining_balance = remaining_balance - ?, status = IF(remaining_balance - ? <= 0, "completed", status) WHERE id = ?',
         [amount, amount, loan[0].id]
       );
 
-      await Loan.pool.commit();
+      await pool.commit();
 
       const payment = await LoanPayment.getWithDetails(result.insertId);
       res.status(201).json(payment);
     } catch (error) {
-      await Loan.pool.rollback();
+      await pool.rollback();
       throw error;
     }
   } catch (error) {
@@ -197,7 +197,7 @@ router.post('/payments', protect, authorize('admin', 'accountant'), async (req, 
 // Get loan summary statistics
 router.get('/summary', protect, async (req, res) => {
   try {
-    const [loans] = await Loan.pool.execute(`
+    const [loans] = await pool.execute(`
       SELECT
         COALESCE(SUM(amount), 0) as total_loaned,
         COALESCE(SUM(remaining_balance), 0) as total_outstanding,
@@ -207,7 +207,7 @@ router.get('/summary', protect, async (req, res) => {
       WHERE status != 'completed'
     `);
 
-    const [payments] = await Loan.pool.execute(`
+    const [payments] = await pool.execute(`
       SELECT COALESCE(SUM(amount), 0) as total_repaid
       FROM loan_payments
       WHERE status = 'completed'
@@ -223,6 +223,7 @@ router.get('/summary', protect, async (req, res) => {
 
     res.json(summary);
   } catch (error) {
+    console.error('Error fetching loan summary:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -395,7 +396,7 @@ router.put('/:id', protect, authorize('admin', 'accountant'), async (req, res) =
 // Update loan status
 router.patch('/:id/status', protect, authorize('admin'), async (req, res) => {
   try {
-    const [result] = await Loan.pool.execute(
+    const [result] = await pool.execute(
       'UPDATE loans SET status = ? WHERE id = ?',
       [req.body.status, req.params.id]
     );
@@ -458,9 +459,9 @@ router.delete('/:id', protect, authorize('admin'), async (req, res) => {
 
     const loanId = req.params.id;
 
-    // Check if loan exists
+    // Check if loan exists and get its status
     const [loan] = await connection.execute(
-      'SELECT * FROM loans WHERE id = ?',
+      'SELECT status FROM loans WHERE id = ?',
       [loanId]
     );
 
@@ -476,11 +477,11 @@ router.delete('/:id', protect, authorize('admin'), async (req, res) => {
       [loanId]
     );
 
-    if (payments[0].count > 0) {
+    if (payments[0].count > 0 && loan[0].status !== 'voided') {
       await connection.rollback();
       connection.release();
       return res.status(400).json({
-        message: 'Cannot delete loan with existing payments. Please void the loan instead.'
+        message: 'Cannot delete loan with existing payments. Please void the loan first.'
       });
     }
 
@@ -489,6 +490,14 @@ router.delete('/:id', protect, authorize('admin'), async (req, res) => {
       'DELETE FROM loan_schedule WHERE loan_id = ?',
       [loanId]
     );
+
+    // If loan is voided, we can also delete its payments
+    if (loan[0].status === 'voided') {
+      await connection.execute(
+        'DELETE FROM loan_payments WHERE loan_id = ?',
+        [loanId]
+      );
+    }
 
     // Delete loan record
     await connection.execute(
@@ -506,6 +515,51 @@ router.delete('/:id', protect, authorize('admin'), async (req, res) => {
     console.error('Error deleting loan:', error);
     res.status(500).json({
       message: 'Error deleting loan',
+      error: error.message
+    });
+  }
+});
+
+// Add this new route for voiding loans
+router.patch('/:id/void', protect, authorize('admin'), async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const loanId = req.params.id;
+    const { reason } = req.body;
+
+    if (!reason) {
+      return res.status(400).json({
+        message: 'A reason is required to void a loan'
+      });
+    }
+
+    // Update loan status to voided
+    await connection.execute(
+      'UPDATE loans SET status = ?, notes = CONCAT(COALESCE(notes, ""), "\nVoid reason: ", ?) WHERE id = ?',
+      ['voided', reason, loanId]
+    );
+
+    // Mark all unpaid schedule items as voided
+    await connection.execute(
+      'UPDATE loan_schedule SET status = ? WHERE loan_id = ? AND status IN ("pending", "partial")',
+      ['voided', loanId]
+    );
+
+    await connection.commit();
+    connection.release();
+
+    // Get updated loan details
+    const loan = await Loan.getWithDetails(loanId);
+    res.json(loan);
+
+  } catch (error) {
+    await connection.rollback();
+    connection.release();
+    console.error('Error voiding loan:', error);
+    res.status(500).json({
+      message: 'Error voiding loan',
       error: error.message
     });
   }

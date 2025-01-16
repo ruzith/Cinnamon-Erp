@@ -24,10 +24,8 @@ class Asset extends BaseModel {
   async getWithDetails(id) {
     const [rows] = await this.pool.execute(`
       SELECT a.*,
-             ac.name as category_name,
              u.name as created_by_name
       FROM assets a
-      LEFT JOIN asset_categories ac ON a.category_id = ac.id
       LEFT JOIN users u ON a.created_by = u.id
       ${id ? 'WHERE a.id = ?' : ''}
       ORDER BY a.name ASC
@@ -51,22 +49,19 @@ class Asset extends BaseModel {
     const date = new Date();
     const year = date.getFullYear().toString().substr(-2);
     const [result] = await this.pool.execute(
-      'SELECT COUNT(*) as count FROM assets WHERE type = ? AND YEAR(created_at) = YEAR(CURRENT_DATE)',
-      [type]
+      'SELECT COUNT(*) as count FROM assets WHERE YEAR(created_at) = YEAR(CURRENT_DATE)',
+      []
     );
     const count = result[0].count + 1;
-    const prefix = type.charAt(0).toUpperCase();
+    const prefix = (type?.charAt(0) || 'A').toUpperCase();
     return `${prefix}${year}${count.toString().padStart(4, '0')}`;
   }
 
   async calculateDepreciation(id) {
     const [asset] = await this.pool.execute(`
       SELECT a.*,
-             ac.depreciation_rate,
-             ac.useful_life,
              TIMESTAMPDIFF(YEAR, a.purchase_date, CURRENT_DATE) as age
       FROM assets a
-      JOIN asset_categories ac ON a.category_id = ac.id
       WHERE a.id = ?
     `, [id]);
 
@@ -75,9 +70,11 @@ class Asset extends BaseModel {
     const {
       purchase_price,
       age,
-      depreciation_rate,
-      useful_life
     } = asset[0];
+
+    // Use default depreciation rate and useful life since we no longer have categories
+    const depreciation_rate = 10; // Default 10%
+    const useful_life = 5; // Default 5 years
 
     // Calculate straight-line depreciation
     const annualDepreciation = purchase_price * (depreciation_rate / 100);
@@ -101,4 +98,4 @@ class Asset extends BaseModel {
   }
 }
 
-module.exports = new Asset(); 
+module.exports = new Asset();

@@ -148,6 +148,14 @@ exports.deleteContractor = async (req, res) => {
       [req.params.id]
     );
 
+    // Check for purchase invoices
+    const [purchaseInvoices] = await connection.execute(`
+      SELECT COUNT(*) as count
+      FROM purchase_invoices
+      WHERE contractor_id = ?`,
+      [req.params.id]
+    );
+
     if (payments[0].count > 0) {
       await connection.rollback();
       connection.release();
@@ -157,20 +165,22 @@ exports.deleteContractor = async (req, res) => {
       });
     }
 
-    // If there are advance payments or assignments, return them to the frontend
-    if (advancePayments.length > 0 || assignments.length > 0) {
+    // If there are any related records, return them to the frontend
+    if (advancePayments.length > 0 || assignments.length > 0 || purchaseInvoices[0].count > 0) {
       await connection.rollback();
       connection.release();
       return res.status(400).json({
         hasAdvancePayments: advancePayments.length > 0,
         hasAssignments: assignments.length > 0,
+        hasPurchaseInvoices: purchaseInvoices[0].count > 0,
         advancePayments: advancePayments,
         assignments: assignments,
-        message: 'Contractor has active assignments or advance payments that need to be reassigned.'
+        purchaseInvoices: purchaseInvoices[0].count,
+        message: 'Contractor has active assignments, advance payments, or purchase invoices that need to be reassigned.'
       });
     }
 
-    // If no assignments or advance payments, proceed with deletion
+    // If no related records, proceed with deletion
     await connection.execute(
       'DELETE FROM cutting_contractors WHERE id = ?',
       [req.params.id]
@@ -227,6 +237,12 @@ exports.reassignContractor = async (req, res) => {
     // Update advance payments
     await connection.execute(
       'UPDATE cutting_advance_payments SET contractor_id = ? WHERE contractor_id = ?',
+      [newContractorId, req.params.id]
+    );
+
+    // Update purchase invoices
+    await connection.execute(
+      'UPDATE purchase_invoices SET contractor_id = ? WHERE contractor_id = ?',
       [newContractorId, req.params.id]
     );
 

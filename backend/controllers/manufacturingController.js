@@ -747,13 +747,14 @@ exports.generateOrderReceipt = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Get order details with product info only
+    // Get order details with product info
     const [orders] = await connection.execute(`
       SELECT
         mo.*,
         p.name as product_name,
         p.code as product_code,
         p.unit_price,
+        (mo.quantity * p.unit_price) as calculated_amount,
         u.name as created_by_name
       FROM manufacturing_orders mo
       JOIN products p ON mo.product_id = p.id
@@ -773,7 +774,10 @@ exports.generateOrderReceipt = async (req, res) => {
     );
     const companyInfo = settings[0] || {};
 
-    // Generate receipt HTML without materials section
+    // Calculate total amount
+    const totalAmount = parseFloat(order.calculated_amount || 0).toFixed(2);
+
+    // Generate receipt HTML
     const receiptHtml = `
       <!DOCTYPE html>
       <html>
@@ -917,7 +921,7 @@ exports.generateOrderReceipt = async (req, res) => {
               <div class="info-label">Product Details</div>
               <div class="info-value product-info">
                 ${order.product_name}
-                <span class="product-code">(${order.product_code})</span>
+                <span class="product-code">${order.product_code ? `(${order.product_code})` : ''}</span>
               </div>
             </div>
             <div class="info-item">
@@ -944,7 +948,7 @@ exports.generateOrderReceipt = async (req, res) => {
 
         <div class="amount-section">
           <div class="amount-label">Total Amount</div>
-          <div class="amount-value">Rs. ${order.total_amount.toFixed(2)}</div>
+          <div class="amount-value">Rs. ${totalAmount}</div>
         </div>
 
         <div class="footer">
@@ -958,7 +962,10 @@ exports.generateOrderReceipt = async (req, res) => {
     res.json({ receiptHtml });
   } catch (error) {
     console.error('Error generating order receipt:', error);
-    res.status(500).json({ message: 'Error generating receipt' });
+    res.status(500).json({
+      message: 'Error generating receipt',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   } finally {
     connection.release();
   }

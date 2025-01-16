@@ -87,6 +87,15 @@ const reportTemplates = [
           { value: 'permanent', label: { en: 'Permanent', si: 'ස්ථිර' } },
           { value: 'temporary', label: { en: 'Temporary', si: 'තාවකාලික' } }
         ]
+      },
+      {
+        field: 'status',
+        type: 'select',
+        label: { en: 'Status', si: 'තත්ත්වය' },
+        options: [
+          { value: 'active', label: { en: 'Active', si: 'ක්‍රියාත්මක' } },
+          { value: 'inactive', label: { en: 'Inactive', si: 'අක්‍රිය' } }
+        ]
       }
     ],
     columns: [
@@ -97,6 +106,14 @@ const reportTemplates = [
       {
         field: 'designation',
         header: { en: 'Designation', si: 'තනතුර' }
+      },
+      {
+        field: 'department',
+        header: { en: 'Department', si: 'දෙපාර්තමේන්තුව' }
+      },
+      {
+        field: 'employmentType',
+        header: { en: 'Employment Type', si: 'සේවා වර්ගය' }
       },
       {
         field: 'status',
@@ -128,6 +145,16 @@ const reportTemplates = [
         type: 'select',
         label: { en: 'Contractor', si: 'කොන්ත්‍රාත්කරු' },
         optionsUrl: '/api/reports/cutting-contractors'
+      },
+      {
+        field: 'status',
+        type: 'select',
+        label: { en: 'Status', si: 'තත්ත්වය' },
+        options: [
+          { value: 'pending', label: { en: 'Pending', si: 'විසඳීමට ඇති' } },
+          { value: 'in_progress', label: { en: 'In Progress', si: 'ක්‍රියාත්මක වෙමින්' } },
+          { value: 'completed', label: { en: 'Completed', si: 'සම්පූර්ණයි' } }
+        ]
       }
     ],
     columns: [
@@ -144,6 +171,10 @@ const reportTemplates = [
         field: 'efficiency',
         header: { en: 'Efficiency', si: 'කාර්යක්ෂමතාව' },
         format: 'percentage'
+      },
+      {
+        field: 'status',
+        header: { en: 'Status', si: 'තත්ත්වය' }
       }
     ]
   },
@@ -210,9 +241,13 @@ const reportTemplates = [
         header: { en: 'Status', si: 'තත්ත්වය' }
       },
       {
-        field: 'completionRate',
-        header: { en: 'Completion Rate', si: 'සම්පූර්ණ කිරීමේ අනුපාතය' },
-        format: 'percentage'
+        field: 'priority',
+        header: { en: 'Priority', si: 'ප්‍රමුඛතාව' }
+      },
+      {
+        field: 'estimatedHours',
+        header: { en: 'Estimated Hours', si: 'ඇස්තමේන්තුගත පැය' },
+        format: 'number'
       }
     ]
   },

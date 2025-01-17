@@ -12,9 +12,15 @@ const createContractor = async (contractorData) => {
   return response.data
 }
 
-const cuttingService = {
-  getContractors,
-  createContractor
+const createPayment = async (paymentData) => {
+  const response = await axios.post(API_URL + 'payments', paymentData);
+  return response.data;
 }
 
-export default cuttingService 
+const cuttingService = {
+  getContractors,
+  createContractor,
+  createPayment
+}
+
+export default cuttingService

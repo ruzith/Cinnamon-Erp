@@ -342,6 +342,7 @@ CREATE TABLE cutting_payments (
   total_amount DECIMAL(10, 2) NOT NULL DEFAULT 250.00,
   company_contribution DECIMAL(10, 2) NOT NULL DEFAULT 100.00,
   manufacturing_contribution DECIMAL(10, 2) NOT NULL DEFAULT 150.00,
+  quantity_kg DECIMAL(10, 2) NOT NULL,
   status ENUM('paid', 'due', 'pending') DEFAULT 'pending',
   payment_date DATE,
   receipt_number VARCHAR(20) UNIQUE,
@@ -512,7 +513,6 @@ CREATE TABLE sales_items (
 CREATE TABLE purchase_invoices (
   id INT PRIMARY KEY AUTO_INCREMENT,
   invoice_number VARCHAR(20) NOT NULL,
-  supplier_id INT NOT NULL,
   contractor_id INT,
   invoice_date DATE NOT NULL,
   due_date DATE NOT NULL,
@@ -527,7 +527,6 @@ CREATE TABLE purchase_invoices (
   created_by INT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (supplier_id) REFERENCES customers(id),
   FOREIGN KEY (contractor_id) REFERENCES cutting_contractors(id),
   FOREIGN KEY (created_by) REFERENCES users(id)
 );

@@ -196,4 +196,4 @@ class Loan extends BaseModel {
   }
 }
 
-module.exports = new Loan();
+module.exports = Loan;

@@ -39,6 +39,7 @@ router.post('/', protect, authorize('admin', 'accountant'), async (req, res) => 
       });
     }
 
+    // Create new instance of Loan class
     const loanModel = new Loan();
     const createdLoan = await loanModel.createWithSchedule({
       borrower_type: loan.borrower_type,
@@ -231,7 +232,8 @@ router.get('/summary', protect, async (req, res) => {
 // Get loan details with payment history
 router.get('/:id', protect, async (req, res) => {
   try {
-    const loan = await Loan.getWithDetails(req.params.id);
+    const loanModel = new Loan();
+    const loan = await loanModel.getWithDetails(req.params.id);
     if (!loan) {
       return res.status(404).json({ message: 'Loan not found' });
     }

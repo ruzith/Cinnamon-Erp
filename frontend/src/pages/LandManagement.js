@@ -351,7 +351,7 @@ const LandManagement = () => {
   };
 
   useEffect(() => {
-    if (activeTab === 1) {
+    if (activeTab === 2) {
       fetchLandReports();
     }
   }, [filters, activeTab]);

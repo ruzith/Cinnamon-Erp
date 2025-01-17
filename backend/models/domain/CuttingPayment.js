@@ -19,14 +19,15 @@ class CuttingPayment extends BaseModel {
       const [result] = await this.pool.execute(
         `INSERT INTO cutting_payments
          (contractor_id, assignment_id, total_amount, company_contribution, manufacturing_contribution,
-          status, payment_date, receipt_number, notes, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          quantity_kg, status, payment_date, receipt_number, notes, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           paymentData.contractor_id,
           paymentData.assignment_id,
           paymentData.total_amount,
           paymentData.company_contribution,
           paymentData.manufacturing_contribution,
+          paymentData.quantity_kg,
           paymentData.status,
           paymentData.payment_date,
           receipt_number,

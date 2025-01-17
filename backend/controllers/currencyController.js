@@ -13,11 +13,11 @@ exports.getAllCurrencies = async (req, res) => {
 exports.createCurrency = async (req, res) => {
   try {
     const { code, name, symbol, rate } = req.body;
-    
+
     if (!code || !name || !symbol || !rate) {
       return res.status(400).json({ message: 'All fields are required' });
     }
-    
+
     const id = await Currency.create({ code, name, symbol, rate });
     res.status(201).json({ id, message: 'Currency created successfully' });
   } catch (error) {
@@ -29,7 +29,7 @@ exports.updateCurrency = async (req, res) => {
   try {
     const { id } = req.params;
     const { code, name, symbol, rate, status } = req.body;
-    
+
     if (!code || !name || !symbol || !rate || !status) {
       return res.status(400).json({ message: 'All fields are required' });
     }
@@ -45,7 +45,7 @@ exports.updateCurrency = async (req, res) => {
       const rateRatio = rate / oldCurrency.rate;
       await Currency.updateAllRates(rateRatio, id);
     }
-    
+
     const success = await Currency.update(id, { code, name, symbol, rate, status });
     if (success) {
       res.json({ message: 'Currency updated successfully' });
@@ -69,4 +69,4 @@ exports.deleteCurrency = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: 'Error deleting currency', error: error.message });
   }
-}; 
+};

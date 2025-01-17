@@ -190,8 +190,8 @@ router.post('/generate/:code', protect, async (req, res) => {
     let results;
     switch (code) {
       case 'SALES_SUMMARY': {
-        // Make the date filter optional
-        const dateFilter = filters.dateRange ? new Date(filters.dateRange) : null;
+        const startDate = filters.dateRangeStart ? new Date(filters.dateRangeStart) : null;
+        const endDate = filters.dateRangeEnd ? new Date(filters.dateRangeEnd) : null;
         const query = `
           SELECT
             DATE(t.date) as date,
@@ -205,14 +205,16 @@ router.post('/generate/:code', protect, async (req, res) => {
           JOIN transactions_entries te ON t.id = te.transaction_id
           JOIN accounts a ON te.account_id = a.id
           WHERE a.type = 'revenue'
-          ${dateFilter ? 'AND DATE(t.date) >= ?' : ''}
+          ${startDate ? 'AND DATE(t.date) >= ?' : ''}
+          ${endDate ? 'AND DATE(t.date) <= ?' : ''}
           GROUP BY DATE(t.date)
           ORDER BY date DESC
           LIMIT 10
         `;
 
         const params = [
-          ...(dateFilter ? [dateFilter.toISOString().split('T')[0]] : [])
+          ...(startDate ? [startDate.toISOString().split('T')[0]] : []),
+          ...(endDate ? [endDate.toISOString().split('T')[0]] : [])
         ];
 
         console.log('Executing SALES_SUMMARY query:', query, 'with params:', params);
@@ -365,79 +367,31 @@ router.post('/generate/:code', protect, async (req, res) => {
         break;
       }
 
-      case 'MANUFACTURING_ADVANCED': {
-        const dateFilter = filters.dateRange ? new Date(filters.dateRange) : null;
-        const query = `
-          SELECT
-            p.name as productLine,
-            SUM(mo.quantity) as outputQuantity,
-            AVG(mo.defect_rate) as defectRate,
-            AVG(mo.efficiency) as efficiency,
-            SUM(mo.downtime_hours) as downtime,
-            AVG(mo.cost_per_unit) as costPerUnit
-          FROM manufacturing_orders mo
-          JOIN products p ON mo.product_id = p.id
-          WHERE 1=1
-            ${dateFilter ? 'AND DATE(mo.production_date) = ?' : ''}
-            ${filters.productLine ? 'AND p.id = ?' : ''}
-            ${filters.efficiency ?
-              filters.efficiency === 'high' ? 'AND mo.efficiency > 0.9' :
-              filters.efficiency === 'medium' ? 'AND mo.efficiency BETWEEN 0.7 AND 0.9' :
-              filters.efficiency === 'low' ? 'AND mo.efficiency < 0.7' : ''
-            : ''}
-          GROUP BY p.name
-          ORDER BY p.name
-        `;
-
-        const params = [
-          ...(dateFilter ? [dateFilter.toISOString().split('T')[0]] : []),
-          ...(filters.productLine ? [filters.productLine] : [])
-        ];
-
-        console.log('Executing MANUFACTURING_ADVANCED query:', query, 'with params:', params);
-        const rows = await executeQuery(query, params);
-        console.log('MANUFACTURING_ADVANCED results:', rows);
-
-        results = rows.map(row => ({
-          productLine: row.productLine,
-          outputQuantity: Number(row.outputQuantity || 0),
-          defectRate: Number(row.defectRate || 0) / 100,
-          efficiency: Number(row.efficiency || 0) / 100,
-          downtime: Number(row.downtime || 0),
-          costPerUnit: Number(row.costPerUnit || 0)
-        }));
-        break;
-      }
-
       case 'MANUFACTURING_PURCHASING': {
+        const startDate = filters.dateRangeStart ? new Date(filters.dateRangeStart) : null;
+        const endDate = filters.dateRangeEnd ? new Date(filters.dateRangeEnd) : null;
+
         const query = `
-          SELECT
-            i.id as materialId,
-            i.product_name as materialCode,
-            i.product_name as materialName,
-            i.category as materialCategory,
-            SUM(pi.net_weight) as quantity,
-            AVG(pi.rate) as unitPrice,
-            SUM(pi.amount) as totalCost,
-            AVG(DATEDIFF(piv.due_date, piv.invoice_date)) as deliveryTime,
-            COUNT(DISTINCT piv.id) as orderCount,
-            MIN(pi.rate) as minPrice,
-            MAX(pi.rate) as maxPrice,
-            AVG(pi.amount) as averageOrderValue
-          FROM purchase_items pi
-          JOIN purchase_invoices piv ON pi.invoice_id = piv.id
-          JOIN inventory i ON pi.grade_id = i.id
-          WHERE 1=1
-            ${filters.dateRange ? 'AND DATE(piv.invoice_date) = ?' : ''}
-            ${filters.materialCategory ? 'AND i.category = ?' : ''}
-          GROUP BY i.id, i.product_name, i.category
-          ORDER BY i.product_name
-          LIMIT 10
+            SELECT
+                DATE(piv.invoice_date) as date,
+                piv.invoice_number as invoiceNumber,
+                i.product_name as materialName,
+                pi.net_weight as quantity,
+                pi.rate as unitPrice,
+                pi.amount as totalAmount
+            FROM purchase_invoices piv
+            JOIN purchase_items pi ON piv.id = pi.invoice_id
+            JOIN inventory i ON pi.grade_id = i.id
+            WHERE 1=1
+                ${startDate ? 'AND DATE(piv.invoice_date) >= ?' : ''}
+                ${endDate ? 'AND DATE(piv.invoice_date) <= ?' : ''}
+            ORDER BY piv.invoice_date DESC, piv.invoice_number
+            LIMIT 1000
         `;
 
         const params = [
-          ...(filters.dateRange ? [new Date(filters.dateRange).toISOString().split('T')[0]] : []),
-          ...(filters.materialCategory ? [filters.materialCategory] : [])
+            ...(startDate ? [startDate.toISOString().split('T')[0]] : []),
+            ...(endDate ? [endDate.toISOString().split('T')[0]] : [])
         ];
 
         console.log('Executing MANUFACTURING_PURCHASING query:', query, 'with params:', params);
@@ -445,18 +399,12 @@ router.post('/generate/:code', protect, async (req, res) => {
         console.log('MANUFACTURING_PURCHASING results:', rows);
 
         results = rows.map(row => ({
-          materialId: row.materialId,
-          materialCode: row.materialCode,
-          materialName: row.materialName,
-          materialCategory: row.materialCategory,
-          quantity: Number(row.quantity || 0),
-          unitPrice: Number(row.unitPrice || 0),
-          totalCost: Number(row.totalCost || 0),
-          deliveryTime: Number(row.deliveryTime || 0),
-          orderCount: Number(row.orderCount || 0),
-          minPrice: Number(row.minPrice || 0),
-          maxPrice: Number(row.maxPrice || 0),
-          averageOrderValue: Number(row.averageOrderValue || 0)
+            date: row.date,
+            invoiceNumber: row.invoiceNumber,
+            materialName: row.materialName,
+            quantity: Number(row.quantity || 0),
+            unitPrice: Number(row.unitPrice || 0),
+            totalAmount: Number(row.totalAmount || 0)
         }));
         break;
       }
@@ -1047,71 +995,6 @@ router.post('/generate/TASK_SUMMARY', protect, async (req, res) => {
   }
 });
 
-// Manufacturing Advanced Report
-router.post('/generate/MANUFACTURING_ADVANCED', protect, async (req, res) => {
-  try {
-    const { filters } = req.body;
-
-    let query = `
-      SELECT
-        p.id,
-        p.name as productLine,
-        SUM(mo.quantity) as outputQuantity,
-        AVG(mo.defect_rate) as defectRate,
-        AVG(mo.efficiency) as efficiency,
-        SUM(mo.downtime_hours) as downtime,
-        AVG(mo.cost_per_unit) as costPerUnit
-      FROM manufacturing_orders mo
-      JOIN products p ON mo.product_id = p.id
-      WHERE mo.status = 'completed'
-    `;
-
-    const queryParams = [];
-
-    if (filters.dateRange) {
-      query += ` AND mo.production_date BETWEEN ? AND ?`;
-      queryParams.push(filters.dateRange.start, filters.dateRange.end);
-    }
-
-    if (filters.productLine) {
-      query += ` AND p.id = ?`;
-      queryParams.push(filters.productLine);
-    }
-
-    if (filters.efficiency) {
-      switch(filters.efficiency) {
-        case 'high':
-          query += ` AND mo.efficiency > 0.9`;
-          break;
-        case 'medium':
-          query += ` AND mo.efficiency BETWEEN 0.7 AND 0.9`;
-          break;
-        case 'low':
-          query += ` AND mo.efficiency < 0.7`;
-          break;
-      }
-    }
-
-    // Add GROUP BY clause
-    query += ` GROUP BY p.id, p.name`;
-
-    const rows = await executeQuery(query, queryParams);
-
-    const results = rows.map(row => ({
-      productLine: row.productLine,
-      outputQuantity: Number(row.outputQuantity || 0),
-      defectRate: Number(row.defectRate || 0) / 100,
-      efficiency: Number(row.efficiency || 0) / 100,
-      downtime: Number(row.downtime || 0),
-      costPerUnit: Number(row.costPerUnit || 0)
-    }));
-
-    res.json(results);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
 // Manufacturing Purchasing Report
 router.post('/generate/MANUFACTURING_PURCHASING', protect, async (req, res) => {
   try {
@@ -1194,8 +1077,8 @@ router.post('/preview/:code', protect, async (req, res) => {
     let results;
     switch (code) {
       case 'SALES_SUMMARY': {
-        // Make the date filter optional
-        const dateFilter = filters.dateRange ? new Date(filters.dateRange) : null;
+        const startDate = filters.dateRangeStart ? new Date(filters.dateRangeStart) : null;
+        const endDate = filters.dateRangeEnd ? new Date(filters.dateRangeEnd) : null;
         const query = `
           SELECT
             DATE(t.date) as date,
@@ -1209,14 +1092,16 @@ router.post('/preview/:code', protect, async (req, res) => {
           JOIN transactions_entries te ON t.id = te.transaction_id
           JOIN accounts a ON te.account_id = a.id
           WHERE a.type = 'revenue'
-          ${dateFilter ? 'AND DATE(t.date) >= ?' : ''}
+          ${startDate ? 'AND DATE(t.date) >= ?' : ''}
+          ${endDate ? 'AND DATE(t.date) <= ?' : ''}
           GROUP BY DATE(t.date)
           ORDER BY date DESC
           LIMIT 10
         `;
 
         const params = [
-          ...(dateFilter ? [dateFilter.toISOString().split('T')[0]] : [])
+          ...(startDate ? [startDate.toISOString().split('T')[0]] : []),
+          ...(endDate ? [endDate.toISOString().split('T')[0]] : [])
         ];
 
         console.log('Executing SALES_SUMMARY query:', query, 'with params:', params);
@@ -1369,79 +1254,31 @@ router.post('/preview/:code', protect, async (req, res) => {
         break;
       }
 
-      case 'MANUFACTURING_ADVANCED': {
-        const dateFilter = filters.dateRange ? new Date(filters.dateRange) : null;
-        const query = `
-          SELECT
-            p.name as productLine,
-            SUM(mo.quantity) as outputQuantity,
-            AVG(mo.defect_rate) as defectRate,
-            AVG(mo.efficiency) as efficiency,
-            SUM(mo.downtime_hours) as downtime,
-            AVG(mo.cost_per_unit) as costPerUnit
-          FROM manufacturing_orders mo
-          JOIN products p ON mo.product_id = p.id
-          WHERE 1=1
-            ${dateFilter ? 'AND DATE(mo.production_date) = ?' : ''}
-            ${filters.productLine ? 'AND p.id = ?' : ''}
-            ${filters.efficiency ?
-              filters.efficiency === 'high' ? 'AND mo.efficiency > 0.9' :
-              filters.efficiency === 'medium' ? 'AND mo.efficiency BETWEEN 0.7 AND 0.9' :
-              filters.efficiency === 'low' ? 'AND mo.efficiency < 0.7' : ''
-            : ''}
-          GROUP BY p.name
-          ORDER BY p.name
-        `;
-
-        const params = [
-          ...(dateFilter ? [dateFilter.toISOString().split('T')[0]] : []),
-          ...(filters.productLine ? [filters.productLine] : [])
-        ];
-
-        console.log('Executing MANUFACTURING_ADVANCED query:', query, 'with params:', params);
-        const rows = await executeQuery(query, params);
-        console.log('MANUFACTURING_ADVANCED results:', rows);
-
-        results = rows.map(row => ({
-          productLine: row.productLine,
-          outputQuantity: Number(row.outputQuantity || 0),
-          defectRate: Number(row.defectRate || 0) / 100,
-          efficiency: Number(row.efficiency || 0) / 100,
-          downtime: Number(row.downtime || 0),
-          costPerUnit: Number(row.costPerUnit || 0)
-        }));
-        break;
-      }
-
       case 'MANUFACTURING_PURCHASING': {
+        const startDate = filters.dateRangeStart ? new Date(filters.dateRangeStart) : null;
+        const endDate = filters.dateRangeEnd ? new Date(filters.dateRangeEnd) : null;
+
         const query = `
-          SELECT
-            i.id as materialId,
-            i.product_name as materialCode,
-            i.product_name as materialName,
-            i.category as materialCategory,
-            SUM(pi.net_weight) as quantity,
-            AVG(pi.rate) as unitPrice,
-            SUM(pi.amount) as totalCost,
-            AVG(DATEDIFF(piv.due_date, piv.invoice_date)) as deliveryTime,
-            COUNT(DISTINCT piv.id) as orderCount,
-            MIN(pi.rate) as minPrice,
-            MAX(pi.rate) as maxPrice,
-            AVG(pi.amount) as averageOrderValue
-          FROM purchase_items pi
-          JOIN purchase_invoices piv ON pi.invoice_id = piv.id
-          JOIN inventory i ON pi.grade_id = i.id
-          WHERE 1=1
-            ${filters.dateRange ? 'AND DATE(piv.invoice_date) = ?' : ''}
-            ${filters.materialCategory ? 'AND i.category = ?' : ''}
-          GROUP BY i.id, i.product_name, i.category
-          ORDER BY i.product_name
-          LIMIT 10
+            SELECT
+                DATE(piv.invoice_date) as date,
+                piv.invoice_number as invoiceNumber,
+                i.product_name as materialName,
+                pi.net_weight as quantity,
+                pi.rate as unitPrice,
+                pi.amount as totalAmount
+            FROM purchase_invoices piv
+            JOIN purchase_items pi ON piv.id = pi.invoice_id
+            JOIN inventory i ON pi.grade_id = i.id
+            WHERE 1=1
+                ${startDate ? 'AND DATE(piv.invoice_date) >= ?' : ''}
+                ${endDate ? 'AND DATE(piv.invoice_date) <= ?' : ''}
+            ORDER BY piv.invoice_date DESC, piv.invoice_number
+            LIMIT 1000
         `;
 
         const params = [
-          ...(filters.dateRange ? [new Date(filters.dateRange).toISOString().split('T')[0]] : []),
-          ...(filters.materialCategory ? [filters.materialCategory] : [])
+            ...(startDate ? [startDate.toISOString().split('T')[0]] : []),
+            ...(endDate ? [endDate.toISOString().split('T')[0]] : [])
         ];
 
         console.log('Executing MANUFACTURING_PURCHASING query:', query, 'with params:', params);
@@ -1449,18 +1286,12 @@ router.post('/preview/:code', protect, async (req, res) => {
         console.log('MANUFACTURING_PURCHASING results:', rows);
 
         results = rows.map(row => ({
-          materialId: row.materialId,
-          materialCode: row.materialCode,
-          materialName: row.materialName,
-          materialCategory: row.materialCategory,
-          quantity: Number(row.quantity || 0),
-          unitPrice: Number(row.unitPrice || 0),
-          totalCost: Number(row.totalCost || 0),
-          deliveryTime: Number(row.deliveryTime || 0),
-          orderCount: Number(row.orderCount || 0),
-          minPrice: Number(row.minPrice || 0),
-          maxPrice: Number(row.maxPrice || 0),
-          averageOrderValue: Number(row.averageOrderValue || 0)
+            date: row.date,
+            invoiceNumber: row.invoiceNumber,
+            materialName: row.materialName,
+            quantity: Number(row.quantity || 0),
+            unitPrice: Number(row.unitPrice || 0),
+            totalAmount: Number(row.totalAmount || 0)
         }));
         break;
       }

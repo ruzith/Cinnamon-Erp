@@ -248,7 +248,7 @@ const AssetManagement = () => {
     setAssetFormData({
       assetNumber: asset?.asset_number || '',
       name: asset?.name || '',
-      category: asset?.category_id || '',
+      category: asset?.category || '',
       type: asset?.type || '',
       purchaseDate: asset?.purchase_date ? asset.purchase_date.split('T')[0] : '',
       purchasePrice: asset?.purchase_price || '',
@@ -365,11 +365,28 @@ const AssetManagement = () => {
     }
 
     try {
-      const response = await axios.post('/api/assets', assetFormData);
+      const assetData = {
+        asset_number: assetFormData.assetNumber,
+        name: assetFormData.name,
+        category: assetFormData.category,
+        type: assetFormData.type,
+        purchase_date: assetFormData.purchaseDate,
+        purchase_price: assetFormData.purchasePrice,
+        current_value: assetFormData.currentValue,
+        status: assetFormData.status
+      };
+
+      if (selectedAsset) {
+        // Update existing asset
+        await axios.put(`/api/assets/${selectedAsset.id}`, assetData);
+      } else {
+        // Create new asset
+        await axios.post('/api/assets', assetData);
+      }
       handleCloseDialog();
       fetchAssets();
     } catch (error) {
-      console.error('Error creating asset:', error);
+      console.error('Error saving asset:', error);
     }
   };
 

@@ -592,6 +592,7 @@ const Accounting = () => {
                   <TableRow>
                     <TableCell>Account Code</TableCell>
                     <TableCell>Account Name</TableCell>
+                    <TableCell>Type</TableCell>
                     <TableCell align="right">Debit</TableCell>
                     <TableCell align="right">Credit</TableCell>
                   </TableRow>
@@ -601,65 +602,25 @@ const Accounting = () => {
                     <TableRow key={account.code}>
                       <TableCell>{account.code}</TableCell>
                       <TableCell>{account.name}</TableCell>
-                      <TableCell align="right">${(account.debit || 0).toFixed(2)}</TableCell>
-                      <TableCell align="right">${(account.credit || 0).toFixed(2)}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={account.type}
+                          color={getAccountTypeColor(account.type)}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell align="right">{formatCurrency(account.debit)}</TableCell>
+                      <TableCell align="right">{formatCurrency(account.credit)}</TableCell>
                     </TableRow>
                   ))}
-                  <TableRow>
-                    <TableCell colSpan={2}><strong>Total</strong></TableCell>
-                    <TableCell align="right"><strong>${(data.totalDebit || 0).toFixed(2)}</strong></TableCell>
-                    <TableCell align="right"><strong>${(data.totalCredit || 0).toFixed(2)}</strong></TableCell>
+                  <TableRow sx={{ bgcolor: 'action.hover' }}>
+                    <TableCell colSpan={3}><strong>Total</strong></TableCell>
+                    <TableCell align="right"><strong>{formatCurrency(data.totalDebit)}</strong></TableCell>
+                    <TableCell align="right"><strong>{formatCurrency(data.totalCredit)}</strong></TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
             </TableContainer>
-          );
-
-        case 'profit-loss':
-          return (
-            <Box>
-              <Typography variant="h6" gutterBottom>Revenue</Typography>
-              <TableContainer>
-                <Table>
-                  <TableBody>
-                    {data.revenue?.map((item) => (
-                      <TableRow key={item.code}>
-                        <TableCell>{item.name}</TableCell>
-                        <TableCell align="right">${(item.total || 0).toFixed(2)}</TableCell>
-                      </TableRow>
-                    ))}
-                    <TableRow>
-                      <TableCell><strong>Total Revenue</strong></TableCell>
-                      <TableCell align="right"><strong>${(data.totalRevenue || 0).toFixed(2)}</strong></TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </TableContainer>
-
-              <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>Expenses</Typography>
-              <TableContainer>
-                <Table>
-                  <TableBody>
-                    {data.expenses?.map((item) => (
-                      <TableRow key={item.code}>
-                        <TableCell>{item.name}</TableCell>
-                        <TableCell align="right">${(item.total || 0).toFixed(2)}</TableCell>
-                      </TableRow>
-                    ))}
-                    <TableRow>
-                      <TableCell><strong>Total Expenses</strong></TableCell>
-                      <TableCell align="right"><strong>${(data.totalExpenses || 0).toFixed(2)}</strong></TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </TableContainer>
-
-              <Box sx={{ mt: 2, p: 2, bgcolor: 'background.paper' }}>
-                <Typography variant="h6">
-                  Net Profit: {formatCurrency(data.netProfit || 0)}
-                </Typography>
-              </Box>
-            </Box>
           );
 
         case 'balance-sheet':
@@ -667,109 +628,161 @@ const Accounting = () => {
             <Box>
               {/* Assets Section */}
               <Typography variant="h6" gutterBottom>Assets</Typography>
+              <Typography variant="subtitle1" gutterBottom>Current Assets</Typography>
               <TableContainer>
-                <Table>
+                <Table size="small">
                   <TableBody>
-                    <TableRow>
-                      <TableCell colSpan={2}><Typography variant="subtitle1">Current Assets</Typography></TableCell>
-                    </TableRow>
-                    {data.assets?.current?.map((item) => (
-                      <TableRow key={item.code}>
-                        <TableCell>{item.name}</TableCell>
-                        <TableCell align="right">{formatCurrency(item.total || 0)}</TableCell>
+                    {data.assets?.current?.map((asset) => (
+                      <TableRow key={asset.code}>
+                        <TableCell>{asset.name}</TableCell>
+                        <TableCell align="right">{formatCurrency(asset.balance)}</TableCell>
                       </TableRow>
                     ))}
-                    <TableRow>
+                    <TableRow sx={{ bgcolor: 'action.hover' }}>
                       <TableCell><strong>Total Current Assets</strong></TableCell>
-                      <TableCell align="right"><strong>{formatCurrency(data.assets?.totalCurrent || 0)}</strong></TableCell>
-                    </TableRow>
-
-                    <TableRow>
-                      <TableCell colSpan={2}><Typography variant="subtitle1" sx={{ mt: 2 }}>Fixed Assets</Typography></TableCell>
-                    </TableRow>
-                    {data.assets?.fixed?.map((item) => (
-                      <TableRow key={item.code}>
-                        <TableCell>{item.name}</TableCell>
-                        <TableCell align="right">{formatCurrency(item.total || 0)}</TableCell>
-                      </TableRow>
-                    ))}
-                    <TableRow>
-                      <TableCell><strong>Total Fixed Assets</strong></TableCell>
-                      <TableCell align="right"><strong>{formatCurrency(data.assets?.totalFixed || 0)}</strong></TableCell>
-                    </TableRow>
-
-                    <TableRow>
-                      <TableCell><strong>Total Assets</strong></TableCell>
-                      <TableCell align="right"><strong>{formatCurrency(data.assets?.total || 0)}</strong></TableCell>
+                      <TableCell align="right"><strong>{formatCurrency(data.assets?.totalCurrent)}</strong></TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>
               </TableContainer>
+
+              <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>Fixed Assets</Typography>
+              <TableContainer>
+                <Table size="small">
+                  <TableBody>
+                    {data.assets?.fixed?.map((asset) => (
+                      <TableRow key={asset.code}>
+                        <TableCell>{asset.name}</TableCell>
+                        <TableCell align="right">{formatCurrency(asset.balance)}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow sx={{ bgcolor: 'action.hover' }}>
+                      <TableCell><strong>Total Fixed Assets</strong></TableCell>
+                      <TableCell align="right"><strong>{formatCurrency(data.assets?.totalFixed)}</strong></TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
+              <Box sx={{ mt: 2, p: 1, bgcolor: 'action.hover' }}>
+                <Typography variant="subtitle1">
+                  Total Assets: {formatCurrency(data.assets?.total)}
+                </Typography>
+              </Box>
 
               {/* Liabilities Section */}
               <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>Liabilities</Typography>
+              <Typography variant="subtitle1" gutterBottom>Current Liabilities</Typography>
               <TableContainer>
-                <Table>
+                <Table size="small">
                   <TableBody>
-                    <TableRow>
-                      <TableCell colSpan={2}><Typography variant="subtitle1">Current Liabilities</Typography></TableCell>
-                    </TableRow>
-                    {data.liabilities?.current?.map((item) => (
-                      <TableRow key={item.code}>
-                        <TableCell>{item.name}</TableCell>
-                        <TableCell align="right">{formatCurrency(item.total || 0)}</TableCell>
+                    {data.liabilities?.current?.map((liability) => (
+                      <TableRow key={liability.code}>
+                        <TableCell>{liability.name}</TableCell>
+                        <TableCell align="right">{formatCurrency(liability.balance)}</TableCell>
                       </TableRow>
                     ))}
-                    <TableRow>
+                    <TableRow sx={{ bgcolor: 'action.hover' }}>
                       <TableCell><strong>Total Current Liabilities</strong></TableCell>
-                      <TableCell align="right"><strong>{formatCurrency(data.liabilities?.totalCurrent || 0)}</strong></TableCell>
-                    </TableRow>
-
-                    <TableRow>
-                      <TableCell colSpan={2}><Typography variant="subtitle1" sx={{ mt: 2 }}>Long-term Liabilities</Typography></TableCell>
-                    </TableRow>
-                    {data.liabilities?.longTerm?.map((item) => (
-                      <TableRow key={item.code}>
-                        <TableCell>{item.name}</TableCell>
-                        <TableCell align="right">{formatCurrency(item.total || 0)}</TableCell>
-                      </TableRow>
-                    ))}
-                    <TableRow>
-                      <TableCell><strong>Total Long-term Liabilities</strong></TableCell>
-                      <TableCell align="right"><strong>{formatCurrency(data.liabilities?.totalLongTerm || 0)}</strong></TableCell>
-                    </TableRow>
-
-                    <TableRow>
-                      <TableCell><strong>Total Liabilities</strong></TableCell>
-                      <TableCell align="right"><strong>{formatCurrency(data.liabilities?.total || 0)}</strong></TableCell>
+                      <TableCell align="right"><strong>{formatCurrency(data.liabilities?.totalCurrent)}</strong></TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>
               </TableContainer>
+
+              <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>Long Term Liabilities</Typography>
+              <TableContainer>
+                <Table size="small">
+                  <TableBody>
+                    {data.liabilities?.longTerm?.map((liability) => (
+                      <TableRow key={liability.code}>
+                        <TableCell>{liability.name}</TableCell>
+                        <TableCell align="right">{formatCurrency(liability.balance)}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow sx={{ bgcolor: 'action.hover' }}>
+                      <TableCell><strong>Total Long Term Liabilities</strong></TableCell>
+                      <TableCell align="right"><strong>{formatCurrency(data.liabilities?.totalLongTerm)}</strong></TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
+              <Box sx={{ mt: 2, p: 1, bgcolor: 'action.hover' }}>
+                <Typography variant="subtitle1">
+                  Total Liabilities: {formatCurrency(data.liabilities?.total)}
+                </Typography>
+              </Box>
 
               {/* Equity Section */}
               <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>Equity</Typography>
               <TableContainer>
-                <Table>
+                <Table size="small">
                   <TableBody>
-                    {data.equity?.items?.map((item) => (
-                      <TableRow key={item.code}>
+                    {data.equity?.items?.map((item, index) => (
+                      <TableRow key={index}>
                         <TableCell>{item.name}</TableCell>
-                        <TableCell align="right">{formatCurrency(item.total || 0)}</TableCell>
+                        <TableCell align="right">{formatCurrency(item.balance)}</TableCell>
                       </TableRow>
                     ))}
-                    <TableRow>
+                    <TableRow sx={{ bgcolor: 'action.hover' }}>
                       <TableCell><strong>Total Equity</strong></TableCell>
-                      <TableCell align="right"><strong>{formatCurrency(data.equity?.total || 0)}</strong></TableCell>
+                      <TableCell align="right"><strong>{formatCurrency(data.equity?.total)}</strong></TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>
               </TableContainer>
 
-              {/* Total Liabilities and Equity */}
-              <Box sx={{ mt: 2, p: 2, bgcolor: 'background.paper' }}>
+              <Box sx={{ mt: 3, p: 2, bgcolor: 'background.paper', border: 1, borderColor: 'divider' }}>
                 <Typography variant="h6">
                   Total Liabilities and Equity: {formatCurrency((data.liabilities?.total || 0) + (data.equity?.total || 0))}
+                </Typography>
+              </Box>
+            </Box>
+          );
+
+        case 'profit-loss':
+          return (
+            <Box>
+              <Typography variant="h6" gutterBottom>Revenue</Typography>
+              <TableContainer>
+                <Table size="small">
+                  <TableBody>
+                    {data.revenue?.map((item, index) => (
+                      <TableRow key={index}>
+                        <TableCell>{item.name}</TableCell>
+                        <TableCell align="right">{formatCurrency(item.amount)}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow sx={{ bgcolor: 'action.hover' }}>
+                      <TableCell><strong>Total Revenue</strong></TableCell>
+                      <TableCell align="right"><strong>{formatCurrency(data.totalRevenue)}</strong></TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
+              <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>Expenses</Typography>
+              <TableContainer>
+                <Table size="small">
+                  <TableBody>
+                    {data.expenses?.map((item, index) => (
+                      <TableRow key={index}>
+                        <TableCell>{item.name}</TableCell>
+                        <TableCell align="right">{formatCurrency(item.amount)}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow sx={{ bgcolor: 'action.hover' }}>
+                      <TableCell><strong>Total Expenses</strong></TableCell>
+                      <TableCell align="right"><strong>{formatCurrency(data.totalExpenses)}</strong></TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
+              <Box sx={{ mt: 3, p: 2, bgcolor: 'background.paper', border: 1, borderColor: 'divider' }}>
+                <Typography variant="h6">
+                  Net Profit/Loss: {formatCurrency(data.netProfit)}
                 </Typography>
               </Box>
             </Box>
@@ -778,142 +791,99 @@ const Accounting = () => {
         case 'cash-flow':
           return (
             <Box>
-              {/* Operating Activities */}
               <Typography variant="h6" gutterBottom>Operating Activities</Typography>
               <TableContainer>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Description</TableCell>
-                      <TableCell align="right">Amount</TableCell>
-                    </TableRow>
-                  </TableHead>
+                <Table size="small">
                   <TableBody>
-                    {/* Inflows */}
-                    <TableRow>
-                      <TableCell colSpan={2}>
-                        <Typography variant="subtitle2">Cash Inflows</Typography>
-                      </TableCell>
-                    </TableRow>
                     {data.operating?.inflows?.map((item, index) => (
                       <TableRow key={`inflow-${index}`}>
-                        <TableCell>{item.description || 'Operating Inflow'}</TableCell>
-                        <TableCell align="right">{formatCurrency(Math.abs(item.credit - item.debit))}</TableCell>
+                        <TableCell>{item.description}</TableCell>
+                        <TableCell align="right" sx={{ color: 'success.main' }}>
+                          {formatCurrency(item.amount)}
+                        </TableCell>
                       </TableRow>
                     ))}
-
-                    {/* Outflows */}
-                    <TableRow>
-                      <TableCell colSpan={2}>
-                        <Typography variant="subtitle2">Cash Outflows</Typography>
-                      </TableCell>
-                    </TableRow>
                     {data.operating?.outflows?.map((item, index) => (
                       <TableRow key={`outflow-${index}`}>
-                        <TableCell>{item.description || 'Operating Outflow'}</TableCell>
-                        <TableCell align="right">-${formatCurrency(Math.abs(item.debit - item.credit))}</TableCell>
+                        <TableCell>{item.description}</TableCell>
+                        <TableCell align="right" sx={{ color: 'error.main' }}>
+                          ({formatCurrency(item.amount)})
+                        </TableCell>
                       </TableRow>
                     ))}
-
-                    {/* Operating Total */}
-                    <TableRow>
+                    <TableRow sx={{ bgcolor: 'action.hover' }}>
                       <TableCell><strong>Net Cash from Operations</strong></TableCell>
                       <TableCell align="right">
-                        <strong>{formatCurrency(data.operating?.total || 0)}</strong>
+                        <strong>{formatCurrency(data.operating?.total)}</strong>
                       </TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>
               </TableContainer>
 
-              {/* Investing Activities */}
               <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>Investing Activities</Typography>
               <TableContainer>
-                <Table>
+                <Table size="small">
                   <TableBody>
-                    {/* Inflows */}
-                    <TableRow>
-                      <TableCell colSpan={2}>
-                        <Typography variant="subtitle2">Cash Inflows</Typography>
-                      </TableCell>
-                    </TableRow>
                     {data.investing?.inflows?.map((item, index) => (
                       <TableRow key={`invest-in-${index}`}>
-                        <TableCell>{item.description || 'Investment Inflow'}</TableCell>
-                        <TableCell align="right">{formatCurrency(Math.abs(item.credit - item.debit))}</TableCell>
+                        <TableCell>{item.description}</TableCell>
+                        <TableCell align="right" sx={{ color: 'success.main' }}>
+                          {formatCurrency(item.amount)}
+                        </TableCell>
                       </TableRow>
                     ))}
-
-                    {/* Outflows */}
-                    <TableRow>
-                      <TableCell colSpan={2}>
-                        <Typography variant="subtitle2">Cash Outflows</Typography>
-                      </TableCell>
-                    </TableRow>
                     {data.investing?.outflows?.map((item, index) => (
                       <TableRow key={`invest-out-${index}`}>
-                        <TableCell>{item.description || 'Investment Outflow'}</TableCell>
-                        <TableCell align="right">-${formatCurrency(Math.abs(item.debit - item.credit))}</TableCell>
+                        <TableCell>{item.description}</TableCell>
+                        <TableCell align="right" sx={{ color: 'error.main' }}>
+                          ({formatCurrency(item.amount)})
+                        </TableCell>
                       </TableRow>
                     ))}
-
-                    {/* Investing Total */}
-                    <TableRow>
+                    <TableRow sx={{ bgcolor: 'action.hover' }}>
                       <TableCell><strong>Net Cash from Investing</strong></TableCell>
                       <TableCell align="right">
-                        <strong>{formatCurrency(data.investing?.total || 0)}</strong>
+                        <strong>{formatCurrency(data.investing?.total)}</strong>
                       </TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>
               </TableContainer>
 
-              {/* Financing Activities */}
               <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>Financing Activities</Typography>
               <TableContainer>
-                <Table>
+                <Table size="small">
                   <TableBody>
-                    {/* Inflows */}
-                    <TableRow>
-                      <TableCell colSpan={2}>
-                        <Typography variant="subtitle2">Cash Inflows</Typography>
-                      </TableCell>
-                    </TableRow>
                     {data.financing?.inflows?.map((item, index) => (
                       <TableRow key={`finance-in-${index}`}>
-                        <TableCell>{item.description || 'Financing Inflow'}</TableCell>
-                        <TableCell align="right">{formatCurrency(Math.abs(item.credit - item.debit))}</TableCell>
+                        <TableCell>{item.description}</TableCell>
+                        <TableCell align="right" sx={{ color: 'success.main' }}>
+                          {formatCurrency(item.amount)}
+                        </TableCell>
                       </TableRow>
                     ))}
-
-                    {/* Outflows */}
-                    <TableRow>
-                      <TableCell colSpan={2}>
-                        <Typography variant="subtitle2">Cash Outflows</Typography>
-                      </TableCell>
-                    </TableRow>
                     {data.financing?.outflows?.map((item, index) => (
                       <TableRow key={`finance-out-${index}`}>
-                        <TableCell>{item.description || 'Financing Outflow'}</TableCell>
-                        <TableCell align="right">-${formatCurrency(Math.abs(item.debit - item.credit))}</TableCell>
+                        <TableCell>{item.description}</TableCell>
+                        <TableCell align="right" sx={{ color: 'error.main' }}>
+                          ({formatCurrency(item.amount)})
+                        </TableCell>
                       </TableRow>
                     ))}
-
-                    {/* Financing Total */}
-                    <TableRow>
+                    <TableRow sx={{ bgcolor: 'action.hover' }}>
                       <TableCell><strong>Net Cash from Financing</strong></TableCell>
                       <TableCell align="right">
-                        <strong>{formatCurrency(data.financing?.total || 0)}</strong>
+                        <strong>{formatCurrency(data.financing?.total)}</strong>
                       </TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>
               </TableContainer>
 
-              {/* Net Cash Flow */}
-              <Box sx={{ mt: 3, p: 2, bgcolor: 'background.paper' }}>
+              <Box sx={{ mt: 3, p: 2, bgcolor: 'background.paper', border: 1, borderColor: 'divider' }}>
                 <Typography variant="h6">
-                  Net Change in Cash: {formatCurrency(data.netCashFlow || 0)}
+                  Net Change in Cash: {formatCurrency(data.netCashFlow)}
                 </Typography>
               </Box>
             </Box>

@@ -252,74 +252,6 @@ const reportTemplates = [
     ]
   },
 
-  // Manufacturing Advanced Report
-  {
-    code: 'MANUFACTURING_ADVANCED',
-    name: {
-      en: 'Manufacturing Advanced Report',
-      si: 'නිෂ්පාදන උසස් වාර්තාව'
-    },
-    category: 'manufacturing',
-    description: {
-      en: 'Detailed analysis of manufacturing processes and efficiency',
-      si: 'නිෂ්පාදන ක්‍රියාවලීන් සහ කාර්යක්ෂමතාව පිළිබඳ සවිස්තර විශ්ලේෂණය'
-    },
-    filters: [
-      {
-        field: 'dateRange',
-        type: 'date',
-        label: { en: 'Date Range', si: 'කාල සීමාව' }
-      },
-      {
-        field: 'productLine',
-        type: 'select',
-        label: { en: 'Product Line', si: 'නිෂ්පාදන පෙළ' },
-        optionsUrl: '/api/reports/product-lines'
-      },
-      {
-        field: 'efficiency',
-        type: 'select',
-        label: { en: 'Efficiency Level', si: 'කාර්යක්ෂමතා මට්ටම' },
-        options: [
-          { value: 'high', label: { en: 'High (>90%)', si: 'ඉහළ (>90%)' } },
-          { value: 'medium', label: { en: 'Medium (70-90%)', si: 'මධ්‍යම (70-90%)' } },
-          { value: 'low', label: { en: 'Low (<70%)', si: 'අඩු (<70%)' } }
-        ]
-      }
-    ],
-    columns: [
-      {
-        field: 'productLine',
-        header: { en: 'Product Line', si: 'නිෂ්පාදන පෙළ' }
-      },
-      {
-        field: 'outputQuantity',
-        header: { en: 'Output Quantity', si: 'නිමැවුම් ප්‍රමාණය' },
-        format: 'number'
-      },
-      {
-        field: 'defectRate',
-        header: { en: 'Defect Rate', si: 'දෝෂ අනුපාතය' },
-        format: 'percentage'
-      },
-      {
-        field: 'efficiency',
-        header: { en: 'Efficiency', si: 'කාර්යක්ෂමතාව' },
-        format: 'percentage'
-      },
-      {
-        field: 'downtime',
-        header: { en: 'Downtime (Hours)', si: 'අක්‍රීය කාලය (පැය)' },
-        format: 'number'
-      },
-      {
-        field: 'costPerUnit',
-        header: { en: 'Cost Per Unit', si: 'ඒකක පිරිවැය' },
-        format: 'currency'
-      }
-    ]
-  },
-
   // Manufacturing Purchasing Report
   {
     code: 'MANUFACTURING_PURCHASING',
@@ -337,65 +269,35 @@ const reportTemplates = [
         field: 'dateRange',
         type: 'date',
         label: { en: 'Date Range', si: 'කාල සීමාව' }
-      },
-      {
-        field: 'materialCategory',
-        type: 'select',
-        label: { en: 'Material Category', si: 'ද්‍රව්‍ය වර්ගය' },
-        optionsUrl: '/api/reports/material-categories'
       }
     ],
     columns: [
       {
-        field: 'materialCode',
-        header: { en: 'Material Code', si: 'ද්‍රව්‍ය කේතය' }
+        field: 'date',
+        header: { en: 'Date', si: 'දිනය' },
+        format: 'date'
+      },
+      {
+        field: 'invoiceNumber',
+        header: { en: 'Invoice Number', si: 'ඉන්වොයිස් අංකය' }
       },
       {
         field: 'materialName',
-        header: { en: 'Material Name', si: 'ද්‍රව්‍ය නාමය' }
-      },
-      {
-        field: 'materialCategory',
-        header: { en: 'Category', si: 'වර්ගය' }
+        header: { en: 'Material', si: 'ද්‍රව්‍ය' }
       },
       {
         field: 'quantity',
-        header: { en: 'Total Quantity', si: 'මුළු ප්‍රමාණය' },
+        header: { en: 'Quantity', si: 'ප්‍රමාණය' },
         format: 'number'
       },
       {
         field: 'unitPrice',
-        header: { en: 'Average Unit Price', si: 'සාමාන්‍ය ඒකක මිල' },
+        header: { en: 'Unit Price', si: 'ඒකක මිල' },
         format: 'currency'
       },
       {
-        field: 'totalCost',
-        header: { en: 'Total Cost', si: 'මුළු පිරිවැය' },
-        format: 'currency'
-      },
-      {
-        field: 'deliveryTime',
-        header: { en: 'Avg. Delivery Time (Days)', si: 'සාමාන්‍ය බෙදාහැරීමේ කාලය (දින)' },
-        format: 'number'
-      },
-      {
-        field: 'orderCount',
-        header: { en: 'Number of Orders', si: 'ඇණවුම් ගණන' },
-        format: 'number'
-      },
-      {
-        field: 'minPrice',
-        header: { en: 'Lowest Price', si: 'අවම මිල' },
-        format: 'currency'
-      },
-      {
-        field: 'maxPrice',
-        header: { en: 'Highest Price', si: 'උපරිම මිල' },
-        format: 'currency'
-      },
-      {
-        field: 'averageOrderValue',
-        header: { en: 'Average Order Value', si: 'සාමාන්‍ය ඇණවුම් වටිනාකම' },
+        field: 'totalAmount',
+        header: { en: 'Total Amount', si: 'මුළු මුදල' },
         format: 'currency'
       }
     ]

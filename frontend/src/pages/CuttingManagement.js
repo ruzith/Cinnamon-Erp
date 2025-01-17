@@ -379,10 +379,22 @@ const CuttingManagement = () => {
         throw new Error('Please select an assignment for this payment');
       }
 
+      // Include quantity in the payment form data
+      const paymentData = {
+        contractor_id: paymentFormData.contractor_id,
+        assignment_id: paymentFormData.assignment_id,
+        amount: paymentFormData.amount,
+        companyContribution: paymentFormData.companyContribution,
+        manufacturingContribution: paymentFormData.manufacturingContribution,
+        quantity: paymentFormData.quantity,
+        status: paymentFormData.status,
+        notes: paymentFormData.notes
+      };
+
       if (paymentFormData.id) {
-        await axios.put(`/api/cutting/payments/${paymentFormData.id}`, paymentFormData);
+        await axios.put(`/api/cutting/payments/${paymentFormData.id}`, paymentData);
       } else {
-        await axios.post('/api/cutting/payments', paymentFormData);
+        await axios.post('/api/cutting/payments', paymentData);
       }
       setOpenPaymentDialog(false);
       // Refresh both payment lists and contractors
@@ -397,6 +409,7 @@ const CuttingManagement = () => {
         amount: 250,
         companyContribution: 100,
         manufacturingContribution: 150,
+        quantity: '',
         status: 'pending',
         notes: ''
       });
@@ -546,49 +559,49 @@ const CuttingManagement = () => {
 
   const handleOpenCuttingPaymentDialog = async (item) => {
     try {
-      await fetchAssignments();
+        await fetchAssignments();
 
-      const baseFormData = {
-        quantity_kg: '',
-        price_per_kg: 300,
-        total_amount: 0,
-        company_contribution: 180,
-        manufacturing_contribution: 120,
-        notes: '',
-        status: 'pending'
-      };
+        const baseFormData = {
+            quantity_kg: '',
+            price_per_kg: 300,
+            total_amount: 0,
+            company_contribution: 180,
+            manufacturing_contribution: 120,
+            notes: '',
+            status: 'pending'
+        };
 
-      // If item has land_number, it's an assignment
-      if (item.land_number) {
-        setCuttingPaymentFormData({
-          ...baseFormData,
-          contractor_id: item.contractor_id,
-          assignment_id: item.id,
-          isFromAssignment: true
-        });
-      } else {
-        // It's a contractor
-        const contractorAssignments = assignments.filter(
-          a => a.contractor_id === item.id &&
-          ['active', 'in_progress', 'completed'].includes(a.status)
-        );
+        // If item has land_number, it's an assignment
+        if (item.land_number) {
+            setCuttingPaymentFormData({
+                ...baseFormData,
+                contractor_id: item.contractor_id,
+                assignment_id: item.id,
+                isFromAssignment: true
+            });
+        } else {
+            // It's a contractor
+            const contractorAssignments = assignments.filter(
+                a => a.contractor_id === item.id &&
+                ['active', 'in_progress', 'completed'].includes(a.status)
+            );
 
-        if (contractorAssignments.length === 0) {
-          alert('No active or completed assignments found for this contractor');
-          return;
+            if (contractorAssignments.length === 0) {
+                alert('No active or completed assignments found for this contractor');
+                return;
+            }
+
+            setCuttingPaymentFormData({
+                ...baseFormData,
+                contractor_id: item.id,
+                assignment_id: contractorAssignments[0]?.id || null,
+                isFromAssignment: false
+            });
         }
-
-        setCuttingPaymentFormData({
-          ...baseFormData,
-          contractor_id: item.id,
-          assignment_id: '',
-          isFromAssignment: false
-        });
-      }
-      setOpenCuttingPaymentDialog(true);
+        setOpenCuttingPaymentDialog(true);
     } catch (error) {
-      console.error('Error preparing cutting payment dialog:', error);
-      alert('Error loading assignments');
+        console.error('Error preparing cutting payment dialog:', error);
+        alert('Error loading assignments');
     }
   };
 
@@ -1772,30 +1785,6 @@ const CuttingManagement = () => {
         <DialogTitle>Process Cutting Payment</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
-            {!cuttingPaymentFormData.isFromAssignment && (
-              <Grid item xs={12}>
-                <FormControl fullWidth>
-                  <InputLabel>Contractor</InputLabel>
-                  <Select
-                    name="contractor_id"
-                    value={assignmentFormData.contractor_id}
-                    label="Contractor"
-                    onChange={(e) => setAssignmentFormData(prev => ({
-                      ...prev,
-                      contractor_id: e.target.value
-                    }))}
-                  >
-                    {contractors
-                      .filter(c => c.status === 'active')
-                      .map(contractor => (
-                        <MenuItem key={contractor.id} value={contractor.id}>
-                          {contractor.name}
-                        </MenuItem>
-                      ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-            )}
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth

@@ -126,13 +126,13 @@ router.put('/:id', protect, authorize('admin'), async (req, res) => {
 
     // Transform the incoming data to match database fields
     const assetData = {
-      asset_number: req.body.assetNumber,
+      asset_number: req.body.asset_number,
       name: req.body.name,
-      category_id: req.body.category,
-      type: req.body.type.toLowerCase(),
-      purchase_date: req.body.purchaseDate,
-      purchase_price: req.body.purchasePrice,
-      current_value: req.body.currentValue,
+      category: req.body.category,
+      type: req.body.type,
+      purchase_date: req.body.purchase_date,
+      purchase_price: req.body.purchase_price,
+      current_value: req.body.current_value,
       status: req.body.status
     };
 
@@ -140,7 +140,7 @@ router.put('/:id', protect, authorize('admin'), async (req, res) => {
       UPDATE assets
       SET asset_number = ?,
           name = ?,
-          category_id = ?,
+          category = ?,
           type = ?,
           purchase_date = ?,
           purchase_price = ?,
@@ -150,7 +150,7 @@ router.put('/:id', protect, authorize('admin'), async (req, res) => {
     `, [
       assetData.asset_number,
       assetData.name,
-      assetData.category_id,
+      assetData.category,
       assetData.type,
       assetData.purchase_date,
       assetData.purchase_price,
@@ -166,6 +166,7 @@ router.put('/:id', protect, authorize('admin'), async (req, res) => {
     const updatedAsset = await Asset.getWithDetails(req.params.id);
     res.json(updatedAsset);
   } catch (error) {
+    console.error('Error updating asset:', error);
     res.status(400).json({ message: error.message });
   }
 });

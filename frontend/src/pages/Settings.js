@@ -99,11 +99,19 @@ const Settings = () => {
   const handleChange = (e) => {
     const name = e?.target?.name || e.name;
     const value = e?.target?.value ?? e.value;
-    
+
     setFormData(prev => ({
       ...prev,
       [name]: value
     }));
+
+    // If the default currency is changed, update the formData
+    if (name === 'defaultCurrency') {
+      setFormData(prev => ({
+        ...prev,
+        defaultCurrency: value
+      }));
+    }
   };
 
   const handleLogoChange = (e) => {
@@ -236,7 +244,7 @@ const Settings = () => {
   const handleTimeZoneChange = async (e) => {
     const name = e?.target?.name || e.name;
     const value = e?.target?.value ?? e.value;
-    
+
     setFormData(prev => ({
       ...prev,
       [name]: value
@@ -244,6 +252,77 @@ const Settings = () => {
 
     // Save time zone to localStorage for immediate use
     localStorage.setItem('timeZone', value);
+  };
+
+  const [currencyFormData, setCurrencyFormData] = useState({
+    code: '',
+    name: '',
+    symbol: '',
+    rate: '',
+    status: 'active', // Default status
+  });
+
+  const handleCurrencyChange = (e) => {
+    const { name, value } = e.target;
+    setCurrencyFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleCurrencySubmit = async () => {
+    const token = JSON.parse(localStorage.getItem('user'))?.token;
+    try {
+        if (editingId) {
+            // If editing, send a PUT request
+            await axios.put(`/api/currencies/${editingId}`, currencyFormData, {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
+            showMessage('Currency updated successfully');
+        } else {
+            // If adding, send a POST request
+            const response = await axios.post('/api/currencies', currencyFormData, {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
+            showMessage('Currency added successfully');
+
+            // Check if default currency is empty and set it to the newly created currency
+            if (!formData.defaultCurrency) {
+                setFormData(prev => ({
+                    ...prev,
+                    defaultCurrency: response.data.id // Assuming the response contains the new currency's ID
+                }));
+            }
+        }
+        setModalVisible(false); // Close the modal
+        setEditingId(null); // Reset editingId
+        setCurrencyFormData({ // Reset form data
+            code: '',
+            name: '',
+            symbol: '',
+            rate: '',
+            status: 'active', // Reset to default status
+        });
+        fetchCurrencies(); // Refresh the currency list
+    } catch (error) {
+        showMessage(error.response?.data?.message || 'Operation failed', 'error');
+    }
+  };
+
+  const handleEditCurrency = (currency) => {
+    setCurrencyFormData({
+      code: currency.code,
+      name: currency.name,
+      symbol: currency.symbol,
+      rate: currency.rate,
+      status: currency.status,
+    });
+    setEditingId(currency.id); // Set the editingId
+    setModalVisible(true);
   };
 
   return (
@@ -296,10 +375,7 @@ const Settings = () => {
                       <TableCell>
                         <IconButton
                           size="small"
-                          onClick={() => {
-                            setEditingId(currency.id);
-                            setModalVisible(true);
-                          }}
+                          onClick={() => handleEditCurrency(currency)}
                           sx={{ color: 'primary.main' }}
                         >
                           <EditIcon />
@@ -489,14 +565,14 @@ const Settings = () => {
                       <Typography variant="subtitle2" color="textSecondary" sx={{ mb: 1 }}>
                         Company Logo
                       </Typography>
-                      <img 
-                        src={settings.logo_url} 
-                        alt="Company Logo" 
-                        style={{ 
-                          maxWidth: '200px', 
-                          maxHeight: '100px', 
-                          objectFit: 'contain' 
-                        }} 
+                      <img
+                        src={settings.logo_url}
+                        alt="Company Logo"
+                        style={{
+                          maxWidth: '200px',
+                          maxHeight: '100px',
+                          objectFit: 'contain'
+                        }}
                       />
                     </Box>
                   </Grid>
@@ -566,8 +642,69 @@ const Settings = () => {
           Save Changes
         </Button>
       </Box>
+
+      <Dialog open={modalVisible} onClose={() => setModalVisible(false)}>
+        <DialogTitle>New Currency</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={6}>
+              <TextField
+                autoFocus
+                margin="dense"
+                name="code"
+                label="Currency Code"
+                type="text"
+                fullWidth
+                variant="outlined"
+                value={currencyFormData.code}
+                onChange={handleCurrencyChange}
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                margin="dense"
+                name="name"
+                label="Currency Name"
+                type="text"
+                fullWidth
+                variant="outlined"
+                value={currencyFormData.name}
+                onChange={handleCurrencyChange}
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                margin="dense"
+                name="symbol"
+                label="Currency Symbol"
+                type="text"
+                fullWidth
+                variant="outlined"
+                value={currencyFormData.symbol}
+                onChange={handleCurrencyChange}
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                margin="dense"
+                name="rate"
+                label="Exchange Rate"
+                type="number"
+                fullWidth
+                variant="outlined"
+                value={currencyFormData.rate}
+                onChange={handleCurrencyChange}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setModalVisible(false)}>Cancel</Button>
+          <Button onClick={handleCurrencySubmit}>Add</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
 
-export default Settings; 
+export default Settings;

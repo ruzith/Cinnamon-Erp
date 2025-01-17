@@ -17,11 +17,11 @@ exports.getContractors = async (req, res) => {
     `;
 
     const contributionQuery = includeContribution ? `,
-        (SELECT cp.manufacturing_contribution
+        (SELECT cp.manufacturing_contribution / cp.quantity_kg AS latest_manufacturing_contribution
          FROM cutting_payments cp
          WHERE cp.contractor_id = cc.id
          ORDER BY cp.created_at DESC
-         LIMIT 1) as latest_manufacturing_contribution
+         LIMIT 1) AS latest_manufacturing_contribution
     ` : '';
 
     const query = `
@@ -665,6 +665,7 @@ exports.createPayment = async (req, res) => {
       total_amount: req.body.amount,
       company_contribution: req.body.companyContribution,
       manufacturing_contribution: req.body.manufacturingContribution,
+      quantity_kg: req.body.quantity_kg,
       status: req.body.status,
       payment_date: new Date(),
       notes: req.body.notes,
@@ -947,7 +948,7 @@ exports.updateAdvancePayment = async (req, res) => {
 // @access  Private/Admin/Accountant
 exports.updatePayment = async (req, res) => {
   try {
-    const { amount, companyContribution, manufacturingContribution, notes, status } = req.body;
+    const { amount, companyContribution, manufacturingContribution, manufacturingContributionPerKg, notes, status } = req.body;
 
     // Check if payment exists
     const [existingPayment] = await CuttingPayment.pool.execute(
@@ -968,7 +969,7 @@ exports.updatePayment = async (req, res) => {
            notes = ?,
            status = ?
        WHERE id = ?`,
-      [amount, companyContribution, manufacturingContribution, notes, status, req.params.id]
+      [amount, companyContribution, manufacturingContribution, manufacturingContributionPerKg, notes, status, req.params.id]
     );
 
     if (result.affectedRows === 0) {

@@ -179,6 +179,17 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor, onSuccess, con
       if (onSuccess) {
         onSuccess();
       }
+
+      // Reset form state after successful submission
+      setFormData({
+        contractor: '',
+        items: [],
+        cuttingRate: 250,
+        status: 'draft',
+        notes: ''
+      });
+      setSelectedAdvances(new Set());
+
       onClose();
     } catch (error) {
       console.error('Error creating purchase invoice:', error);

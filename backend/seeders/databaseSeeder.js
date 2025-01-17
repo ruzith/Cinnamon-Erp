@@ -1050,50 +1050,20 @@ const generateCuttingTasks = async (connection) => {
 
 // Add this helper function after generateCuttingTasks
 const generateCuttingPayments = async (connection) => {
-  const [assignments] = await connection.query(
-    'SELECT la.id, la.contractor_id FROM land_assignments la WHERE la.status = "completed"'
-  );
-  const [users] = await connection.query('SELECT id FROM users WHERE role = "admin"');
-
-  const payments = [];
-  let paymentCounter = 1;
-
-  for (const assignment of assignments) {
-    // 80% chance of having a payment for completed assignments
-    if (Math.random() < 0.8) {
-      const paymentDate = faker.date.recent({ days: 30 });
-      const year = paymentDate.getFullYear().toString().substr(-2);
-      const month = (paymentDate.getMonth() + 1).toString().padStart(2, '0');
-      const receiptNumber = `CUT${year}${month}${paymentCounter.toString().padStart(4, '0')}`;
-      paymentCounter++;
-
-      // Randomize the contributions slightly around the default values
-      const totalAmount = faker.number.float({ min: 200, max: 300, multipleOf: 0.01 });
-      const companyContribution = faker.number.float({ min: 80, max: 120, multipleOf: 0.01 });
-      const manufacturingContribution = totalAmount - companyContribution;
-
-      payments.push({
-        contractor_id: assignment.contractor_id,
-        assignment_id: assignment.id,
-        total_amount: totalAmount,
-        company_contribution: companyContribution,
-        manufacturing_contribution: manufacturingContribution,
-        status: faker.helpers.arrayElement(['paid', 'due', 'pending']),
-        payment_date: paymentDate.toISOString().split('T')[0],
-        receipt_number: receiptNumber,
-        notes: faker.helpers.arrayElement([
-          'Regular payment',
-          'Monthly cutting payment',
-          'Performance bonus included',
-          null
-        ]),
-        created_by: users[0].id,
-        created_at: paymentDate
-      });
-    }
-  }
-
-  return payments;
+  return [
+    {
+      contractor_id: 1,
+      assignment_id: 1,
+      total_amount: 2100,
+      company_contribution: 1260,
+      manufacturing_contribution: 840,
+      quantity_kg: 7, // Ensure this is included
+      status: 'pending',
+      payment_date: new Date(),
+      notes: 'Initial payment'
+    },
+    // Add more payment objects as needed
+  ];
 };
 
 // Add this helper function after generateCuttingPayments
@@ -1454,7 +1424,6 @@ const generateMonthlyTargets = async (connection) => {
 // Add this helper function to generate purchase invoices
 const generatePurchaseInvoices = async (connection) => {
   const [contractors] = await connection.query('SELECT id, latest_manufacturing_contribution FROM cutting_contractors');
-  const [suppliers] = await connection.query('SELECT id FROM customers');
   const [users] = await connection.query('SELECT id FROM users WHERE role = "admin" LIMIT 1');
 
   const invoices = [];
@@ -1478,7 +1447,6 @@ const generatePurchaseInvoices = async (connection) => {
 
     const invoice = {
       invoice_number: `PUR${date.getFullYear().toString().substr(-2)}${(date.getMonth() + 1).toString().padStart(2, '0')}${(i + 1).toString().padStart(4, '0')}`,
-      supplier_id: suppliers[Math.floor(Math.random() * suppliers.length)].id,
       contractor_id: selectedContractor.id,
       invoice_date: date,
       due_date: new Date(date.getTime() + 15 * 24 * 60 * 60 * 1000),
@@ -2210,7 +2178,18 @@ const seedData = async () => {
     console.log('Seeding cutting payments...');
     const cuttingPayments = await generateCuttingPayments(connection);
     for (const payment of cuttingPayments) {
-      await connection.query('INSERT INTO cutting_payments SET ?', payment);
+      await connection.query('INSERT INTO cutting_payments SET ?', {
+        contractor_id: payment.contractor_id,
+        assignment_id: payment.assignment_id,
+        total_amount: payment.total_amount,
+        company_contribution: payment.company_contribution,
+        manufacturing_contribution: payment.manufacturing_contribution,
+        quantity_kg: payment.quantity_kg, // Add this line
+        status: payment.status,
+        payment_date: payment.payment_date,
+        notes: payment.notes,
+        created_by: payment.created_by
+      });
     }
 
     // Add manufacturing orders after products are seeded

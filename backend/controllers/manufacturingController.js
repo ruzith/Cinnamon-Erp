@@ -1140,15 +1140,11 @@ exports.printInvoice = async (req, res) => {
     const [invoices] = await connection.execute(`
       SELECT
         pi.*,
-        c.name as supplier_name,
-        c.phone as supplier_phone,
-        c.address as supplier_address,
         cc.name as contractor_name,
-        cc.contractor_id as contractor_code,
-        cc.phone as contractor_phone
+        cc.phone as contractor_phone,
+        cc.address as contractor_address
       FROM purchase_invoices pi
-      JOIN customers c ON pi.supplier_id = c.id
-      LEFT JOIN cutting_contractors cc ON pi.contractor_id = cc.id
+      JOIN cutting_contractors cc ON pi.contractor_id = cc.id
       WHERE pi.id = ?
     `, [id]);
 
@@ -1398,9 +1394,6 @@ const generatePurchaseInvoice = (invoice, settings) => {
           <div class="info-value">${new Date(invoice.due_date).toLocaleDateString()}</div>
         </div>
         <div class="contractor-info">
-          <div class="info-label">Supplier Details</div>
-          <div class="info-value">${invoice.supplier_name}</div>
-          <div class="info-value">${invoice.supplier_phone || 'N/A'}</div>
           <div class="info-label">Contractor Details</div>
           <div class="info-value">${invoice.contractor_name || 'N/A'}</div>
           <div class="info-value">Code: ${invoice.contractor_code || 'N/A'}</div>
@@ -1845,7 +1838,6 @@ exports.createPurchaseInvoice = async (req, res) => {
     const [result] = await connection.execute(
       `INSERT INTO purchase_invoices (
         invoice_number,
-        supplier_id,
         contractor_id,
         invoice_date,
         due_date,
@@ -1858,11 +1850,10 @@ exports.createPurchaseInvoice = async (req, res) => {
         status,
         notes,
         created_by
-      ) VALUES (?, ?, ?, CURDATE(), DATE_ADD(CURDATE(), INTERVAL 15 DAY), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, CURDATE(), DATE_ADD(CURDATE(), INTERVAL 15 DAY), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         invoiceNumber,
-        1, // Default supplier ID
-        contractor,
+        contractor, // Keep contractor_id
         totalAmount,
         totalAmount,
         cuttingRate,
@@ -1981,11 +1972,9 @@ exports.getManufacturingInvoices = async (req, res) => {
         pi.status,
         pi.notes,
         pi.created_at,
-        s.name as supplier_name,
         cc.name as contractor_name,
         u.name as created_by_name
       FROM purchase_invoices pi
-      LEFT JOIN customers s ON pi.supplier_id = s.id
       LEFT JOIN cutting_contractors cc ON pi.contractor_id = cc.id
       LEFT JOIN users u ON pi.created_by = u.id
       ORDER BY pi.created_at DESC
@@ -2063,6 +2052,9 @@ exports.deleteAssignment = async (req, res) => {
   }
 };
 
+// @desc    Get all purchases
+// @route   GET /api/manufacturing/purchases
+// @access  Private
 exports.getPurchases = async (req, res) => {
   try {
     const query = `
@@ -2070,7 +2062,6 @@ exports.getPurchases = async (req, res) => {
         pi.id,
         pi.invoice_number,
         pi.invoice_date as date,
-        c.name as supplier_name,
         cc.name as contractor_name,
         GROUP_CONCAT(
           DISTINCT CONCAT(
@@ -2095,7 +2086,6 @@ exports.getPurchases = async (req, res) => {
         pi.cutting_charges,
         pi.final_amount
       FROM purchase_invoices pi
-      JOIN customers c ON pi.supplier_id = c.id
       LEFT JOIN cutting_contractors cc ON pi.contractor_id = cc.id
       JOIN purchase_items pit ON pi.id = pit.invoice_id
       JOIN inventory i ON pit.grade_id = i.id
@@ -2103,7 +2093,6 @@ exports.getPurchases = async (req, res) => {
         pi.id,
         pi.invoice_number,
         pi.invoice_date,
-        c.name,
         cc.name,
         pi.total_amount,
         pi.status,
@@ -2163,9 +2152,8 @@ exports.markPurchaseAsPaid = async (req, res) => {
 
     // Get the updated purchase details
     const [purchases] = await connection.query(
-      `SELECT pi.*, c.name as supplier_name, cc.name as contractor_name
+      `SELECT pi.*, cc.name as contractor_name
        FROM purchase_invoices pi
-       JOIN customers c ON pi.supplier_id = c.id
        LEFT JOIN cutting_contractors cc ON pi.contractor_id = cc.id
        WHERE pi.id = ?`,
       [id]

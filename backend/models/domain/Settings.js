@@ -51,7 +51,7 @@ class Settings extends BaseModel {
       // Update all monetary values in different tables
       const tables = [
         { name: 'transactions', columns: ['amount'] },
-        { name: 'purchase_invoices', columns: ['total_amount', 'paid_amount'] },
+        { name: 'purchase_invoices', columns: ['total_amount'] },
         { name: 'loans', columns: ['amount', 'remaining_balance'] },
         { name: 'loan_payments', columns: ['amount'] },
         { name: 'assets', columns: ['purchase_price', 'current_value'] },
@@ -93,4 +93,4 @@ class Settings extends BaseModel {
   }
 }
 
-module.exports = new Settings(); 
+module.exports = new Settings();

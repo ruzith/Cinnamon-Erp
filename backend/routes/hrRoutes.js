@@ -5,6 +5,7 @@ const { pool } = require('../config/db');
 const SalaryAdvance = require('../models/domain/SalaryAdvance');
 const Payroll = require('../models/domain/Payroll');
 const hrController = require('../controllers/hrController');
+const { deletePayroll } = require('../controllers/payrollController');
 
 const salaryAdvanceModel = new SalaryAdvance();
 const payrollModel = new Payroll();
@@ -77,6 +78,17 @@ router.get('/payroll/employee/:id', protect, async (req, res) => {
 router.post('/payroll', [protect, authorize('admin', 'hr')], async (req, res) => {
   try {
     const { items, ...payrollData } = req.body;
+
+    // Check if payroll already exists for the employee, month, and year
+    const existingPayroll = await pool.query(
+      'SELECT * FROM employee_payrolls WHERE employee_id = ? AND month = ? AND year = ?',
+      [payrollData.employee_id, payrollData.month, payrollData.year]
+    );
+
+    if (existingPayroll[0].length > 0) {
+      return res.status(400).json({ message: 'Payroll record already exists for this employee for the specified month and year.' });
+    }
+
     const result = await payrollModel.createPayroll(payrollData, items);
     res.status(201).json(result);
   } catch (error) {
@@ -228,5 +240,7 @@ router.get('/reports/employee', [protect, authorize('admin', 'hr')], async (req,
     res.status(500).json({ message: error.message });
   }
 });
+
+router.delete('/payroll/:id', deletePayroll);
 
 module.exports = router;

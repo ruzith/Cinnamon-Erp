@@ -6,6 +6,7 @@ const AssetCategory = require('../models/domain/AssetCategory');
 const AssetMaintenance = require('../models/domain/AssetMaintenance');
 const { getAssets, deleteAsset } = require('../controllers/assetController');
 const { authenticateToken } = require('../middleware/auth');
+const { validateAssetData } = require('../validators/assetValidator');
 
 // Category routes
 router.get('/categories', protect, async (req, res) => {
@@ -49,29 +50,23 @@ router.get('/', protect, async (req, res) => {
 router.post('/', protect, authorize('admin'), async (req, res) => {
   try {
     // Validate required fields
-    if (!req.body.purchaseDate) {
+    const { isValid, errors } = validateAssetData(req.body);
+    if (!isValid) {
       return res.status(400).json({
-        message: "Purchase date is required"
+        message: "Validation failed",
+        errors
       });
     }
 
-    // Validate date format
-    const purchaseDate = new Date(req.body.purchaseDate);
-    if (isNaN(purchaseDate.getTime())) {
-      return res.status(400).json({
-        message: "Invalid purchase date format"
-      });
-    }
-
-    // Transform the incoming data to match database fields
+    // Transform and sanitize the data
     const assetData = {
       asset_number: req.body.assetNumber || await Asset.generateAssetNumber(req.body.type),
-      name: req.body.name,
-      category: req.body.category,
-      type: req.body.type,
-      purchase_date: purchaseDate,
-      purchase_price: req.body.purchasePrice,
-      current_value: req.body.currentValue,
+      name: req.body.name.trim(),
+      category: req.body.category?.trim() || 'Uncategorized',
+      type: req.body.type?.trim() || 'General',
+      purchase_date: new Date(req.body.purchaseDate),
+      purchase_price: parseFloat(req.body.purchasePrice) || 0,
+      current_value: parseFloat(req.body.currentValue) || parseFloat(req.body.purchasePrice) || 0,
       status: req.body.status || 'active',
       created_by: req.user.id
     };
@@ -111,7 +106,7 @@ router.post('/', protect, authorize('admin'), async (req, res) => {
     console.error('Error creating asset:', error);
     res.status(400).json({
       message: error.message || 'Error creating asset',
-      details: error.sqlMessage // Include SQL error message if available
+      details: error.sqlMessage
     });
   }
 });
@@ -124,16 +119,25 @@ router.put('/:id', protect, authorize('admin'), async (req, res) => {
       return res.status(404).json({ message: 'Asset not found' });
     }
 
-    // Transform the incoming data to match database fields
+    // Validate the update data
+    const { isValid, errors } = validateAssetData(req.body);
+    if (!isValid) {
+      return res.status(400).json({
+        message: "Validation failed",
+        errors
+      });
+    }
+
+    // Transform and sanitize the data
     const assetData = {
-      asset_number: req.body.asset_number,
-      name: req.body.name,
-      category: req.body.category,
-      type: req.body.type,
-      purchase_date: req.body.purchase_date,
-      purchase_price: req.body.purchase_price,
-      current_value: req.body.current_value,
-      status: req.body.status
+      asset_number: req.body.assetNumber?.trim() || asset.asset_number,
+      name: req.body.name?.trim() || asset.name,
+      category: req.body.category?.trim() || 'Uncategorized',
+      type: req.body.type?.trim() || 'General',
+      purchase_date: new Date(req.body.purchaseDate),
+      purchase_price: parseFloat(req.body.purchasePrice) || 0,
+      current_value: parseFloat(req.body.currentValue) || parseFloat(req.body.purchasePrice) || 0,
+      status: req.body.status || 'active'
     };
 
     const [result] = await Asset.pool.execute(`
@@ -167,7 +171,10 @@ router.put('/:id', protect, authorize('admin'), async (req, res) => {
     res.json(updatedAsset);
   } catch (error) {
     console.error('Error updating asset:', error);
-    res.status(400).json({ message: error.message });
+    res.status(400).json({
+      message: error.message || 'Error updating asset',
+      details: error.sqlMessage
+    });
   }
 });
 

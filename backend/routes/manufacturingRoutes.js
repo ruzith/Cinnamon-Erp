@@ -26,7 +26,8 @@ const {
   getPurchases,
   createPurchaseInvoice,
   markPurchaseAsPaid,
-  updateAssignmentStatus
+  updateAssignmentStatus,
+  completeAssignment
 } = require('../controllers/manufacturingController');
 const ManufacturingOrder = require('../models/domain/ManufacturingOrder');
 const { validateOrder } = require('../validators/manufacturingValidator');
@@ -116,6 +117,7 @@ router.delete('/assignments/:id', protect, authorize('admin', 'manager'), delete
 router.get('/assignments/:id/report', protect, printAssignmentReport);
 router.get('/reports/assignments', protect, getAssignmentReports);
 router.put('/assignments/:id/status', protect, authorize('admin', 'manager'), updateAssignmentStatus);
+router.post('/assignments/complete', protect, authorize('admin'), completeAssignment);
 
 // Advance payment routes
 router.get('/advance-payments', protect, getAdvancePayments);

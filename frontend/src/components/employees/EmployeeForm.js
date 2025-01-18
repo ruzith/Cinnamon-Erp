@@ -118,6 +118,7 @@ const EmployeeForm = ({ employee, setIsEditing, onClose }) => {
         <Grid item xs={12} sm={6}>
           <TextField
             margin="normal"
+            required
             fullWidth
             label="Phone"
             name="phone"
@@ -128,6 +129,7 @@ const EmployeeForm = ({ employee, setIsEditing, onClose }) => {
         <Grid item xs={12} sm={6}>
           <TextField
             margin="normal"
+            required
             fullWidth
             label="Birthday"
             name="birthday"
@@ -142,6 +144,7 @@ const EmployeeForm = ({ employee, setIsEditing, onClose }) => {
         <Grid item xs={12}>
           <TextField
             margin="normal"
+            required
             fullWidth
             label="Address"
             name="address"
@@ -152,7 +155,7 @@ const EmployeeForm = ({ employee, setIsEditing, onClose }) => {
           />
         </Grid>
         <Grid item xs={12} sm={6}>
-          <FormControl fullWidth margin="normal">
+          <FormControl fullWidth margin="normal" required>
             <InputLabel>Designation</InputLabel>
             <Select
               name="designation_id"

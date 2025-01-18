@@ -125,9 +125,23 @@ exports.createInventoryTransaction = async (req, res) => {
       }, {});
 
       // Create inventory transaction
-      const [result] = await Inventory.pool.execute(
-        'INSERT INTO inventory_transactions SET ?',
-        [req.body]
+      const transactionNotes = {
+        IN: `Inventory received: ${req.body.description || 'Manual adjustment'}`,
+        OUT: `Inventory issued: ${req.body.description || 'Manual adjustment'}`,
+        ADJUSTMENT: `Inventory adjusted: ${req.body.description || 'Stock count adjustment'}`
+      };
+
+      await Inventory.pool.execute(
+        `INSERT INTO inventory_transactions
+         (item_id, type, quantity, reference, notes)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          req.body.item_id,
+          req.body.type,
+          req.body.quantity,
+          req.body.reference || `ADJ-${new Date().getTime()}`,
+          transactionNotes[req.body.type]
+        ]
       );
 
       // Create transaction entries with mapped account IDs

@@ -128,15 +128,15 @@ exports.deleteContractor = async (req, res) => {
       SELECT la.*, l.land_number
       FROM land_assignments la
       JOIN lands l ON la.land_id = l.id
-      WHERE la.contractor_id = ? AND la.status = "active"`,
+      WHERE la.contractor_id = ?`,
       [req.params.id]
     );
 
     // Check for pending payments
     const [payments] = await connection.execute(`
-      SELECT COUNT(*) as count
+      SELECT *
       FROM cutting_payments
-      WHERE contractor_id = ? AND status IN ('pending', 'due')`,
+      WHERE contractor_id = ?`,
       [req.params.id]
     );
 
@@ -144,39 +144,32 @@ exports.deleteContractor = async (req, res) => {
     const [advancePayments] = await connection.execute(`
       SELECT *
       FROM cutting_advance_payments
-      WHERE contractor_id = ? AND status IN ('pending', 'approved')`,
+      WHERE contractor_id = ?`,
       [req.params.id]
     );
 
     // Check for purchase invoices
     const [purchaseInvoices] = await connection.execute(`
-      SELECT COUNT(*) as count
+      SELECT *
       FROM purchase_invoices
       WHERE contractor_id = ?`,
       [req.params.id]
     );
 
-    if (payments[0].count > 0) {
-      await connection.rollback();
-      connection.release();
-      return res.status(400).json({
-        message: 'Cannot delete contractor with pending payments',
-        pendingPayments: payments[0].count
-      });
-    }
-
     // If there are any related records, return them to the frontend
-    if (advancePayments.length > 0 || assignments.length > 0 || purchaseInvoices[0].count > 0) {
+    if (payments.length > 0 || advancePayments.length > 0 || assignments.length > 0 || purchaseInvoices.length > 0) {
       await connection.rollback();
       connection.release();
       return res.status(400).json({
+        hasPayments: payments.length > 0,
         hasAdvancePayments: advancePayments.length > 0,
         hasAssignments: assignments.length > 0,
-        hasPurchaseInvoices: purchaseInvoices[0].count > 0,
+        hasPurchaseInvoices: purchaseInvoices.length > 0,
+        payments: payments,
         advancePayments: advancePayments,
         assignments: assignments,
-        purchaseInvoices: purchaseInvoices[0].count,
-        message: 'Contractor has active assignments, advance payments, or purchase invoices that need to be reassigned.'
+        purchaseInvoices: purchaseInvoices,
+        message: 'Contractor has payments, advance payments, assignments, or purchase invoices that need to be reassigned.'
       });
     }
 
@@ -728,6 +721,19 @@ exports.completeAssignment = async (req, res) => {
     await connection.beginTransaction();
 
     try {
+      // Get assignment details first
+      const [assignment] = await connection.execute(`
+        SELECT la.*, l.land_number, cc.name as contractor_name
+        FROM land_assignments la
+        JOIN lands l ON la.land_id = l.id
+        JOIN cutting_contractors cc ON la.contractor_id = cc.id
+        WHERE la.id = ?
+      `, [assignment_id]);
+
+      if (!assignment[0]) {
+        throw new Error('Assignment not found');
+      }
+
       // Update assignment status
       const updateAssignmentQuery = `
         UPDATE land_assignments
@@ -747,10 +753,39 @@ exports.completeAssignment = async (req, res) => {
       `;
       await connection.execute(updateInventoryQuery, [quantity_received, raw_item_id]);
 
+      // Create inventory transaction record
+      const [inventoryItem] = await connection.execute(
+        'SELECT product_name FROM inventory WHERE id = ?',
+        [raw_item_id]
+      );
+
+      await connection.execute(
+        `INSERT INTO inventory_transactions
+         (item_id, type, quantity, reference, notes)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          raw_item_id,
+          'IN',
+          quantity_received,
+          `CUT-${assignment[0].land_number}`,
+          `Raw material received from cutting operation at ${assignment[0].land_number} by ${assignment[0].contractor_name}`
+        ]
+      );
+
       // Commit transaction
       await connection.commit();
 
-      res.status(200).json({ message: 'Assignment completed and inventory updated successfully' });
+      res.status(200).json({
+        message: 'Assignment completed and inventory updated successfully',
+        details: {
+          assignment_id,
+          raw_item_id,
+          quantity_received,
+          product_name: inventoryItem[0]?.product_name,
+          land_number: assignment[0].land_number,
+          contractor_name: assignment[0].contractor_name
+        }
+      });
     } catch (error) {
       // Rollback in case of error
       await connection.rollback();
@@ -948,7 +983,7 @@ exports.updateAdvancePayment = async (req, res) => {
 // @access  Private/Admin/Accountant
 exports.updatePayment = async (req, res) => {
   try {
-    const { amount, companyContribution, manufacturingContribution, manufacturingContributionPerKg, notes, status } = req.body;
+    const { amount, companyContribution, manufacturingContribution, notes, status } = req.body;
 
     // Check if payment exists
     const [existingPayment] = await CuttingPayment.pool.execute(
@@ -960,16 +995,29 @@ exports.updatePayment = async (req, res) => {
       return res.status(404).json({ message: 'Payment not found' });
     }
 
+    // Prepare the update data
+    const updateData = {
+      total_amount: amount,
+      company_contribution: companyContribution,
+      manufacturing_contribution: manufacturingContribution,
+      notes: notes,
+      status: status,
+      quantity_kg: req.body.quantity_kg
+    };
+
+    // Remove undefined properties
+    Object.keys(updateData).forEach(key => {
+      if (updateData[key] === undefined) {
+        delete updateData[key];
+      }
+    });
+
     // Update the payment
     const [result] = await CuttingPayment.pool.execute(
       `UPDATE cutting_payments
-       SET total_amount = ?,
-           company_contribution = ?,
-           manufacturing_contribution = ?,
-           notes = ?,
-           status = ?
-       WHERE id = ?`,
-      [amount, companyContribution, manufacturingContribution, manufacturingContributionPerKg, notes, status, req.params.id]
+      SET ${Object.keys(updateData).map(key => `${key} = ?`).join(', ')}
+      WHERE id = ?`,
+      [...Object.values(updateData), req.params.id]
     );
 
     if (result.affectedRows === 0) {

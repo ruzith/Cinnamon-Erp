@@ -48,4 +48,4 @@ class InventoryTransaction extends BaseModel {
   }
 }
 
-module.exports = new InventoryTransaction(); 
+module.exports = new InventoryTransaction();

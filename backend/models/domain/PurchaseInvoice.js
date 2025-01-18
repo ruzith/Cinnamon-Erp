@@ -15,7 +15,7 @@ class PurchaseInvoice extends BaseModel {
     );
     const count = result[0].count + 1;
 
-    return `PUR${year}${month}${count.toString().padStart(4, '0')}`;
+    return `PUR-${year}${month}-${count.toString().padStart(4, '0')}`;
   }
 
   async createWithItems(invoiceData, items) {

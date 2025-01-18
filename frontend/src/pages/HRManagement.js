@@ -100,23 +100,32 @@ const PayrollForm = ({ onSubmit, onClose, onSuccess }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    await onSubmit({
-      employee_id: selectedEmployee,
-      month: parseInt(month),
-      year: parseInt(year),
-      additional_amounts: additionalAmounts.map(item => ({
-        description: item.description,
-        amount: parseFloat(item.amount)
-      })),
-      deduction_items: deductionItems.map(item => ({
-        description: item.description,
-        amount: parseFloat(item.amount)
-      }))
-    });
-    if (onSuccess) {
-      await onSuccess();
+    try {
+        await onSubmit({
+            employee_id: selectedEmployee,
+            month: parseInt(month),
+            year: parseInt(year),
+            additional_amounts: additionalAmounts.map(item => ({
+                description: item.description,
+                amount: parseFloat(item.amount)
+            })),
+            deduction_items: deductionItems.map(item => ({
+                description: item.description,
+                amount: parseFloat(item.amount)
+            }))
+        });
+        if (onSuccess) {
+            await onSuccess();
+        }
+        onClose();
+    } catch (error) {
+        // Handle the error gracefully
+        if (error.response && error.response.status === 400) {
+            alert(error.response.data.message); // Display the error message from the server
+        } else {
+            alert('An unexpected error occurred. Please try again.'); // Fallback error message
+        }
     }
-    onClose();
   };
 
   return (
@@ -343,32 +352,6 @@ export default function HRManagement() {
       fetchAdvances();
     } catch (error) {
       console.error('Error submitting advance:', error);
-    }
-  };
-
-  const handlePayrollSubmit = async () => {
-    try {
-      const selectedEmployeeData = employees.find(emp => emp.id === selectedEmployee);
-      const advances = await axios.get(`/api/hr/salary-advances/employee/${selectedEmployee}`);
-      const pendingAdvances = advances.data.filter(adv => adv.approval_status === 'approved');
-
-      const totalAdvances = pendingAdvances.reduce((sum, adv) => sum + parseFloat(adv.amount), 0);
-
-      const payrollData = {
-        employee_id: selectedEmployee,
-        month: parseInt(payrollMonth),
-        year: parseInt(payrollYear),
-        basic_salary: parseFloat(selectedEmployeeData.basic_salary),
-        deductions: totalAdvances,
-        net_salary: parseFloat(selectedEmployeeData.basic_salary) - totalAdvances,
-        created_by: user.id,
-      };
-
-      await axios.post('/api/hr/payroll', payrollData);
-      setOpenPayrollDialog(false);
-      fetchPayrolls();
-    } catch (error) {
-      console.error('Error submitting payroll:', error);
     }
   };
 
@@ -988,6 +971,16 @@ export default function HRManagement() {
     }
   };
 
+  const handleDeletePayroll = async (payrollId) => {
+    try {
+        await axios.delete(`/api/hr/payroll/${payrollId}`);
+        fetchPayrolls();
+    } catch (error) {
+        console.error('Error deleting payroll:', error);
+        alert(error.response?.data?.message || 'Error deleting payroll');
+    }
+  };
+
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
       {/* Header */}
@@ -1114,6 +1107,14 @@ export default function HRManagement() {
                         title="Print Payroll"
                       >
                         <PrintIcon />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDeletePayroll(payroll.id)}
+                        sx={{ color: 'error.main', ml: 1 }}
+                        title="Delete Payroll"
+                      >
+                        <DeleteIcon />
                       </IconButton>
                     </TableCell>
                   </TableRow>
@@ -1463,7 +1464,6 @@ export default function HRManagement() {
                 }
               } catch (error) {
                 console.error('Error generating payroll:', error);
-                alert(error.response?.data?.message || 'Error generating payroll');
                 throw error;
               }
             }}

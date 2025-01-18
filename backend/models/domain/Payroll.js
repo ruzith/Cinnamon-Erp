@@ -90,6 +90,16 @@ class Payroll extends BaseModel {
     const [rows] = await this.pool.execute(query, params);
     return rows;
   }
+
+  async findById(id) {
+    const [rows] = await this.pool.execute('SELECT * FROM employee_payrolls WHERE id = ?', [id]);
+    return rows[0];
+  }
+
+  async findByIdAndDelete(id) {
+    const [result] = await this.pool.execute('DELETE FROM employee_payrolls WHERE id = ?', [id]);
+    return result.affectedRows > 0;
+  }
 }
 
 module.exports = Payroll;

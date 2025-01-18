@@ -383,7 +383,7 @@ CREATE TABLE tasks (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (category_id) REFERENCES task_categories(id),
-  FOREIGN KEY (assigned_to) REFERENCES users(id),
+  FOREIGN KEY (assigned_to) REFERENCES employees(id),
   FOREIGN KEY (created_by) REFERENCES users(id)
 );
 -- Asset Categories table
@@ -679,7 +679,6 @@ CREATE TABLE asset_maintenance (
 CREATE TABLE IF NOT EXISTS cinnamon_assignments (
   id INT PRIMARY KEY AUTO_INCREMENT,
   contractor_id INT NOT NULL,
-  quantity DECIMAL(10, 2) NOT NULL,
   duration INT NOT NULL,
   duration_type ENUM('day', 'week', 'month') NOT NULL,
   start_date DATE NOT NULL,
@@ -687,11 +686,14 @@ CREATE TABLE IF NOT EXISTS cinnamon_assignments (
   raw_material_id INT,
   raw_material_quantity DECIMAL(10, 2),
   notes TEXT,
+  finished_good_id INT,
+  quantity DECIMAL(10, 2),
   status ENUM('active', 'completed', 'cancelled') DEFAULT 'active',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (contractor_id) REFERENCES manufacturing_contractors(id),
-  FOREIGN KEY (raw_material_id) REFERENCES inventory(id)
+  FOREIGN KEY (raw_material_id) REFERENCES inventory(id),
+  FOREIGN KEY (finished_good_id) REFERENCES inventory(id)
 );
 -- Manufacturing Advance Payments table
 CREATE TABLE manufacturing_advance_payments (

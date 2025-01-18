@@ -138,7 +138,7 @@ const Sales = () => {
 
   const fetchInventory = async () => {
     try {
-      const response = await axios.get('/api/inventory?type=finished_good');
+      const response = await axios.get('/api/inventory/finished-goods');
       setInventory(response.data.map(item => ({
         ...item,
         productName: item.product_name,
@@ -164,7 +164,7 @@ const Sales = () => {
 
         // Pre-populate the form data with sale details
         setSaleFormData({
-          customerId: sale.customer_id || '',  // Set the customer ID
+          customerId: sale.customer_id || '',  // Now we can use the customer_id from response
           status: sale.status || 'draft',
           paymentStatus: sale.payment_status || 'pending',
           paymentMethod: sale.payment_method || '',
@@ -347,7 +347,7 @@ const Sales = () => {
       const formattedData = {
         customer_id: saleFormData.customerId,
         items: transformedItems,
-        status: saleFormData.status,
+        status: 'confirmed',
         payment_status: saleFormData.paymentStatus,
         payment_method: saleFormData.paymentMethod,
         notes: saleFormData.notes,
@@ -679,15 +679,20 @@ const Sales = () => {
                     >
                       <PrintIcon fontSize="small" />
                     </IconButton>
-                    {sale.status === 'draft' && (
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDelete(sale)}
-                        sx={{ color: 'error.main', ml: 1 }}
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    )}
+                    <IconButton
+                      size="small"
+                      onClick={() => handleEdit(sale)}
+                      sx={{ color: 'primary.main', ml: 1 }}
+                    >
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleDelete(sale)}
+                      sx={{ color: 'error.main', ml: 1 }}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
                   </TableCell>
                 </TableRow>
               ))}
@@ -925,8 +930,8 @@ const Sales = () => {
                           >
                             <MenuItem value="cash">Cash</MenuItem>
                             <MenuItem value="card">Card</MenuItem>
-                            <MenuItem value="bank_transfer">Bank Transfer</MenuItem>
-                            <MenuItem value="check">Check</MenuItem>
+                            <MenuItem value="bank-transfer">Bank Transfer</MenuItem>
+                            <MenuItem value="other">Other</MenuItem>
                           </Select>
                         </FormControl>
                       </Grid>

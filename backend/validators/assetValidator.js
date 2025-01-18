@@ -36,26 +36,35 @@ const validateAssetData = (assetData) => {
     errors.name = 'Asset name is required';
   }
 
-  if (!assetData.category?.trim()) {
-    errors.category = 'Category is required';
-  }
-
-  if (!assetData.type?.trim()) {
-    errors.type = 'Type is required';
-  }
-
   if (!assetData.purchaseDate) {
     errors.purchaseDate = 'Purchase date is required';
+  } else {
+    const purchaseDate = new Date(assetData.purchaseDate);
+    if (isNaN(purchaseDate.getTime())) {
+      errors.purchaseDate = 'Invalid purchase date format';
+    }
+    // Optional: Validate that purchase date is not in the future
+    if (purchaseDate > new Date()) {
+      errors.purchaseDate = 'Purchase date cannot be in the future';
+    }
   }
 
-  if (!assetData.purchasePrice || assetData.purchasePrice <= 0) {
-    errors.purchasePrice = 'Valid purchase price is required';
+  // Validate numeric fields
+  if (assetData.purchasePrice) {
+    const price = parseFloat(assetData.purchasePrice);
+    if (isNaN(price) || price < 0) {
+      errors.purchasePrice = 'Purchase price must be a valid positive number';
+    }
   }
 
-  if (!assetData.currentValue || assetData.currentValue < 0) {
-    errors.currentValue = 'Valid current value is required';
+  if (assetData.currentValue) {
+    const value = parseFloat(assetData.currentValue);
+    if (isNaN(value) || value < 0) {
+      errors.currentValue = 'Current value must be a valid positive number';
+    }
   }
 
+  // Validate status if provided
   if (assetData.status && !validateAssetStatus(assetData.status)) {
     errors.status = 'Invalid asset status';
   }

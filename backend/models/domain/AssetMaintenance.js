@@ -48,10 +48,10 @@ class AssetMaintenance extends BaseModel {
 
   async createWithAttachments(maintenanceData, attachments = []) {
     const connection = await this.pool.getConnection();
-    
+
     try {
       await connection.beginTransaction();
-      
+
       // Transform the data to match database fields
       const dbMaintenanceData = {
         asset_id: maintenanceData.assetId,
@@ -144,4 +144,4 @@ class AssetMaintenance extends BaseModel {
   }
 }
 
-module.exports = new AssetMaintenance(); 
+module.exports = new AssetMaintenance();

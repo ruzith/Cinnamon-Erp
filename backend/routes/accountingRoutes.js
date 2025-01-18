@@ -126,7 +126,7 @@ router.post('/transactions', protect, async (req, res) => {
     } = req.body;
 
     // Validate required fields
-    if (!date || !type || !category || !amount || !description || !account) {
+    if (!date || !type || !category || !amount || !account || !paymentMethod) {
       return res.status(400).json({ message: 'Please provide all required fields' });
     }
 

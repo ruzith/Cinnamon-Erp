@@ -82,16 +82,6 @@ const CuttingManagement = () => {
     isFromContractor: false
   });
   const [lands, setLands] = useState([]);
-  const [openPaymentDialog, setOpenPaymentDialog] = useState(false);
-  const [paymentFormData, setPaymentFormData] = useState({
-    contractor_id: '',
-    assignment_id: null,
-    amount: 250,
-    companyContribution: 100,
-    manufacturingContribution: 150,
-    status: 'pending',
-    notes: ''
-  });
   const [openReassignDialog, setOpenReassignDialog] = useState(false);
   const [contractorToDelete, setContractorToDelete] = useState(null);
   const [newContractorId, setNewContractorId] = useState('');
@@ -122,7 +112,8 @@ const CuttingManagement = () => {
     manufacturing_contribution: 120,
     notes: '',
     status: 'pending',
-    isFromAssignment: false
+    isFromAssignment: false,
+    id: null
   });
   const [payments, setPayments] = useState([]);
   const [advancePayments, setAdvancePayments] = useState([]);
@@ -132,7 +123,9 @@ const CuttingManagement = () => {
     oldContractorId: null,
     newContractorId: '',
     advancePayments: [],
-    assignments: []
+    assignments: [],
+    payments: [],
+    purchaseInvoices: []
   });
 
   useEffect(() => {
@@ -174,7 +167,7 @@ const CuttingManagement = () => {
 
   const fetchInventoryItems = async () => {
     try {
-      const response = await axios.get('/api/inventory?type=raw_material');
+      const response = await axios.get('/api/inventory/raw-materials');
       setInventoryItems(response.data);
     } catch (error) {
       console.error('Error fetching inventory items:', error);
@@ -256,29 +249,6 @@ const CuttingManagement = () => {
     }
   };
 
-  const handleDelete = async (contractorId) => {
-    try {
-      await axios.delete(`/api/cutting/contractors/${contractorId}`);
-      fetchContractors();
-    } catch (error) {
-      if (error.response?.data?.activeAssignments) {
-        const shouldReassign = window.confirm(
-          `This contractor has ${error.response.data.assignmentCount} active assignments. Would you like to reassign them to another contractor?`
-        );
-
-        if (shouldReassign) {
-          setOpenReassignDialog(true);
-          setContractorToDelete(contractorId);
-        }
-      } else if (error.response?.data?.pendingPayments) {
-        alert(error.response.data.message);
-      } else {
-        console.error('Error deleting contractor:', error);
-        alert('Error deleting contractor');
-      }
-    }
-  };
-
   const handleReassignAndDelete = async () => {
     try {
       if (!newContractorId) {
@@ -342,80 +312,6 @@ const CuttingManagement = () => {
     } catch (error) {
       console.error('Error saving assignment:', error);
       alert(error.response?.data?.message || 'Error saving assignment');
-    }
-  };
-
-  const handleOpenPaymentDialog = async (contractor) => {
-    try {
-      await fetchAssignments();
-
-      const contractorAssignments = assignments.filter(
-        a => a.contractor_id === contractor.id &&
-        (a.status === 'active' || a.status === 'in_progress')
-      );
-
-      if (contractorAssignments.length === 0) {
-        alert('No active assignments found for this contractor');
-        return;
-      }
-
-      setPaymentFormData(prev => ({
-        ...prev,
-        contractor_id: contractor.id,
-        assignment_id: contractorAssignments[0]?.id || null,
-        notes: `Payment for ${contractor.name}`
-      }));
-      setOpenPaymentDialog(true);
-    } catch (error) {
-      console.error('Error preparing payment dialog:', error);
-      alert('Error loading contractor assignments');
-    }
-  };
-
-  const handlePaymentSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      if (!paymentFormData.assignment_id) {
-        throw new Error('Please select an assignment for this payment');
-      }
-
-      // Include quantity in the payment form data
-      const paymentData = {
-        contractor_id: paymentFormData.contractor_id,
-        assignment_id: paymentFormData.assignment_id,
-        amount: paymentFormData.amount,
-        companyContribution: paymentFormData.companyContribution,
-        manufacturingContribution: paymentFormData.manufacturingContribution,
-        quantity: paymentFormData.quantity,
-        status: paymentFormData.status,
-        notes: paymentFormData.notes
-      };
-
-      if (paymentFormData.id) {
-        await axios.put(`/api/cutting/payments/${paymentFormData.id}`, paymentData);
-      } else {
-        await axios.post('/api/cutting/payments', paymentData);
-      }
-      setOpenPaymentDialog(false);
-      // Refresh both payment lists and contractors
-      await Promise.all([
-        fetchContractors(),
-        fetchPayments(),
-        fetchAdvancePayments()
-      ]);
-      setPaymentFormData({
-        contractor_id: '',
-        assignment_id: null,
-        amount: 250,
-        companyContribution: 100,
-        manufacturingContribution: 150,
-        quantity: '',
-        status: 'pending',
-        notes: ''
-      });
-    } catch (error) {
-      console.error('Error processing payment:', error);
-      alert(error.response?.data?.message || error.message || 'Error processing payment');
     }
   };
 
@@ -559,49 +455,50 @@ const CuttingManagement = () => {
 
   const handleOpenCuttingPaymentDialog = async (item) => {
     try {
-        await fetchAssignments();
+      await fetchAssignments();
 
-        const baseFormData = {
-            quantity_kg: '',
-            price_per_kg: 300,
-            total_amount: 0,
-            company_contribution: 180,
-            manufacturing_contribution: 120,
-            notes: '',
-            status: 'pending'
-        };
+      const baseFormData = {
+        quantity_kg: '',
+        price_per_kg: 300,
+        total_amount: 0,
+        company_contribution: 180,
+        manufacturing_contribution: 120,
+        notes: '',
+        status: 'pending',
+        id: null
+      };
 
-        // If item has land_number, it's an assignment
-        if (item.land_number) {
-            setCuttingPaymentFormData({
-                ...baseFormData,
-                contractor_id: item.contractor_id,
-                assignment_id: item.id,
-                isFromAssignment: true
-            });
-        } else {
-            // It's a contractor
-            const contractorAssignments = assignments.filter(
-                a => a.contractor_id === item.id &&
-                ['active', 'in_progress', 'completed'].includes(a.status)
-            );
+      // If item has land_number, it's an assignment
+      if (item.land_number) {
+        setCuttingPaymentFormData({
+          ...baseFormData,
+          contractor_id: item.contractor_id,
+          assignment_id: item.id,
+          isFromAssignment: true
+        });
+      } else {
+        // It's a contractor
+        const contractorAssignments = assignments.filter(
+          a => a.contractor_id === item.id &&
+          ['active', 'in_progress', 'completed'].includes(a.status)
+        );
 
-            if (contractorAssignments.length === 0) {
-                alert('No active or completed assignments found for this contractor');
-                return;
-            }
-
-            setCuttingPaymentFormData({
-                ...baseFormData,
-                contractor_id: item.id,
-                assignment_id: contractorAssignments[0]?.id || null,
-                isFromAssignment: false
-            });
+        if (contractorAssignments.length === 0) {
+          alert('No active or completed assignments found for this contractor');
+          return;
         }
-        setOpenCuttingPaymentDialog(true);
+
+        setCuttingPaymentFormData({
+          ...baseFormData,
+          contractor_id: item.id,
+          assignment_id: contractorAssignments[0]?.id || null,
+          isFromAssignment: false
+        });
+      }
+      setOpenCuttingPaymentDialog(true);
     } catch (error) {
-        console.error('Error preparing cutting payment dialog:', error);
-        alert('Error loading assignments');
+      console.error('Error preparing cutting payment dialog:', error);
+      alert('Error loading assignments');
     }
   };
 
@@ -617,7 +514,8 @@ const CuttingManagement = () => {
       manufacturing_contribution: 120,
       notes: '',
       status: 'pending',
-      isFromAssignment: false
+      isFromAssignment: false,
+      id: null
     });
   };
 
@@ -636,7 +534,13 @@ const CuttingManagement = () => {
         status: cuttingPaymentFormData.status || 'pending'
       };
 
-      await axios.post('/api/cutting/payments', formattedData);
+      if (cuttingPaymentFormData.id) {
+        // Edit existing payment
+        await axios.put(`/api/cutting/payments/${cuttingPaymentFormData.id}`, formattedData);
+      } else {
+        // Create new payment
+        await axios.post('/api/cutting/payments', formattedData);
+      }
       handleCloseCuttingPaymentDialog();
       // Refresh both payment lists and contractors
       await Promise.all([
@@ -670,17 +574,21 @@ const CuttingManagement = () => {
   };
 
   const handleEditPayment = (payment) => {
-    setPaymentFormData({
-      id: payment.id,
-      contractor_id: payment.contractor_id,
-      assignment_id: payment.assignment_id,
-      amount: payment.total_amount,
-      companyContribution: payment.company_contribution,
-      manufacturingContribution: payment.manufacturing_contribution,
-      status: payment.status,
-      notes: payment.notes
+    console.log('Editing payment:', payment);
+    const price_per_kg = (parseFloat(payment.total_amount) / parseFloat(payment.quantity_kg)).toFixed(2); // Calculate price_per_kg
+    setCuttingPaymentFormData({
+        id: payment.id,
+        contractor_id: payment.contractor_id,
+        assignment_id: payment.assignment_id,
+        quantity_kg: payment.quantity_kg,
+        price_per_kg: price_per_kg,
+        total_amount: payment.total_amount,
+        company_contribution: payment.company_contribution,
+        manufacturing_contribution: payment.manufacturing_contribution,
+        notes: payment.notes,
+        status: payment.status
     });
-    setOpenPaymentDialog(true);
+    setOpenCuttingPaymentDialog(true);
   };
 
   const handleDeletePayment = async (paymentId) => {
@@ -820,14 +728,16 @@ const CuttingManagement = () => {
       } catch (error) {
         if (error.response?.data?.hasAdvancePayments ||
             error.response?.data?.hasAssignments ||
-            error.response?.data?.hasPurchaseInvoices) {
+            error.response?.data?.hasPurchaseInvoices ||
+            error.response?.data?.hasPayments) {
           // Set the reassignment data and open the dialog
           setReassignmentData({
             oldContractorId: contractorId,
             newContractorId: '',
             advancePayments: error.response.data.advancePayments || [],
             assignments: error.response.data.assignments || [],
-            purchaseInvoices: error.response.data.purchaseInvoices || 0
+            purchaseInvoices: error.response.data.purchaseInvoices || [],
+            payments: error.response.data.payments || []
           });
           setReassignDialog(true);
         } else {
@@ -846,7 +756,9 @@ const CuttingManagement = () => {
       oldContractorId: null,
       newContractorId: '',
       advancePayments: [],
-      assignments: []
+      assignments: [],
+      payments: [],
+      purchaseInvoices: []
     });
   };
 
@@ -861,7 +773,13 @@ const CuttingManagement = () => {
       });
 
       // Refresh the data
-      await fetchContractors();
+      await Promise.all([
+        fetchContractors(),
+        fetchAssignments(),
+        fetchAdvancePayments(),
+        fetchPayments()
+      ]);
+
       handleReassignmentClose();
     } catch (error) {
       console.error('Error in reassignment:', error);
@@ -898,16 +816,16 @@ const CuttingManagement = () => {
                 .filter(c => c.id !== reassignmentData.oldContractorId)
                 .map((contractor) => (
                   <MenuItem key={contractor.id} value={contractor.id}>
-                    {contractor.name} ({contractor.contractor_id})
+                    {contractor.name}
                   </MenuItem>
                 ))}
             </Select>
           </FormControl>
 
-          {reassignmentData.assignments.length > 0 && (
+          {reassignmentData.assignments?.length > 0 && (
             <>
               <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Active Assignments ({reassignmentData.assignments.length}):
+                Assignments ({reassignmentData.assignments.length}):
               </Typography>
               <List dense>
                 {reassignmentData.assignments.map((assignment) => (
@@ -922,7 +840,7 @@ const CuttingManagement = () => {
             </>
           )}
 
-          {reassignmentData.advancePayments.length > 0 && (
+          {reassignmentData.advancePayments?.length > 0 && (
             <>
               <Typography variant="subtitle2" sx={{ mb: 1 }}>
                 Advance Payments ({reassignmentData.advancePayments.length}):
@@ -940,10 +858,40 @@ const CuttingManagement = () => {
             </>
           )}
 
-          {reassignmentData.purchaseInvoices > 0 && (
-            <Typography variant="subtitle2" sx={{ mb: 1, color: 'warning.main' }}>
-              Purchase Invoices to be reassigned: {reassignmentData.purchaseInvoices}
-            </Typography>
+          {reassignmentData.payments?.length > 0 && (
+            <>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Payments ({reassignmentData.payments.length}):
+              </Typography>
+              <List dense>
+                {reassignmentData.payments.map((payment) => (
+                  <ListItem key={payment.id}>
+                    <ListItemText
+                      primary={`Receipt Number: ${payment.receipt_number}`}
+                      secondary={`Amount: ${formatCurrency(payment.total_amount)} - Status: ${payment.status}`}
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </>
+          )}
+
+          {reassignmentData.purchaseInvoices?.length > 0 && (
+            <>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Purchase Invoices ({reassignmentData.purchaseInvoices.length}):
+              </Typography>
+              <List dense>
+                {reassignmentData.purchaseInvoices.map((invoice, index) => (
+                  <ListItem key={index}>
+                    <ListItemText
+                      primary={`Invoice ID: ${invoice.id}`}
+                      secondary={`Amount: ${formatCurrency(invoice.amount)}`}
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </>
           )}
         </Box>
       </DialogContent>
@@ -1077,7 +1025,7 @@ const CuttingManagement = () => {
                             color="success"
                             onClick={() => handleOpenCompletionDialog(assignment, true)}
                           >
-                            Complete
+                            Completed
                           </Button>
                         )}
                         <Box sx={{ display: 'flex', gap: 0.5 }}>
@@ -1250,7 +1198,7 @@ const CuttingManagement = () => {
                     </TableCell>
                     <TableCell align="right">
                       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
-                        {payment.status !== 'paid' && (
+                        {payment.status !== 'paid' && payment.status !== 'used' && (
                           <Button
                             size="small"
                             color="success"
@@ -1293,6 +1241,7 @@ const CuttingManagement = () => {
                   <TableCell>Amount</TableCell>
                   <TableCell>Company Contribution</TableCell>
                   <TableCell>Manufacturing Contribution</TableCell>
+                  <TableCell>Quantity (kg)</TableCell>
                   <TableCell>Payment Date</TableCell>
                   <TableCell>Notes</TableCell>
                   <TableCell>Status</TableCell>
@@ -1307,6 +1256,7 @@ const CuttingManagement = () => {
                     <TableCell>{formatCurrency(payment.total_amount, false)}</TableCell>
                     <TableCell>{formatCurrency(payment.company_contribution, false)}</TableCell>
                     <TableCell>{formatCurrency(payment.manufacturing_contribution, false)}</TableCell>
+                    <TableCell>{payment.quantity_kg}</TableCell>
                     <TableCell>{new Date(payment.payment_date).toLocaleDateString()}</TableCell>
                     <TableCell>{payment.notes}</TableCell>
                     <TableCell>
@@ -1510,115 +1460,6 @@ const CuttingManagement = () => {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={openPaymentDialog} onClose={() => setOpenPaymentDialog(false)}>
-        <DialogTitle>Process Cutting Payment</DialogTitle>
-        <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12}>
-              <FormControl fullWidth required>
-                <InputLabel>Assignment</InputLabel>
-                <Select
-                  value={paymentFormData.assignment_id || ''}
-                  label="Assignment*"
-                  onChange={(e) => setPaymentFormData(prev => ({
-                    ...prev,
-                    assignment_id: e.target.value
-                  }))}
-                >
-                  {assignments
-                    .filter(a =>
-                      a.contractor_id === paymentFormData.contractor_id &&
-                      ['active', 'in_progress', 'completed'].includes(a.status)
-                    )
-                    .map(assignment => (
-                      <MenuItem key={assignment.id} value={assignment.id}>
-                        {`Land ${assignment.land_number} - ${assignment.location} (${assignment.status})`}
-                      </MenuItem>
-                    ))}
-                </Select>
-              </FormControl>
-            </Grid>
-
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Total Amount"
-                type="number"
-                value={paymentFormData.amount}
-                onChange={(e) => setPaymentFormData(prev => ({
-                  ...prev,
-                  amount: e.target.value
-                }))}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Company Contribution"
-                type="number"
-                value={paymentFormData.companyContribution}
-                onChange={(e) => setPaymentFormData(prev => ({
-                  ...prev,
-                  companyContribution: e.target.value
-                }))}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Manufacturing Contribution"
-                type="number"
-                value={paymentFormData.manufacturingContribution}
-                onChange={(e) => setPaymentFormData(prev => ({
-                  ...prev,
-                  manufacturingContribution: e.target.value
-                }))}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <FormControl fullWidth>
-                <InputLabel>Status</InputLabel>
-                <Select
-                  value={paymentFormData.status}
-                  label="Status"
-                  onChange={(e) => setPaymentFormData(prev => ({
-                    ...prev,
-                    status: e.target.value
-                  }))}
-                >
-                  <MenuItem value="pending">Pending</MenuItem>
-                  <MenuItem value="due">Due</MenuItem>
-                  <MenuItem value="paid">Paid</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Notes"
-                multiline
-                rows={2}
-                value={paymentFormData.notes}
-                onChange={(e) => setPaymentFormData(prev => ({
-                  ...prev,
-                  notes: e.target.value
-                }))}
-              />
-            </Grid>
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenPaymentDialog(false)}>Cancel</Button>
-          <Button
-            variant="contained"
-            onClick={handlePaymentSubmit}
-            disabled={!paymentFormData.assignment_id}
-          >
-            Process Payment
-          </Button>
-        </DialogActions>
-      </Dialog>
-
       <Dialog open={openReassignDialog} onClose={() => {
         setOpenReassignDialog(false);
         setContractorToDelete(null);
@@ -1661,9 +1502,9 @@ const CuttingManagement = () => {
         <DialogTitle>
           {selectedAssignment ? (
             completionFormData.assignment_id
-              ? `Complete Assignment - Land ${selectedAssignment.land_number}`
-              : `Complete Assignment for ${selectedAssignment.name || selectedAssignment.contractor_name}`
-          ) : 'Complete Assignment'
+              ? `Complete Cutting Operation - Land ${selectedAssignment.land_number}`
+              : `Complete Cutting Operation for ${selectedAssignment.name || selectedAssignment.contractor_name}`
+          ) : 'Complete Cutting Operation'
           }
         </DialogTitle>
         <DialogContent>
@@ -1733,7 +1574,7 @@ const CuttingManagement = () => {
             variant="contained"
             disabled={!completionFormData.assignment_id || !completionFormData.raw_item_id || !completionFormData.quantity_received}
           >
-            Complete
+            Complete Operation
           </Button>
         </DialogActions>
       </Dialog>
@@ -1782,7 +1623,7 @@ const CuttingManagement = () => {
       </Dialog>
 
       <Dialog open={openCuttingPaymentDialog} onClose={handleCloseCuttingPaymentDialog}>
-        <DialogTitle>Process Cutting Payment</DialogTitle>
+        <DialogTitle>{cuttingPaymentFormData.id ? 'Edit Cutting Payment' : 'Process Cutting Payment'}</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={12} sm={6}>
@@ -1804,7 +1645,6 @@ const CuttingManagement = () => {
                   }));
                 }}
                 required
-                helperText={`Total Charge: ${formatCurrency(cuttingPaymentFormData.quantity_kg * cuttingPaymentFormData.price_per_kg, false)}`}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -1826,7 +1666,6 @@ const CuttingManagement = () => {
                   }));
                 }}
                 required
-                helperText={`Current: ${formatCurrency(cuttingPaymentFormData.price_per_kg, false)}/kg`}
               />
             </Grid>
             <Grid item xs={12}>
@@ -1846,7 +1685,6 @@ const CuttingManagement = () => {
                   }));
                 }}
                 required
-                helperText={`Calculated Amount: ${formatCurrency(cuttingPaymentFormData.total_amount, false)}`}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -1868,7 +1706,6 @@ const CuttingManagement = () => {
                     }));
                   }
                 }}
-                helperText={`Current: ${formatCurrency(cuttingPaymentFormData.company_contribution, false)}`}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -1890,7 +1727,6 @@ const CuttingManagement = () => {
                     }));
                   }
                 }}
-                helperText={`Current: ${formatCurrency(cuttingPaymentFormData.manufacturing_contribution, false)}`}
               />
             </Grid>
             <Grid item xs={12}>
@@ -1915,7 +1751,7 @@ const CuttingManagement = () => {
             onClick={handleCuttingPaymentSubmit}
             disabled={!cuttingPaymentFormData.assignment_id || !cuttingPaymentFormData.quantity_kg || !cuttingPaymentFormData.total_amount}
           >
-            Process Payment
+            {cuttingPaymentFormData.id ? 'Update Payment' : 'Process Payment'}
           </Button>
         </DialogActions>
       </Dialog>

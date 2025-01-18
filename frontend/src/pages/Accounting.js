@@ -423,42 +423,58 @@ const Accounting = () => {
 
   const handleTransactionSubmit = async (e) => {
     e.preventDefault();
-    try {
-      if (selectedTransaction) {
-        // If editing existing transaction
-        const response = await axios.put(`/api/accounting/transactions/${selectedTransaction.id}`, {
-          ...transactionFormData,
-          status: transactionFormData.status || 'draft'
-        });
-      } else {
-        // If creating new transaction
-        const response = await axios.post('/api/accounting/transactions', {
-          ...transactionFormData,
-          status: transactionFormData.status || 'draft'
-        });
-      }
 
-      fetchTransactions();
-      fetchSummary();
-      handleCloseTransactionDialog();
+    // Validate required fields
+    const { date, type, category, amount, account, paymentMethod } = transactionFormData;
+    if (!date || !type || !category || !amount || !account || !paymentMethod) {
+        alert('Please fill in all required fields: Date, Type, Category, Amount, Account, and Payment Method.');
+        return;
+    }
+
+    try {
+        if (selectedTransaction) {
+            // If editing existing transaction
+            const response = await axios.put(`/api/accounting/transactions/${selectedTransaction.id}`, {
+                ...transactionFormData,
+                status: transactionFormData.status || 'draft'
+            });
+        } else {
+            // If creating new transaction
+            const response = await axios.post('/api/accounting/transactions', {
+                ...transactionFormData,
+                status: transactionFormData.status || 'draft'
+            });
+        }
+
+        fetchTransactions();
+        fetchSummary();
+        handleCloseTransactionDialog();
     } catch (error) {
-      console.error('Error saving transaction:', error);
-      alert(error.response?.data?.message || 'Error saving transaction');
+        console.error('Error saving transaction:', error);
+        alert(error.response?.data?.message || 'Error saving transaction');
     }
   };
 
   const handleAccountSubmit = async (e) => {
     e.preventDefault();
+
+    // Validate required fields
+    const { code, name, type, category } = accountFormData;
+    if (!code || !name || !type || !category) {
+        alert('Please fill in all required fields: Code, Name, Type, Category.');
+        return;
+    }
+
     try {
-      if (selectedAccount) {
-        await axios.put(`/api/accounting/accounts/${selectedAccount.id}`, accountFormData);
-      } else {
-        await axios.post('/api/accounting/accounts', accountFormData);
-      }
-      fetchAccounts();
-      handleCloseAccountDialog();
+        if (selectedAccount) {
+            await axios.put(`/api/accounting/accounts/${selectedAccount.id}`, accountFormData);
+        } else {
+            await axios.post('/api/accounting/accounts', accountFormData);
+        }
+        fetchAccounts();
+        handleCloseAccountDialog();
     } catch (error) {
-      console.error('Error saving account:', error);
+        console.error('Error saving account:', error);
     }
   };
 
@@ -1036,7 +1052,7 @@ const Accounting = () => {
                     </TableCell>
                     <TableCell>{transaction.type}</TableCell>
                     <TableCell>{transaction.description}</TableCell>
-                    <TableCell>{transaction.entries?.[0]?.account_name || 'N/A'}</TableCell>
+                    <TableCell>{transaction.account_name || 'N/A'}</TableCell>
                     <TableCell
                       sx={{
                         color: transaction.type === 'revenue' ? 'success.main' : 'error.main'

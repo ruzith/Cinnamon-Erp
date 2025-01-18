@@ -255,7 +255,7 @@ exports.createAssignment = async (req, res) => {
   const connection = await pool.getConnection();
 
   try {
-    const { contractor_id, quantity, duration, duration_type, start_date, notes, raw_material_id, raw_material_quantity } = req.body;
+    const { contractor_id, duration, duration_type, start_date, notes, raw_material_id, raw_material_quantity } = req.body;
 
     await connection.beginTransaction();
 
@@ -283,12 +283,12 @@ exports.createAssignment = async (req, res) => {
         break;
     }
 
-    // Create the assignment
+    // Create the assignment (removed quantity from the INSERT)
     const [result] = await connection.execute(
       `INSERT INTO cinnamon_assignments
-       (contractor_id, quantity, duration, duration_type, start_date, end_date, notes, status, raw_material_id, raw_material_quantity)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
-      [contractor_id, quantity, duration, duration_type, start_date, end_date, notes, raw_material_id, raw_material_quantity]
+       (contractor_id, duration, duration_type, start_date, end_date, notes, status, raw_material_id, raw_material_quantity)
+       VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
+      [contractor_id, duration, duration_type, start_date, end_date, notes, raw_material_id, raw_material_quantity]
     );
 
     // Deduct raw material from inventory
@@ -2251,5 +2251,94 @@ exports.updateAssignmentStatus = async (req, res) => {
     res.status(500).json({ message: 'Error updating assignment status' });
   } finally {
     connection.release();
+  }
+};
+
+// @desc    Complete manufacturing assignment and update inventory
+// @route   POST /api/manufacturing/assignments/complete
+// @access  Private/Admin
+exports.completeAssignment = async (req, res) => {
+  const connection = await pool.getConnection();
+
+  try {
+    const { assignment_id, finished_good_id, quantity_received } = req.body;
+
+    // Start transaction
+    await connection.beginTransaction();
+
+    try {
+      // Get assignment details first
+      const [assignment] = await connection.execute(`
+        SELECT ma.*, mc.name as contractor_name
+        FROM cinnamon_assignments ma
+        JOIN manufacturing_contractors mc ON ma.contractor_id = mc.id
+        WHERE ma.id = ?
+      `, [assignment_id]);
+
+      if (!assignment[0]) {
+        throw new Error('Assignment not found');
+      }
+
+      // Update assignment status
+      const updateAssignmentQuery = `
+        UPDATE cinnamon_assignments
+        SET status = 'completed',
+            updated_at = NOW(),
+            finished_good_id = ?,
+            quantity = ?
+        WHERE id = ?
+      `;
+      await connection.execute(updateAssignmentQuery, [
+        finished_good_id,
+        quantity_received,
+        assignment_id
+      ]);
+
+      // Add finished good to inventory
+      const updateFinishedGoodQuery = `
+        UPDATE inventory
+        SET quantity = quantity + ?
+        WHERE id = ?
+      `;
+      await connection.execute(updateFinishedGoodQuery, [
+        quantity_received,
+        finished_good_id
+      ]);
+
+      // Create inventory transaction records
+      // For finished good (IN)
+      await connection.execute(
+        `INSERT INTO inventory_transactions
+         (item_id, type, quantity, reference, notes)
+         VALUES (?, 'IN', ?, ?, ?)`,
+        [
+          finished_good_id,
+          quantity_received,
+          `MFG-${assignment_id}`,
+          `Produced from manufacturing by ${assignment[0].contractor_name}`
+        ]
+      );
+
+      // Commit transaction
+      await connection.commit();
+
+      res.status(200).json({
+        message: 'Assignment completed and inventory updated successfully',
+        details: {
+          assignment_id,
+          finished_good_id,
+          quantity_received,
+          contractor_name: assignment[0].contractor_name
+        }
+      });
+    } catch (error) {
+      // Rollback in case of error
+      await connection.rollback();
+      throw error;
+    }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  } finally {
+    connection.release(); // Release the connection back to the pool
   }
 };

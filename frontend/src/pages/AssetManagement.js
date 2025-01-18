@@ -74,6 +74,7 @@ const MaintenanceDialog = ({
               value={formData.type}
               label="Type"
               onChange={onChange}
+              required
             >
               <MenuItem value="routine">Routine</MenuItem>
               <MenuItem value="repair">Repair</MenuItem>
@@ -90,6 +91,7 @@ const MaintenanceDialog = ({
             value={formData.date}
             onChange={onChange}
             InputLabelProps={{ shrink: true }}
+            required
           />
         </Grid>
         <Grid item xs={12}>
@@ -111,6 +113,7 @@ const MaintenanceDialog = ({
             type="number"
             value={formData.cost}
             onChange={onChange}
+            required
           />
         </Grid>
         <Grid item xs={12} sm={6}>
@@ -131,6 +134,7 @@ const MaintenanceDialog = ({
             value={formData.nextMaintenanceDate}
             onChange={onChange}
             InputLabelProps={{ shrink: true }}
+            required
           />
         </Grid>
         <Grid item xs={12}>
@@ -264,7 +268,7 @@ const AssetManagement = () => {
       assetId: asset.id,
       type: 'routine',
       description: '',
-      date: new Date().toISOString().split('T')[0],
+      date: '',
       cost: '',
       performedBy: '',
       nextMaintenanceDate: '',
@@ -347,17 +351,33 @@ const AssetManagement = () => {
   };
 
   const handleAssetSubmit = async () => {
-    const errors = {};
-    Object.keys(assetFormData).forEach(field => {
-      const error = validateField(field, assetFormData[field]);
-      if (error) errors[field] = error;
-    });
+    // Clear previous errors
+    setFormErrors({});
 
-    const newTouched = {};
-    Object.keys(assetFormData).forEach(field => {
-      newTouched[field] = true;
-    });
-    setTouched(newTouched);
+    // Basic frontend validation
+    const errors = {};
+    if (!assetFormData.name?.trim()) {
+      errors.name = "Name is required";
+    }
+
+    if (!assetFormData.purchaseDate) {
+      errors.purchaseDate = "Purchase date is required";
+    } else {
+      const purchaseDate = new Date(assetFormData.purchaseDate);
+      if (purchaseDate > new Date()) {
+        errors.purchaseDate = "Purchase date cannot be in the future";
+      }
+    }
+
+    if (assetFormData.purchasePrice &&
+        (isNaN(parseFloat(assetFormData.purchasePrice)) || parseFloat(assetFormData.purchasePrice) < 0)) {
+      errors.purchasePrice = "Purchase price must be a valid positive number";
+    }
+
+    if (assetFormData.currentValue &&
+        (isNaN(parseFloat(assetFormData.currentValue)) || parseFloat(assetFormData.currentValue) < 0)) {
+      errors.currentValue = "Current value must be a valid positive number";
+    }
 
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
@@ -366,13 +386,13 @@ const AssetManagement = () => {
 
     try {
       const assetData = {
-        asset_number: assetFormData.assetNumber,
+        assetNumber: assetFormData.assetNumber,
         name: assetFormData.name,
         category: assetFormData.category,
         type: assetFormData.type,
-        purchase_date: assetFormData.purchaseDate,
-        purchase_price: assetFormData.purchasePrice,
-        current_value: assetFormData.currentValue,
+        purchaseDate: assetFormData.purchaseDate,
+        purchasePrice: assetFormData.purchasePrice,
+        currentValue: assetFormData.currentValue,
         status: assetFormData.status
       };
 
@@ -387,13 +407,43 @@ const AssetManagement = () => {
       fetchAssets();
     } catch (error) {
       console.error('Error saving asset:', error);
+      setFormErrors(error.response?.data?.errors || { submit: error.message });
     }
   };
 
   const handleMaintenanceSubmit = async (e) => {
     e.preventDefault();
+
+    // Basic validation
+    const errors = {};
+    if (!maintenanceFormData.type) {
+      errors.type = "Type is required";
+    }
+    if (!maintenanceFormData.date) {
+      errors.date = "Date is required";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      // Handle errors (e.g., set state to show error messages)
+      console.error('Validation errors:', errors);
+      return;
+    }
+
+    // Transform the maintenance data to ensure proper values
+    const maintenanceData = {
+      assetId: selectedAsset.id,
+      type: maintenanceFormData.type,
+      description: maintenanceFormData.description,
+      date: maintenanceFormData.date,
+      cost: maintenanceFormData.cost ? parseFloat(maintenanceFormData.cost) : null,
+      performedBy: maintenanceFormData.performedBy,
+      nextMaintenanceDate: maintenanceFormData.nextMaintenanceDate,
+      status: maintenanceFormData.status,
+      notes: maintenanceFormData.notes
+    };
+
     try {
-      await axios.post(`/api/assets/${selectedAsset.id}/maintenance`, maintenanceFormData);
+      await axios.post(`/api/assets/${selectedAsset.id}/maintenance`, maintenanceData);
       fetchMaintenanceRecords();
       handleCloseMaintenanceDialog();
     } catch (error) {
@@ -406,6 +456,7 @@ const AssetManagement = () => {
       try {
         await axios.delete(`/api/assets/${assetId}`);
         fetchAssets();
+        fetchMaintenanceRecords();
       } catch (error) {
         console.error('Error deleting asset:', error);
       }
@@ -706,11 +757,12 @@ const AssetManagement = () => {
                     <TableCell>{formatCurrency(record.cost)}</TableCell>
                     <TableCell>{record.next_maintenance_date ? formatDate(record.next_maintenance_date) : 'N/A'}</TableCell>
                     <TableCell>
-                      {new Date(record.next_maintenance_date) < new Date() ? (
-                        <Chip label="Overdue" color="error" size="small" />
-                      ) : (
-                        <Chip label="Scheduled" color="success" size="small" />
-                      )}
+                      <Chip
+                        label={record.status}
+                        color={getMaintenanceStatusColor(record.status)}
+                        size="small"
+                        sx={{ textTransform: 'capitalize' }}
+                      />
                     </TableCell>
                   </TableRow>
                 ))}
@@ -823,7 +875,6 @@ const AssetManagement = () => {
                   <MenuItem value="active">Active</MenuItem>
                   <MenuItem value="maintenance">In Maintenance</MenuItem>
                   <MenuItem value="retired">Retired</MenuItem>
-                  <MenuItem value="disposed">Disposed</MenuItem>
                 </Select>
               </FormControl>
             </Grid>

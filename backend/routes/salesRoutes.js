@@ -15,11 +15,14 @@ router.get('/', protect, async (req, res) => {
     const [invoices] = await SalesInvoice.pool.execute(`
       SELECT si.*,
              u.name as created_by_name,
+             c.id as customer_id,
              COUNT(sit.id) as total_items
       FROM sales_invoices si
       LEFT JOIN users u ON si.created_by = u.id
+      LEFT JOIN customers c ON c.name = si.customer_name
+        AND c.phone = si.customer_phone
       LEFT JOIN sales_items sit ON si.id = sit.invoice_id
-      GROUP BY si.id
+      GROUP BY si.id, u.name, c.id
       ORDER BY si.date DESC
     `);
     res.json(invoices);
@@ -431,6 +434,17 @@ router.put('/:id', protect, async (req, res) => {
   try {
     await connection.beginTransaction();
 
+    // Get the original sale and items for comparison
+    const [originalSale] = await connection.query(
+      'SELECT status FROM sales_invoices WHERE id = ?',
+      [req.params.id]
+    );
+
+    const [originalItems] = await connection.query(
+      'SELECT product_id, quantity FROM sales_items WHERE invoice_id = ?',
+      [req.params.id]
+    );
+
     const {
       customer_id,
       items,
@@ -484,7 +498,33 @@ router.put('/:id', protect, async (req, res) => {
       [req.params.id]
     );
 
-    // Insert new items
+    // If the original sale was confirmed, restore the inventory
+    if (originalSale[0].status === 'confirmed') {
+      for (const item of originalItems) {
+        await connection.query(
+          `UPDATE inventory
+           SET quantity = quantity + ?
+           WHERE id = ?`,
+          [item.quantity, item.product_id]
+        );
+
+        // Record inventory transaction for reversal
+        await connection.query(
+          `INSERT INTO inventory_transactions
+           (item_id, type, quantity, reference, notes)
+           VALUES (?, ?, ?, ?, ?)`,
+          [
+            item.product_id,
+            'IN',
+            item.quantity,
+            `${req.params.id}-REV`,
+            `Sale Update Reversed for invoice ${req.params.id}`
+          ]
+        );
+      }
+    }
+
+    // Insert new items and update inventory if confirmed
     for (const item of items) {
       await connection.query(
         `INSERT INTO sales_items
@@ -500,17 +540,32 @@ router.put('/:id', protect, async (req, res) => {
         ]
       );
 
-      // Update inventory quantity
-      await connection.query(
-        `UPDATE inventory
-         SET quantity = quantity - ?
-         WHERE id = ?`,
-        [item.quantity, item.product_id]
-      );
+      if (req.body.status === 'confirmed') {
+        // Update inventory quantity
+        await connection.query(
+          `UPDATE inventory
+           SET quantity = quantity - ?
+           WHERE id = ?`,
+          [item.quantity, item.product_id]
+        );
+
+        // Record inventory transaction
+        await connection.query(
+          `INSERT INTO inventory_transactions
+           (item_id, type, quantity, reference, notes)
+           VALUES (?, ?, ?, ?, ?)`,
+          [
+            item.product_id,
+            'OUT',
+            item.quantity,
+            `${req.params.id}-UPD`,
+            `Sale Updated for invoice ${req.params.id}`
+          ]
+        );
+      }
     }
 
     await connection.commit();
-
     res.json({
       message: 'Sale updated successfully',
       id: req.params.id
@@ -549,27 +604,54 @@ router.get('/:id/items', protect, async (req, res) => {
   }
 });
 
-// Add this route handler for deleting sales
+// Delete a sale
 router.delete('/:id', protect, async (req, res) => {
   const connection = await db.getConnection();
 
   try {
     await connection.beginTransaction();
 
-    // First get the sale items to restore inventory quantities
+    // Get the sale status and items
+    const [sale] = await connection.query(
+      'SELECT status FROM sales_invoices WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (!sale[0]) {
+      throw new Error('Sale not found');
+    }
+
+    // Get the sale items
     const [items] = await connection.query(
       'SELECT product_id, quantity FROM sales_items WHERE invoice_id = ?',
       [req.params.id]
     );
 
-    // Restore inventory quantities
-    for (const item of items) {
-      await connection.query(
-        `UPDATE inventory
-         SET quantity = quantity + ?
-         WHERE id = ?`,
-        [item.quantity, item.product_id]
-      );
+    // If the sale was confirmed, restore inventory quantities
+    if (sale[0].status === 'confirmed') {
+      for (const item of items) {
+        // Restore inventory quantities
+        await connection.query(
+          `UPDATE inventory
+           SET quantity = quantity + ?
+           WHERE id = ?`,
+          [item.quantity, item.product_id]
+        );
+
+        // Record inventory transaction
+        await connection.query(
+          `INSERT INTO inventory_transactions
+           (item_id, type, quantity, reference, notes)
+           VALUES (?, ?, ?, ?, ?)`,
+          [
+            item.product_id,
+            'IN',
+            item.quantity,
+            `${req.params.id}-DEL`,
+            `Sale Deleted for invoice ${req.params.id}`
+          ]
+        );
+      }
     }
 
     // Delete sale items

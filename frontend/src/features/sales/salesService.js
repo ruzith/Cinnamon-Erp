@@ -26,4 +26,4 @@ const salesService = {
   updateInvoice
 };
 
-export default salesService; 
+export default salesService;

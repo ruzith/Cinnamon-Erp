@@ -475,6 +475,7 @@ const generateInventoryTransactions = async (connection, count = 50) => {
 const generateTasks = async (connection, count = 15) => {
   // Get all users and find admin user
   const [users] = await connection.query('SELECT id, role FROM users');
+  const [employees] = await connection.query('SELECT id FROM employees');
   const [categories] = await connection.query('SELECT id FROM task_categories');
   const adminUsers = users.filter(user => user.role === 'admin');
 
@@ -491,7 +492,7 @@ const generateTasks = async (connection, count = 15) => {
     estimated_hours: faker.number.float({ min: 1, max: 40, multipleOf: 0.5 }),
     notes: faker.lorem.sentences(2),
     due_date: faker.date.future({ years: 1 }).toISOString().split('T')[0],
-    assigned_to: faker.helpers.arrayElement(users).id,
+    assigned_to: faker.helpers.arrayElement(employees).id,
     created_by: adminUsers[0].id
   }));
 };
@@ -1167,8 +1168,11 @@ async function generateCinnamonAssignments(connection) {
   const [rawMaterials] = await connection.query(
     'SELECT id, quantity FROM inventory WHERE category = "raw_material" AND status = "active" AND quantity > 0'
   );
+  const [finishedGoods] = await connection.query(
+    'SELECT id FROM inventory WHERE category = "finished_good" AND status = "active"'
+  );
 
-  if (contractors.length === 0 || rawMaterials.length === 0) {
+  if (contractors.length === 0 || rawMaterials.length === 0 || finishedGoods.length === 0) {
     return assignments;
   }
 
@@ -1177,6 +1181,7 @@ async function generateCinnamonAssignments(connection) {
   for (let i = 0; i < numAssignments; i++) {
     const contractor = contractors[Math.floor(Math.random() * contractors.length)];
     const rawMaterial = rawMaterials[Math.floor(Math.random() * rawMaterials.length)];
+    const finishedGood = finishedGoods[Math.floor(Math.random() * finishedGoods.length)];
 
     // Ensure raw material quantity doesn't exceed available stock
     const maxQuantity = Math.min(rawMaterial.quantity, 50);
@@ -1202,6 +1207,7 @@ async function generateCinnamonAssignments(connection) {
         end_date: endDate,
         raw_material_id: rawMaterial.id,
         raw_material_quantity: rawMaterialQuantity,
+        finished_good_id: finishedGood.id, // New field for finished good
         status: faker.helpers.arrayElement(['active', 'completed', 'cancelled']),
         notes: `Sample assignment with ${rawMaterialQuantity}kg of raw material`
       });

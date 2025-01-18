@@ -696,35 +696,34 @@ const Inventory = () => {
                   <TableCell>Quantity</TableCell>
                   <TableCell>Reference</TableCell>
                   <TableCell>Notes</TableCell>
-                  <TableCell align="right">Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {filteredTransactions.map((transaction) => (
-                  <TableRow key={transaction.id} hover>
-                    <TableCell>{new Date(transaction.created_at).toLocaleDateString()}</TableCell>
-                    <TableCell>{transaction.product_name}</TableCell>
-                    <TableCell>
-                      <Chip
-                        label={transaction.type}
-                        color={transaction.type === 'IN' ? 'success' : transaction.type === 'OUT' ? 'error' : 'warning'}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell>{transaction.quantity}</TableCell>
-                    <TableCell>{transaction.reference}</TableCell>
-                    <TableCell>{transaction.notes}</TableCell>
-                    <TableCell align="right">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleOpenTransactionDialog(transaction)}
-                        sx={{ color: 'primary.main' }}
-                      >
-                        <EditIcon />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {filteredTransactions.map((transaction) => {
+                  const isIncrease = transaction.type === 'IN';
+                  return (
+                    <TableRow key={transaction.id} hover>
+                      <TableCell>{new Date(transaction.created_at).toLocaleDateString()}</TableCell>
+                      <TableCell>{transaction.product_name}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={transaction.type}
+                          color={isIncrease ? 'success' : transaction.type === 'OUT' ? 'error' : 'warning'}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Typography
+                          color={isIncrease ? 'success.main' : 'error.main'}
+                        >
+                          {isIncrease ? '+' : '-'}{Math.abs(transaction.quantity)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>{transaction.reference}</TableCell>
+                      <TableCell>{transaction.notes}</TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </TableContainer>
@@ -967,7 +966,6 @@ const Inventory = () => {
                 type="number"
                 value={formData.purchase_price}
                 onChange={handleInputChange}
-                required={formData.category === 'finished_good'}
                 disabled={formData.category === 'raw_material'}
                 helperText={formData.category === 'raw_material' ? 'Not applicable for raw materials' : ''}
               />

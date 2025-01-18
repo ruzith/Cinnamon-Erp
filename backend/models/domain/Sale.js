@@ -85,4 +85,4 @@ class Sale extends BaseModel {
   }
 }
 
-module.exports = new Sale(); 
+module.exports = new Sale();

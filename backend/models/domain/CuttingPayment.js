@@ -87,6 +87,23 @@ class CuttingPayment extends BaseModel {
     );
     return this.getWithDetails(id);
   }
+
+  async update(id, paymentData) {
+    const setClause = Object.keys(paymentData)
+        .map(key => `${key} = ?`)
+        .join(', ');
+
+    // Replace undefined values with null
+    const values = Object.values(paymentData).map(value => value === undefined ? null : value);
+    values.push(id);
+
+    await this.pool.execute(
+        `UPDATE cutting_payments SET ${setClause} WHERE id = ?`,
+        values
+    );
+
+    return this.getWithDetails(id);
+  }
 }
 
 module.exports = new CuttingPayment();

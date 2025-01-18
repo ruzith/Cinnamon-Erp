@@ -78,7 +78,7 @@ export const salesSlice = createSlice({
         state.currentInvoice = action.payload;
       })
       .addCase(updateInvoice.fulfilled, (state, action) => {
-        state.invoices = state.invoices.map(invoice => 
+        state.invoices = state.invoices.map(invoice =>
           invoice.id === action.payload.id ? action.payload : invoice
         );
         state.currentInvoice = action.payload;
@@ -87,4 +87,4 @@ export const salesSlice = createSlice({
 });
 
 export const { reset, setCurrentInvoice } = salesSlice.actions;
-export default salesSlice.reducer; 
+export default salesSlice.reducer;

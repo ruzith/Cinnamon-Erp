@@ -1125,7 +1125,6 @@ const TaskManagement = () => {
                 rows={3}
                 value={formData.description}
                 onChange={handleInputChange}
-                required
               />
             </Grid>
             <Grid item xs={12} sm={6}>

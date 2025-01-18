@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Typography,
@@ -28,7 +28,8 @@ import {
   Alert,
   InputAdornment,
   TableSortLabel,
-} from '@mui/material';
+  FormHelperText,
+} from "@mui/material";
 import {
   Add as AddIcon,
   Edit as EditIcon,
@@ -47,53 +48,53 @@ import {
   Timeline as TimelineIcon,
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
-} from '@mui/icons-material';
-import axios from 'axios';
-import PurchaseInvoiceForm from '../components/PurchaseInvoiceForm';
-import { useCurrencyFormatter } from '../utils/currencyUtils';
-import { formatDate, getCurrentDateTime } from '../utils/dateUtils';
-import SummaryCard from '../components/common/SummaryCard';
-import { fetchCuttingContractors } from '../features/cutting/cuttingSlice';
+} from "@mui/icons-material";
+import axios from "axios";
+import PurchaseInvoiceForm from "../components/PurchaseInvoiceForm";
+import { useCurrencyFormatter } from "../utils/currencyUtils";
+import { formatDate, getCurrentDateTime } from "../utils/dateUtils";
+import SummaryCard from "../components/common/SummaryCard";
+import { fetchCuttingContractors } from "../features/cutting/cuttingSlice";
+import { useSnackbar } from 'notistack';
 
-const STATUS_OPTIONS = ['planned', 'in_progress', 'completed', 'cancelled'];
+const STATUS_OPTIONS = ["planned", "in_progress", "completed", "cancelled"];
 
 const Manufacturing = () => {
   const [manufacturingOrders, setManufacturingOrders] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [formData, setFormData] = useState({
-    name: '',
-    contractor_id: '',
-    phone: '',
-    address: '',
-    status: 'active'
+    name: "",
+    contractor_id: "",
+    phone: "",
+    address: "",
+    status: "active",
   });
   const [openOrderDialog, setOpenOrderDialog] = useState(false);
   const [orderFormData, setOrderFormData] = useState({
-    product_id: '',
-    quantity: '',
-    status: 'planned',
-    priority: 'normal',
-    start_date: new Date().toISOString().split('T')[0],
-    end_date: '',
-    notes: ''
+    product_id: "",
+    quantity: "",
+    status: "planned",
+    priority: "normal",
+    start_date: new Date().toISOString().split("T")[0],
+    end_date: "",
+    notes: "",
   });
   const [products, setProducts] = useState([]);
   const [assignmentFormData, setAssignmentFormData] = useState({
-    contractor_id: '',
-    quantity: '',
+    contractor_id: "",
     duration: 1,
-    duration_type: 'day',
-    start_date: new Date().toISOString().split('T')[0],
-    raw_material_id: '',
-    raw_material_quantity: '',
-    notes: ''
+    duration_type: "day",
+    start_date: new Date().toISOString().split("T")[0],
+    raw_material_id: "",
+    raw_material_quantity: "",
+    notes: "",
   });
   const [advancePaymentData, setAdvancePaymentData] = useState({
-    contractor_id: '',
-    amount: '',
-    payment_date: new Date().toISOString().split('T')[0],
-    notes: ''
+    contractor_id: "",
+    amount: "",
+    payment_date: new Date().toISOString().split("T")[0],
+    notes: "",
   });
   const [openAssignmentDialog, setOpenAssignmentDialog] = useState(false);
   const [manufacturingContractors, setManufacturingContractors] = useState([]);
@@ -106,64 +107,79 @@ const Manufacturing = () => {
   const { formatCurrency } = useCurrencyFormatter();
   const [openReassignDialog, setOpenReassignDialog] = useState(false);
   const [contractorToDelete, setContractorToDelete] = useState(null);
-  const [newContractorId, setNewContractorId] = useState('');
+  const [newContractorId, setNewContractorId] = useState("");
   const [rawMaterials, setRawMaterials] = useState([]);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [openInvoiceDialog, setOpenInvoiceDialog] = useState(false);
   const [assignmentFilters, setAssignmentFilters] = useState({
-    contractor_name: '',
-    start_date: '',
-    end_date: ''
+    contractor_name: "",
+    start_date: "",
+    end_date: "",
   });
   const [reportData, setReportData] = useState([]);
   const [reportError, setReportError] = useState(null);
   const [reportDialog, setReportDialog] = useState(false);
   const [selectedReport, setSelectedReport] = useState(null);
   const [purchases, setPurchases] = useState([]);
+  const [assignmentDialogSource, setAssignmentDialogSource] = useState(null);
+  const [openCompletionDialog, setOpenCompletionDialog] = useState(false);
+  const [selectedAssignment, setSelectedAssignment] = useState(null);
+  const [completionFormData, setCompletionFormData] = useState({
+    assignment_id: '',
+    raw_item_id: '',
+    finished_good_id: '',
+    quantity_received: '',
+  });
+  const [finishedGoods, setFinishedGoods] = useState([]);
+  const { enqueueSnackbar } = useSnackbar();
 
   useEffect(() => {
-    fetchManufacturingOrders();
     fetchProducts();
     fetchManufacturingContractors();
     fetchCuttingContractors();
     fetchAssignments();
     fetchRawMaterials();
     fetchPurchases();
+    fetchFinishedGoods();
   }, []);
-
-  const fetchManufacturingOrders = async () => {
-    try {
-      const response = await axios.get('/api/manufacturing/orders');
-      setManufacturingOrders(response.data);
-    } catch (error) {
-      console.error('Error fetching manufacturing orders:', error);
-    }
-  };
 
   const fetchProducts = async () => {
     try {
-      const response = await axios.get('/api/products');
+      const response = await axios.get("/api/products");
       setProducts(response.data);
     } catch (error) {
-      console.error('Error fetching products:', error);
+      console.error("Error fetching products:", error);
     }
   };
 
   const fetchManufacturingContractors = async () => {
     try {
-      const response = await axios.get('/api/manufacturing/contractors?include_contribution=true');
+      const response = await axios.get(
+        "/api/manufacturing/contractors?include_contribution=true"
+      );
       setManufacturingContractors(response.data);
     } catch (error) {
-      console.error('Error fetching manufacturing contractors:', error);
+      console.error("Error fetching manufacturing contractors:", error);
     }
   };
 
   const fetchCuttingContractors = async () => {
     try {
-      const response = await axios.get('/api/cutting/contractors?include_contribution=true');
+      const response = await axios.get(
+        "/api/cutting/contractors?include_contribution=true"
+      );
       setCuttingContractors(response.data);
     } catch (error) {
-      console.error('Error fetching cutting contractors:', error);
+      console.error("Error fetching cutting contractors:", error);
+    }
+  };
+
+  const fetchFinishedGoods = async () => {
+    try {
+      const response = await axios.get("/api/inventory/finished-goods");
+      setFinishedGoods(response.data);
+    } catch (error) {
+      console.error("Error fetching finished goods:", error);
     }
   };
 
@@ -175,16 +191,16 @@ const Manufacturing = () => {
         contractor_id: contractor.contractor_id,
         phone: contractor.phone,
         address: contractor.address,
-        status: contractor.status || 'active'
+        status: contractor.status || "active",
       });
     } else {
       setSelectedContractor(null);
       setFormData({
-        name: '',
-        contractor_id: '',
-        phone: '',
-        address: '',
-        status: 'active'
+        name: "",
+        contractor_id: "",
+        phone: "",
+        address: "",
+        status: "active",
       });
     }
     setOpenDialog(true);
@@ -197,18 +213,23 @@ const Manufacturing = () => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: name === 'assignedWorkers' ?
-        typeof value === 'string' ? value.split(',') : value :
-        value
+      [name]:
+        name === "assignedWorkers"
+          ? typeof value === "string"
+            ? value.split(",")
+            : value
+          : value,
     }));
   };
 
   const handleContractorSubmit = async () => {
     try {
-      const response = await axios[selectedContractor ? 'put' : 'post'](
-        `/api/manufacturing/contractors${selectedContractor ? `/${selectedContractor.id}` : ''}`,
+      const response = await axios[selectedContractor ? "put" : "post"](
+        `/api/manufacturing/contractors${
+          selectedContractor ? `/${selectedContractor.id}` : ""
+        }`,
         formData
       );
 
@@ -216,48 +237,17 @@ const Manufacturing = () => {
         setOpenDialog(false);
         setSelectedContractor(null);
         setFormData({
-          name: '',
-          contractor_id: '',
-          phone: '',
-          address: '',
-          status: 'active'
+          name: "",
+          contractor_id: "",
+          phone: "",
+          address: "",
+          status: "active",
         });
-        fetchManufacturingContractors(); // Refresh the contractors list
+        fetchManufacturingContractors();
       }
     } catch (error) {
-      console.error('Error submitting contractor:', error);
-      alert(error.response?.data?.message || 'Error submitting contractor');
-    }
-  };
-
-  const handleOrderSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const orderData = {
-        product_id: parseInt(orderFormData.product_id) || null,
-        quantity: parseInt(orderFormData.quantity) || null,
-        status: orderFormData.status,
-        priority: orderFormData.priority,
-        start_date: orderFormData.start_date,
-        end_date: orderFormData.end_date || null,
-        notes: orderFormData.notes || ''
-      };
-
-      if (!orderData.product_id || !orderData.quantity) {
-        alert('Please fill in all required fields');
-        return;
-      }
-
-      if (selectedOrder) {
-        await axios.put(`/api/manufacturing/orders/${selectedOrder.id}`, orderData);
-      } else {
-        await axios.post('/api/manufacturing/orders', orderData);
-      }
-      fetchManufacturingOrders();
-      handleCloseOrderDialog();
-    } catch (error) {
-      console.error('Error saving manufacturing order:', error);
-      alert(error.response?.data?.message || 'Error saving order');
+      console.error("Error submitting contractor:", error);
+      alert(error.response?.data?.message || "Error submitting contractor");
     }
   };
 
@@ -270,128 +260,82 @@ const Manufacturing = () => {
         setContractorToDelete(contractorId);
         setOpenReassignDialog(true);
       } else {
-        console.error('Error deleting contractor:', error);
-        alert(error.response?.data?.message || 'Error deleting contractor');
+        console.error("Error deleting contractor:", error);
+        alert(error.response?.data?.message || "Error deleting contractor");
       }
-    }
-  };
-
-  const handleDeleteOrder = async (orderId) => {
-    try {
-      await axios.delete(`/api/manufacturing/orders/${orderId}`);
-      fetchManufacturingOrders();
-    } catch (error) {
-      if (error.response?.status === 400 && error.response?.data?.message?.includes('Cannot delete orders')) {
-        if (window.confirm('This order is in progress or completed. Would you like to force delete it?')) {
-          handleForceDeleteOrder(orderId);
-        }
-      } else {
-        console.error('Error deleting order:', error);
-        alert(error.response?.data?.message || 'Error deleting order');
-      }
-    }
-  };
-
-  const handleForceDeleteOrder = async (orderId) => {
-    try {
-      await axios.delete(`/api/manufacturing/orders/${orderId}?forceDelete=true`);
-      fetchManufacturingOrders();
-    } catch (error) {
-      console.error('Error force deleting order:', error);
-      alert(error.response?.data?.message || 'Error force deleting order');
     }
   };
 
   const calculateAverageQuality = (orders) => {
-    const completedOrders = orders.filter(order => order.status === 'completed');
+    const completedOrders = orders.filter(
+      (order) => order.status === "completed"
+    );
     if (!completedOrders.length) return 0;
 
-    const qualityMap = { 'A': 4, 'B': 3, 'C': 2, 'D': 1 };
-    const sum = completedOrders.reduce((acc, order) => acc + (qualityMap[order.qualityGrade] || 0), 0);
+    const qualityMap = { A: 4, B: 3, C: 2, D: 1 };
+    const sum = completedOrders.reduce(
+      (acc, order) => acc + (qualityMap[order.qualityGrade] || 0),
+      0
+    );
     return (sum / completedOrders.length).toFixed(1);
   };
 
   const summaryStats = {
     totalOrders: manufacturingOrders.length,
-    activeOrders: manufacturingOrders.filter(order => order.status === 'in_progress').length,
-    completedOrders: manufacturingOrders.filter(order => order.status === 'completed').length,
-    averageQuality: calculateAverageQuality(manufacturingOrders)
+    activeOrders: manufacturingOrders.filter(
+      (order) => order.status === "in_progress"
+    ).length,
+    completedOrders: manufacturingOrders.filter(
+      (order) => order.status === "completed"
+    ).length,
+    averageQuality: calculateAverageQuality(manufacturingOrders),
   };
 
   const getStatusColor = (status) => {
     switch (status.toLowerCase()) {
-      case 'completed':
-        return 'success';
-      case 'in_progress':
-      case 'active':
-        return 'info';
-      case 'pending':
-      case 'planned':
-        return 'warning';
-      case 'cancelled':
-        return 'error';
+      case "completed":
+        return "success";
+      case "in_progress":
+      case "active":
+        return "info";
+      case "pending":
+      case "planned":
+        return "warning";
+      case "cancelled":
+        return "error";
       default:
-        return 'default';
+        return "default";
     }
-  };
-
-  const handleOpenOrderDialog = (order = null) => {
-    if (order) {
-      setSelectedOrder(order);
-      setOrderFormData({
-        product_id: order.product_id,
-        quantity: order.quantity,
-        status: order.status,
-        priority: order.priority,
-        start_date: order.start_date?.split('T')[0] || new Date().toISOString().split('T')[0],
-        end_date: order.end_date?.split('T')[0] || '',
-        notes: order.notes
-      });
-    } else {
-      setSelectedOrder(null);
-      setOrderFormData({
-        product_id: '',
-        quantity: '',
-        status: 'planned',
-        priority: 'normal',
-        start_date: new Date().toISOString().split('T')[0],
-        end_date: '',
-        notes: ''
-      });
-    }
-    setOpenOrderDialog(true);
-  };
-
-  const handleCloseOrderDialog = () => {
-    setOpenOrderDialog(false);
-    setSelectedOrder(null);
   };
 
   const handleOpenAssignmentDialog = (assignment = null, contractor = null) => {
+    setAssignmentDialogSource(contractor ? 'table' : 'header');
+
+    setAssignmentFormData({
+      contractor_id: contractor ? contractor.id : "",
+      duration: 1,
+      duration_type: "day",
+      start_date: formatDate(getCurrentDateTime(), "YYYY-MM-DD"),
+      raw_material_id: "",
+      raw_material_quantity: "",
+      notes: "",
+    });
+
     if (assignment) {
       setAssignmentFormData({
         id: assignment.id,
         contractor_id: assignment.contractor_id,
-        quantity: assignment.quantity,
         duration: assignment.duration,
         duration_type: assignment.duration_type,
-        start_date: assignment.start_date ? formatDate(assignment.start_date, 'YYYY-MM-DD') : formatDate(getCurrentDateTime(), 'YYYY-MM-DD'),
+        start_date: assignment.start_date
+          ? formatDate(assignment.start_date, "YYYY-MM-DD")
+          : formatDate(getCurrentDateTime(), "YYYY-MM-DD"),
         raw_material_id: assignment.raw_material_id,
         raw_material_quantity: assignment.raw_material_quantity,
-        notes: assignment.notes || ''
-      });
-    } else if (contractor) {
-      setAssignmentFormData({
-        contractor_id: contractor.id,
-        quantity: '',
-        duration: 1,
-        duration_type: 'day',
-        start_date: formatDate(getCurrentDateTime(), 'YYYY-MM-DD'),
-        raw_material_id: '',
-        raw_material_quantity: '',
-        notes: ''
+        notes: assignment.notes || "",
       });
     }
+
     setOpenAssignmentDialog(true);
   };
 
@@ -400,71 +344,74 @@ const Manufacturing = () => {
     try {
       let response;
       if (assignmentFormData.id) {
-        // Update existing assignment
-        response = await axios.put(`/api/manufacturing/assignments/${assignmentFormData.id}`, assignmentFormData);
+        response = await axios.put(
+          `/api/manufacturing/assignments/${assignmentFormData.id}`,
+          assignmentFormData
+        );
       } else {
-        // Create new assignment
-        response = await axios.post('/api/manufacturing/assignments', assignmentFormData);
+        response = await axios.post(
+          "/api/manufacturing/assignments",
+          assignmentFormData
+        );
       }
 
-      // Refresh both assignments and contractors data
       await Promise.all([
         fetchAssignments(),
         fetchManufacturingContractors(),
-        fetchRawMaterials() // Refresh raw materials after assignment
+        fetchRawMaterials(),
       ]);
 
       setOpenAssignmentDialog(false);
-      // Reset form
+      setAssignmentDialogSource(null);
       setAssignmentFormData({
         id: null,
-        contractor_id: '',
-        quantity: '',
+        contractor_id: "",
         duration: 1,
-        duration_type: 'day',
-        start_date: new Date().toISOString().split('T')[0],
-        raw_material_id: '',
-        raw_material_quantity: '',
-        notes: ''
+        duration_type: "day",
+        start_date: new Date().toISOString().split("T")[0],
+        raw_material_id: "",
+        raw_material_quantity: "",
+        notes: "",
       });
     } catch (error) {
-      console.error('Error saving assignment:', error);
-      alert(error.response?.data?.message || 'Error saving assignment');
+      console.error("Error saving assignment:", error);
+      alert(error.response?.data?.message || "Error saving assignment");
     }
   };
 
   const handleAdvancePayment = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.post('/api/manufacturing/advance-payments', advancePaymentData);
+      const response = await axios.post(
+        "/api/manufacturing/advance-payments",
+        advancePaymentData
+      );
 
       if (response.data.receiptHtml) {
-        // Create a new window and write the receipt HTML
-        const receiptWindow = window.open('', '_blank');
+        const receiptWindow = window.open("", "_blank");
         if (receiptWindow) {
           receiptWindow.document.write(response.data.receiptHtml);
           receiptWindow.document.close();
 
-          // Add print automatically option
-          receiptWindow.onload = function() {
+          receiptWindow.onload = function () {
             receiptWindow.print();
           };
         } else {
-          alert('Please allow pop-ups to print receipts');
+          alert("Please allow pop-ups to print receipts");
         }
       }
 
       await fetchManufacturingContractors();
       setOpenPaymentDialog(false);
       setAdvancePaymentData({
-        contractor_id: '',
-        amount: '',
-        payment_date: new Date().toISOString().split('T')[0],
-        notes: ''
+        contractor_id: "",
+        amount: "",
+        payment_date: new Date().toISOString().split("T")[0],
+        notes: "",
       });
     } catch (error) {
-      console.error('Error processing advance payment:', error);
-      alert(error.response?.data?.message || 'Error processing payment');
+      console.error("Error processing advance payment:", error);
+      alert(error.response?.data?.message || "Error processing payment");
     }
   };
 
@@ -472,35 +419,37 @@ const Manufacturing = () => {
     try {
       const params = new URLSearchParams();
       if (assignmentFilters.contractor_name) {
-        params.append('contractor_name', assignmentFilters.contractor_name);
+        params.append("contractor_name", assignmentFilters.contractor_name);
       }
       if (assignmentFilters.start_date) {
-        params.append('start_date', assignmentFilters.start_date);
+        params.append("start_date", assignmentFilters.start_date);
       }
       if (assignmentFilters.end_date) {
-        params.append('end_date', assignmentFilters.end_date);
+        params.append("end_date", assignmentFilters.end_date);
       }
 
-      const response = await axios.get(`/api/manufacturing/assignments?${params.toString()}`);
+      const response = await axios.get(
+        `/api/manufacturing/assignments?${params.toString()}`
+      );
       setAssignments(response.data);
     } catch (error) {
-      console.error('Error fetching assignments:', error);
+      console.error("Error fetching assignments:", error);
     }
   };
 
   const handleOpenPaymentDialog = (contractor = null) => {
     if (contractor) {
-      setAdvancePaymentData(prev => ({
+      setAdvancePaymentData((prev) => ({
         ...prev,
         contractor_id: contractor.id,
-        notes: `Advance payment for ${contractor.name}`
+        notes: `Advance payment for ${contractor.name}`,
       }));
     } else {
       setAdvancePaymentData({
-        contractor_id: '',
-        amount: '',
-        payment_date: new Date().toISOString().split('T')[0],
-        notes: ''
+        contractor_id: "",
+        amount: "",
+        payment_date: new Date().toISOString().split("T")[0],
+        notes: "",
       });
     }
     setOpenPaymentDialog(true);
@@ -511,7 +460,14 @@ const Manufacturing = () => {
   };
 
   const renderContractorActions = (contractor) => (
-    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
+    <Box
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "flex-end",
+        gap: 1,
+      }}
+    >
       <Button
         size="small"
         color="success"
@@ -519,25 +475,25 @@ const Manufacturing = () => {
       >
         Assign
       </Button>
-      <Box sx={{ display: 'flex', gap: 0.5 }}>
+      <Box sx={{ display: "flex", gap: 0.5 }}>
         <IconButton
           size="small"
           onClick={() => handleOpenPaymentDialog(contractor)}
-          sx={{ color: 'warning.main', ml: 1 }}
+          sx={{ color: "warning.main", ml: 1 }}
         >
           <PaymentIcon />
         </IconButton>
         <IconButton
           size="small"
           onClick={() => handleOpenDialog(contractor)}
-          sx={{ color: 'primary.main', ml: 1 }}
+          sx={{ color: "primary.main", ml: 1 }}
         >
           <EditIcon />
         </IconButton>
         <IconButton
           size="small"
           onClick={() => handleDeleteContractor(contractor.id)}
-          sx={{ color: 'error.main', ml: 1 }}
+          sx={{ color: "error.main", ml: 1 }}
         >
           <DeleteIcon />
         </IconButton>
@@ -547,81 +503,54 @@ const Manufacturing = () => {
 
   const handleReassignAndDelete = async () => {
     if (!newContractorId) {
-      alert('Please select a new contractor');
+      alert("Please select a new contractor");
       return;
     }
 
     try {
-      await axios.delete(`/api/manufacturing/contractors/${contractorToDelete}?forceDelete=true&newContractorId=${newContractorId}`);
+      await axios.delete(
+        `/api/manufacturing/contractors/${contractorToDelete}?forceDelete=true&newContractorId=${newContractorId}`
+      );
       setOpenReassignDialog(false);
       setContractorToDelete(null);
-      setNewContractorId('');
+      setNewContractorId("");
       fetchManufacturingContractors();
       fetchAssignments();
     } catch (error) {
-      console.error('Error in reassignment:', error);
-      alert('Failed to reassign tasks and delete contractor');
+      console.error("Error in reassignment:", error);
+      alert("Failed to reassign tasks and delete contractor");
     }
   };
 
   const fetchRawMaterials = async () => {
     try {
-      const response = await axios.get('/api/inventory/raw-materials');
+      const response = await axios.get("/api/inventory/raw-materials");
       setRawMaterials(response.data);
     } catch (error) {
-      console.error('Error fetching raw materials:', error);
+      console.error("Error fetching raw materials:", error);
     }
   };
 
   const handlePrintInvoice = async (purchase) => {
     try {
-      const response = await axios.get(`/api/manufacturing/invoices/${purchase.id}/print`);
+      const response = await axios.get(
+        `/api/manufacturing/invoices/${purchase.id}/print`
+      );
 
-      // Create a new window and write the invoice HTML
-      const invoiceWindow = window.open('', '_blank');
+      const invoiceWindow = window.open("", "_blank");
       if (invoiceWindow) {
         invoiceWindow.document.write(response.data.invoiceHtml);
         invoiceWindow.document.close();
 
-        // Print automatically
-        invoiceWindow.onload = function() {
+        invoiceWindow.onload = function () {
           invoiceWindow.print();
         };
       } else {
-        alert('Please allow pop-ups to print invoices');
+        alert("Please allow pop-ups to print invoices");
       }
     } catch (error) {
-      console.error('Error printing invoice:', error);
-      alert(error.response?.data?.message || 'Error printing invoice');
-    }
-  };
-
-  const handleMarkAsPaid = async (order) => {
-    try {
-      await axios.put(`/api/manufacturing/orders/${order.id}/mark-paid`);
-      fetchManufacturingOrders(); // Refresh the orders list
-    } catch (error) {
-      console.error('Error marking order as paid:', error);
-      alert(error.response?.data?.message || 'Error marking order as paid');
-    }
-  };
-
-  const handlePrintManufacturingReceipt = async (order) => {
-    try {
-      const response = await axios.get(`/api/manufacturing/orders/${order.id}/receipt`);
-
-      // Create a new window and write the receipt HTML
-      const receiptWindow = window.open('', '_blank');
-      receiptWindow.document.write(response.data.receiptHtml);
-      receiptWindow.document.close();
-
-      // Print automatically
-      receiptWindow.onload = function() {
-        receiptWindow.print();
-      };
-    } catch (error) {
-      console.error('Error printing manufacturing receipt:', error);
-      alert(error.response?.data?.message || 'Error printing receipt');
+      console.error("Error printing invoice:", error);
+      alert(error.response?.data?.message || "Error printing invoice");
     }
   };
 
@@ -630,31 +559,35 @@ const Manufacturing = () => {
       setReportError(null);
       const params = new URLSearchParams();
       if (assignmentFilters.contractor_name) {
-        params.append('contractor_name', assignmentFilters.contractor_name);
+        params.append("contractor_name", assignmentFilters.contractor_name);
       }
       if (assignmentFilters.start_date) {
-        params.append('start_date', assignmentFilters.start_date);
+        params.append("start_date", assignmentFilters.start_date);
       }
       if (assignmentFilters.end_date) {
-        params.append('end_date', assignmentFilters.end_date);
+        params.append("end_date", assignmentFilters.end_date);
       }
 
-      const response = await axios.get(`/api/manufacturing/reports/assignments?${params.toString()}`);
+      const response = await axios.get(
+        `/api/manufacturing/reports/assignments?${params.toString()}`
+      );
       setReportData(response.data);
     } catch (error) {
-      console.error('Error generating report:', error);
-      setReportError(error.response?.data?.message || 'Error generating report');
+      console.error("Error generating report:", error);
+      setReportError(
+        error.response?.data?.message || "Error generating report"
+      );
     }
   };
 
   useEffect(() => {
-    if (currentTab === 4) {
+    if (currentTab === 3) {
       generateReport();
     }
     if (currentTab === 2) {
       fetchPurchases();
     }
-    if (currentTab === 3) {
+    if (currentTab === 0) {
       fetchManufacturingContractors();
       fetchAssignments();
     }
@@ -672,20 +605,20 @@ const Manufacturing = () => {
 
   const handlePrintReport = async (assignment) => {
     try {
-      const response = await axios.get(`/api/manufacturing/assignments/${assignment.id}/report`);
+      const response = await axios.get(
+        `/api/manufacturing/assignments/${assignment.id}/report`
+      );
 
-      // Create a new window and write the report HTML
-      const reportWindow = window.open('', '_blank');
+      const reportWindow = window.open("", "_blank");
       reportWindow.document.write(response.data.reportHtml);
       reportWindow.document.close();
 
-      // Print automatically
-      reportWindow.onload = function() {
+      reportWindow.onload = function () {
         reportWindow.print();
       };
     } catch (error) {
-      console.error('Error printing assignment report:', error);
-      alert(error.response?.data?.message || 'Error printing report');
+      console.error("Error printing assignment report:", error);
+      alert(error.response?.data?.message || "Error printing report");
     }
   };
 
@@ -726,85 +659,124 @@ const Manufacturing = () => {
               <Grid item xs={12} sm={6} md={4}>
                 <SummaryCard
                   title="Efficiency"
-                  value={selectedReport.efficiency === 'N/A' ? 'N/A' :
-                         selectedReport.efficiency.endsWith('*') ?
-                         `${selectedReport.efficiency.slice(0, -1)}%` :
-                         `${selectedReport.efficiency}%`}
+                  value={
+                    selectedReport.efficiency === "N/A"
+                      ? "N/A"
+                      : selectedReport.efficiency.endsWith("*")
+                      ? `${selectedReport.efficiency.slice(0, -1)}%`
+                      : `${selectedReport.efficiency}%`
+                  }
                   icon={SpeedIcon}
                   iconColor="warning.main"
                   gradientColor="warning"
-                  subtitle={selectedReport.status === 'active' ? 'Target Efficiency' :
-                           selectedReport.status === 'completed' ? 'Actual Efficiency' : 'Not Applicable'}
+                  subtitle={
+                    selectedReport.status === "active"
+                      ? "Target Efficiency"
+                      : selectedReport.status === "completed"
+                      ? "Actual Efficiency"
+                      : "Not Applicable"
+                  }
                 />
               </Grid>
             </Grid>
 
-            <Typography variant="h6" sx={{ mb: 2 }}>Assignment Details</Typography>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              Assignment Details
+            </Typography>
             <Grid container spacing={2} sx={{ mb: 3 }}>
               <Grid item xs={12} md={6}>
                 <Paper sx={{ p: 2 }}>
-                  <Typography variant="subtitle2" color="text.secondary">Contract Information</Typography>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Contract Information
+                  </Typography>
                   <Box sx={{ mt: 1 }}>
                     <Typography variant="body2" sx={{ mb: 1 }}>
-                      <strong>Contractor ID:</strong> {selectedReport.contractor_id}
+                      <strong>Contractor ID:</strong>{" "}
+                      {selectedReport.contractor_id}
                     </Typography>
                     <Typography variant="body2" sx={{ mb: 1 }}>
                       <strong>Phone:</strong> {selectedReport.contractor_phone}
                     </Typography>
                     <Typography variant="body2" sx={{ mb: 1 }}>
-                      <strong>Start Date:</strong> {new Date(selectedReport.start_date).toLocaleDateString()}
+                      <strong>Start Date:</strong>{" "}
+                      {new Date(selectedReport.start_date).toLocaleDateString()}
                     </Typography>
                     <Typography variant="body2">
-                      <strong>End Date:</strong> {new Date(selectedReport.end_date).toLocaleDateString()}
+                      <strong>End Date:</strong>{" "}
+                      {new Date(selectedReport.end_date).toLocaleDateString()}
                     </Typography>
                   </Box>
                 </Paper>
               </Grid>
               <Grid item xs={12} md={6}>
                 <Paper sx={{ p: 2 }}>
-                  <Typography variant="subtitle2" color="text.secondary">Production Details</Typography>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Production Details
+                  </Typography>
                   <Box sx={{ mt: 1 }}>
                     <Typography variant="body2" sx={{ mb: 1 }}>
-                      <strong>Raw Material:</strong> {selectedReport.raw_material_name}
+                      <strong>Raw Material:</strong>{" "}
+                      {selectedReport.raw_material_name}
                     </Typography>
                     <Typography variant="body2" sx={{ mb: 1 }}>
-                      <strong>Duration:</strong> {selectedReport.duration} {selectedReport.duration_type}(s)
+                      <strong>Duration:</strong> {selectedReport.duration}{" "}
+                      {selectedReport.duration_type}(s)
                     </Typography>
                     <Typography variant="body2" sx={{ mb: 1 }}>
                       <strong>Status:</strong>
                       <Chip
                         size="small"
-                        label={selectedReport.status.charAt(0).toUpperCase() + selectedReport.status.slice(1)}
+                        label={
+                          selectedReport.status === "completed"
+                            ? "Completed"
+                            : selectedReport.status === "active"
+                            ? "Active"
+                            : "Not Applicable"
+                        }
                         color={
-                          selectedReport.status === 'completed' ? 'success' :
-                          selectedReport.status === 'active' ? 'primary' :
-                          'default'
+                          selectedReport.status === "completed"
+                            ? "success"
+                            : selectedReport.status === "active"
+                            ? "primary"
+                            : "default"
                         }
                         sx={{ ml: 1 }}
                       />
                     </Typography>
                     <Typography variant="body2">
-                      <strong>Notes:</strong> {selectedReport.notes || 'N/A'}
+                      <strong>Notes:</strong> {selectedReport.notes || "N/A"}
                     </Typography>
                   </Box>
                 </Paper>
               </Grid>
             </Grid>
 
-            {selectedReport.status === 'completed' && (
-              <Typography variant="body1" color="success.main" sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+            {selectedReport.status === "completed" && (
+              <Typography
+                variant="body1"
+                color="success.main"
+                sx={{ mt: 2, display: "flex", alignItems: "center", gap: 1 }}
+              >
                 <CheckCircleIcon /> Assignment completed successfully
               </Typography>
             )}
 
-            {selectedReport.status === 'cancelled' && (
-              <Typography variant="body1" color="error.main" sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+            {selectedReport.status === "cancelled" && (
+              <Typography
+                variant="body1"
+                color="error.main"
+                sx={{ mt: 2, display: "flex", alignItems: "center", gap: 1 }}
+              >
                 <CancelIcon /> Assignment was cancelled
               </Typography>
             )}
 
-            {selectedReport.status === 'active' && (
-              <Typography variant="body1" color="primary.main" sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+            {selectedReport.status === "active" && (
+              <Typography
+                variant="body1"
+                color="primary.main"
+                sx={{ mt: 2, display: "flex", alignItems: "center", gap: 1 }}
+              >
                 <TimelineIcon /> Assignment is in progress
               </Typography>
             )}
@@ -822,53 +794,55 @@ const Manufacturing = () => {
   }, [assignmentFilters]);
 
   const handleDeleteAssignment = async (assignmentId) => {
-    if (!window.confirm('Are you sure you want to delete this assignment?')) return;
+    if (!window.confirm("Are you sure you want to delete this assignment?"))
+      return;
 
     try {
       await axios.delete(`/api/manufacturing/assignments/${assignmentId}`);
       await Promise.all([
         fetchAssignments(),
         fetchManufacturingContractors(),
-        fetchRawMaterials()
+        fetchRawMaterials(),
       ]);
     } catch (error) {
-      console.error('Error deleting assignment:', error);
-      alert(error.response?.data?.message || 'Error deleting assignment');
+      console.error("Error deleting assignment:", error);
+      alert(error.response?.data?.message || "Error deleting assignment");
     }
   };
 
   const handleUpdateAssignmentStatus = async (assignmentId, newStatus) => {
     try {
       await axios.put(`/api/manufacturing/assignments/${assignmentId}/status`, {
-        status: newStatus
+        status: newStatus,
       });
       await Promise.all([
         fetchAssignments(),
         fetchManufacturingContractors(),
-        fetchRawMaterials()
+        fetchRawMaterials(),
       ]);
     } catch (error) {
-      console.error('Error updating assignment status:', error);
-      alert(error.response?.data?.message || 'Error updating assignment status');
+      console.error("Error updating assignment status:", error);
+      alert(
+        error.response?.data?.message || "Error updating assignment status"
+      );
     }
   };
 
   const fetchPurchases = async () => {
     try {
-      const response = await axios.get('/api/manufacturing/purchases');
+      const response = await axios.get("/api/manufacturing/purchases");
       setPurchases(response.data);
     } catch (error) {
-      console.error('Error fetching purchases:', error);
+      console.error("Error fetching purchases:", error);
     }
   };
 
   const handlePurchaseSuccess = async () => {
     await Promise.all([
-      fetchManufacturingOrders(),
       fetchRawMaterials(),
       fetchCuttingContractors(),
       fetchManufacturingContractors(),
-      fetchPurchases()
+      fetchPurchases(),
     ]);
     setOpenPurchaseDialog(false);
   };
@@ -876,20 +850,72 @@ const Manufacturing = () => {
   const handleMarkPurchaseAsPaid = async (purchaseId) => {
     try {
       await axios.put(`/api/manufacturing/purchases/${purchaseId}/mark-paid`);
-      fetchPurchases(); // Refresh the purchases list
+      fetchPurchases();
     } catch (error) {
-      console.error('Error marking purchase as paid:', error);
-      alert(error.response?.data?.message || 'Error marking purchase as paid');
+      console.error("Error marking purchase as paid:", error);
+      alert(error.response?.data?.message || "Error marking purchase as paid");
+    }
+  };
+
+  const handleCloseAssignmentDialog = () => {
+    setOpenAssignmentDialog(false);
+    setAssignmentDialogSource(null);
+  };
+
+  const handleOpenCompletionDialog = (assignment) => {
+    setSelectedAssignment(assignment);
+    setCompletionFormData({
+      assignment_id: assignment.id,
+      raw_item_id: assignment.raw_material_id,
+      finished_good_id: '',
+      quantity_received: '',
+    });
+    setOpenCompletionDialog(true);
+  };
+
+  const handleCloseCompletionDialog = () => {
+    setOpenCompletionDialog(false);
+    setSelectedAssignment(null);
+    setCompletionFormData({
+      assignment_id: '',
+      raw_item_id: '',
+      finished_good_id: '',
+      quantity_received: '',
+    });
+  };
+
+  const handleCompletionSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post('/api/manufacturing/assignments/complete', completionFormData);
+      handleCloseCompletionDialog();
+      // Refresh all relevant data
+      await Promise.all([
+        fetchAssignments(),
+        fetchManufacturingContractors(),
+        fetchRawMaterials(),
+      ]);
+      enqueueSnackbar('Assignment completed successfully', { variant: 'success' });
+    } catch (error) {
+      console.error('Error completing assignment:', error);
+      enqueueSnackbar(error.response?.data?.message || 'Error completing assignment', { variant: 'error' });
     }
   };
 
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          mb: 4,
+        }}
+      >
         <Typography variant="h4" sx={{ fontWeight: 600 }}>
           Manufacturing Management
         </Typography>
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: "flex", gap: 2 }}>
           <Button
             variant="outlined"
             startIcon={<AddIcon />}
@@ -898,7 +924,7 @@ const Manufacturing = () => {
                 setSelectedContractor(cuttingContractors[0]);
                 setOpenPurchaseDialog(true);
               } else {
-                alert('Please add cutting contractors first');
+                alert("Please add cutting contractors first");
               }
             }}
           >
@@ -914,9 +940,9 @@ const Manufacturing = () => {
           <Button
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={() => handleOpenOrderDialog()}
+            onClick={() => handleOpenAssignmentDialog()}
           >
-            New Order
+            New Assignment
           </Button>
         </Box>
       </Box>
@@ -927,10 +953,15 @@ const Manufacturing = () => {
             icon={FactoryIcon}
             title="Total Orders"
             value={manufacturingOrders.length}
-            subtitle={`${manufacturingOrders.filter(o => o.status === 'in_progress').length} In Progress`}
+            subtitle={`${
+              manufacturingOrders.filter((o) => o.status === "in_progress")
+                .length
+            } In Progress`}
             iconColor="#9C27B0"
             gradientColor="secondary"
-            trend={`${manufacturingOrders.filter(o => o.status === 'completed').length} Completed`}
+            trend={`${
+              manufacturingOrders.filter((o) => o.status === "completed").length
+            } Completed`}
           />
         </Grid>
 
@@ -938,11 +969,18 @@ const Manufacturing = () => {
           <SummaryCard
             icon={WorkerIcon}
             title="Active Contractors"
-            value={manufacturingContractors.filter(c => c.status === 'active').length}
-            subtitle={`${assignments.filter(a => a.status === 'active').length} Active Assignments`}
+            value={
+              manufacturingContractors.filter((c) => c.status === "active")
+                .length
+            }
+            subtitle={`${
+              assignments.filter((a) => a.status === "active").length
+            } Active Assignments`}
             iconColor="#D32F2F"
             gradientColor="error"
-            trend={`${formatCurrency(assignments.reduce((sum, a) => sum + parseFloat(a.quantity), 0))} kg Total Assigned`}
+            trend={`${formatCurrency(
+              assignments.reduce((sum, a) => sum + parseFloat(a.quantity), 0)
+            )} kg Total Assigned`}
           />
         </Grid>
 
@@ -950,14 +988,20 @@ const Manufacturing = () => {
           <SummaryCard
             icon={SpeedIcon}
             title="Avg. Production Efficiency"
-            value={`${(manufacturingOrders
-              .filter(o => o.status === 'completed')
-              .reduce((sum, o) => sum + parseFloat(o.efficiency), 0) /
-              manufacturingOrders.filter(o => o.status === 'completed').length * 100).toFixed(1)}%`}
+            value={`${(
+              (manufacturingOrders
+                .filter((o) => o.status === "completed")
+                .reduce((sum, o) => sum + parseFloat(o.efficiency), 0) /
+                manufacturingOrders.filter((o) => o.status === "completed")
+                  .length) *
+              100
+            ).toFixed(1)}%`}
             subtitle="Based on Completed Orders"
             iconColor="#ED6C02"
             gradientColor="warning"
-            trend={`${manufacturingOrders.filter(o => o.status === 'completed').length} Orders Analyzed`}
+            trend={`${
+              manufacturingOrders.filter((o) => o.status === "completed").length
+            } Orders Analyzed`}
           />
         </Grid>
 
@@ -965,110 +1009,234 @@ const Manufacturing = () => {
           <SummaryCard
             icon={QualityIcon}
             title="Avg. Defect Rate"
-            value={`${(manufacturingOrders
-              .filter(o => o.status === 'completed')
-              .reduce((sum, o) => sum + parseFloat(o.defect_rate), 0) /
-              manufacturingOrders.filter(o => o.status === 'completed').length).toFixed(1)}%`}
+            value={`${(
+              manufacturingOrders
+                .filter((o) => o.status === "completed")
+                .reduce((sum, o) => sum + parseFloat(o.defect_rate), 0) /
+              manufacturingOrders.filter((o) => o.status === "completed").length
+            ).toFixed(1)}%`}
             subtitle="Quality Control Metric"
             iconColor="#2E7D32"
             gradientColor="success"
-            trend={`${formatCurrency(manufacturingOrders
-              .filter(o => o.status === 'completed')
-              .reduce((sum, o) => sum + parseFloat(o.downtime_hours), 0))} Hours Downtime`}
+            trend={`${formatCurrency(
+              manufacturingOrders
+                .filter((o) => o.status === "completed")
+                .reduce((sum, o) => sum + parseFloat(o.downtime_hours), 0)
+            )} Hours Downtime`}
           />
         </Grid>
       </Grid>
 
-      <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
+      <Paper elevation={0} sx={{ border: "1px solid", borderColor: "divider" }}>
         <Tabs
           value={currentTab}
           onChange={handleTabChange}
-          sx={{ borderBottom: 1, borderColor: 'divider', px: 2, pt: 2 }}
+          sx={{ borderBottom: 1, borderColor: "divider", px: 2, pt: 2 }}
         >
-          <Tab label="Orders" />
+          <Tab label="Assignments" />
           <Tab label="Contractors" />
           <Tab label="Purchases" />
-          <Tab label="Cinnamon Assignments" />
           <Tab label="Reports" />
         </Tabs>
 
         {currentTab === 0 && (
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Order Number</TableCell>
-                  <TableCell>Product</TableCell>
-                  <TableCell>Quantity</TableCell>
-                  <TableCell>Start Date</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Payment Status</TableCell>
-                  <TableCell></TableCell>
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {manufacturingOrders.map((order) => (
-                  <TableRow key={order.id} hover>
-                    <TableCell>{order.order_number}</TableCell>
-                    <TableCell>{products.find(p => p.id === order.product_id)?.name || 'Unknown'}</TableCell>
-                    <TableCell>{order.quantity}</TableCell>
-                    <TableCell>{new Date(order.start_date).toLocaleDateString()}</TableCell>
-                    <TableCell>
-                      <Chip
-                        label={order.status}
-                        color={getStatusColor(order.status)}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={order.payment_status || 'pending'}
-                        color={order.payment_status === 'paid' ? 'success' : 'warning'}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      {order.status === 'completed' && order.payment_status !== 'paid' && (
-                        <Button
-                          size="small"
-                          color="success"
-                          onClick={() => handleMarkAsPaid(order)}
-                        >
-                          Paid
-                        </Button>
-                      )}
-                    </TableCell>
-                    <TableCell align="right">
-                      <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
+          <>
+            <Paper sx={{ p: 2, mb: 3 }}>
+              <Grid container spacing={2} alignItems="center">
+                <Grid item xs={12} sm={4}>
+                  <FormControl fullWidth>
+                    <InputLabel>Contractor</InputLabel>
+                    <Select
+                      value={assignmentFilters.contractor_name}
+                      label="Contractor"
+                      onChange={(e) =>
+                        setAssignmentFilters((prev) => ({
+                          ...prev,
+                          contractor_name: e.target.value,
+                        }))
+                      }
+                      endAdornment={
+                        assignmentFilters.contractor_name && (
+                          <IconButton
+                            size="small"
+                            sx={{ mr: 2 }}
+                            onClick={() =>
+                              setAssignmentFilters((prev) => ({
+                                ...prev,
+                                contractor_name: "",
+                              }))
+                            }
+                          >
+                            <ClearIcon fontSize="small" />
+                          </IconButton>
+                        )
+                      }
+                    >
+                      <MenuItem value="">
+                        <em>All Contractors</em>
+                      </MenuItem>
+                      {manufacturingContractors.map((contractor) => (
+                        <MenuItem key={contractor.id} value={contractor.name}>
+                          {contractor.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    label="Start Date"
+                    type="date"
+                    value={assignmentFilters.start_date}
+                    onChange={(e) =>
+                      setAssignmentFilters((prev) => ({
+                        ...prev,
+                        start_date: e.target.value,
+                      }))
+                    }
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                    InputProps={{
+                      endAdornment: assignmentFilters.start_date && (
                         <IconButton
                           size="small"
-                          onClick={() => handlePrintManufacturingReceipt(order)}
-                          sx={{ color: 'info.main' }}
+                          onClick={() =>
+                            setAssignmentFilters((prev) => ({
+                              ...prev,
+                              start_date: "",
+                            }))
+                          }
                         >
-                          <PrintIcon />
+                          <ClearIcon fontSize="small" />
                         </IconButton>
+                      ),
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    label="End Date"
+                    type="date"
+                    value={assignmentFilters.end_date}
+                    onChange={(e) =>
+                      setAssignmentFilters((prev) => ({
+                        ...prev,
+                        end_date: e.target.value,
+                      }))
+                    }
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                    InputProps={{
+                      endAdornment: assignmentFilters.end_date && (
                         <IconButton
                           size="small"
-                          onClick={() => handleOpenOrderDialog(order)}
-                          sx={{ color: 'primary.main' }}
+                          onClick={() =>
+                            setAssignmentFilters((prev) => ({
+                              ...prev,
+                              end_date: "",
+                            }))
+                          }
                         >
-                          <EditIcon />
+                          <ClearIcon fontSize="small" />
                         </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleDeleteOrder(order.id)}
-                          sx={{ color: 'error.main' }}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </Box>
-                    </TableCell>
+                      ),
+                      inputProps: {
+                        min: assignmentFilters.start_date || undefined,
+                      },
+                    }}
+                  />
+                </Grid>
+              </Grid>
+            </Paper>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Contractor</TableCell>
+                    <TableCell>Raw Material</TableCell>
+                    <TableCell>Raw Material Qty</TableCell>
+                    <TableCell>Duration</TableCell>
+                    <TableCell>Start Date</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell align="right">Actions</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                </TableHead>
+                <TableBody>
+                  {assignments.map((assignment) => (
+                    <TableRow key={assignment.id} hover>
+                      <TableCell>
+                        {manufacturingContractors.find(
+                          (c) => c.id === assignment.contractor_id
+                        )?.name || "Unknown"}
+                      </TableCell>
+                      <TableCell>
+                        {rawMaterials.find(
+                          (r) => r.id === assignment.raw_material_id
+                        )?.product_name || "N/A"}
+                      </TableCell>
+                      <TableCell>
+                        {assignment.raw_material_quantity || "N/A"}
+                      </TableCell>
+                      <TableCell>{`${assignment.duration} ${assignment.duration_type}(s)`}</TableCell>
+                      <TableCell>
+                        {new Date(assignment.start_date).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={assignment.status}
+                          color={getStatusColor(assignment.status)}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell align="right">
+                        <Box
+                          sx={{
+                            display: "flex",
+                            gap: 0.5,
+                            justifyContent: "flex-end",
+                          }}
+                        >
+                          {assignment.status === "active" && (
+                            <Button
+                              size="small"
+                              color="success"
+                              onClick={() => handleOpenCompletionDialog(assignment)}
+                            >
+                              Completed
+                            </Button>
+                          )}
+                          <IconButton
+                            size="small"
+                            onClick={() =>
+                              handleOpenAssignmentDialog(assignment)
+                            }
+                            sx={{ color: "primary.main" }}
+                            title="Edit Assignment"
+                          >
+                            <EditIcon />
+                          </IconButton>
+                          <IconButton
+                            size="small"
+                            onClick={() =>
+                              handleDeleteAssignment(assignment.id)
+                            }
+                            sx={{ color: "error.main" }}
+                            title="Delete Assignment"
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </>
         )}
 
         {currentTab === 1 && (
@@ -1094,7 +1262,9 @@ const Manufacturing = () => {
                     <TableCell>
                       <Chip
                         label={contractor.status}
-                        color={contractor.status === 'active' ? 'success' : 'default'}
+                        color={
+                          contractor.status === "active" ? "success" : "default"
+                        }
                         size="small"
                       />
                     </TableCell>
@@ -1128,33 +1298,54 @@ const Manufacturing = () => {
               <TableBody>
                 {purchases.map((purchase) => (
                   <TableRow key={purchase.id} hover>
-                    <TableCell>{new Date(purchase.date).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      {new Date(purchase.date).toLocaleDateString()}
+                    </TableCell>
                     <TableCell>{purchase.invoice_number}</TableCell>
                     <TableCell>{purchase.contractor_name}</TableCell>
                     <TableCell>{`${purchase.product_name} - ${purchase.quantity} ${purchase.unit}`}</TableCell>
-                    <TableCell>{formatCurrency(purchase.total_amount)}</TableCell>
-                    <TableCell>{formatCurrency(purchase.cutting_rate)}/kg</TableCell>
-                    <TableCell>{formatCurrency(purchase.advance_payment)}</TableCell>
-                    <TableCell>{formatCurrency(purchase.final_amount)}</TableCell>
+                    <TableCell>
+                      {formatCurrency(purchase.total_amount)}
+                    </TableCell>
+                    <TableCell>
+                      {formatCurrency(purchase.cutting_rate)}/kg
+                    </TableCell>
+                    <TableCell>
+                      {formatCurrency(purchase.advance_payment)}
+                    </TableCell>
+                    <TableCell>
+                      {formatCurrency(purchase.final_amount)}
+                    </TableCell>
                     <TableCell>
                       <Chip
                         label={purchase.status}
                         color={
-                          purchase.status === 'paid' ? 'success' :
-                          purchase.status === 'confirmed' ? 'info' :
-                          purchase.status === 'cancelled' ? 'error' :
-                          'default'
+                          purchase.status === "paid"
+                            ? "success"
+                            : purchase.status === "confirmed"
+                            ? "info"
+                            : purchase.status === "cancelled"
+                            ? "error"
+                            : "default"
                         }
                         size="small"
                       />
                     </TableCell>
                     <TableCell align="right">
-                      <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
-                        {purchase.status !== 'paid' && (
+                      <Box
+                        sx={{
+                          display: "flex",
+                          gap: 0.5,
+                          justifyContent: "flex-end",
+                        }}
+                      >
+                        {purchase.status !== "paid" && (
                           <Button
                             size="small"
                             color="success"
-                            onClick={() => handleMarkPurchaseAsPaid(purchase.id)}
+                            onClick={() =>
+                              handleMarkPurchaseAsPaid(purchase.id)
+                            }
                           >
                             Paid
                           </Button>
@@ -1162,7 +1353,7 @@ const Manufacturing = () => {
                         <IconButton
                           size="small"
                           onClick={() => handlePrintInvoice(purchase)}
-                          sx={{ color: 'info.main' }}
+                          sx={{ color: "info.main" }}
                         >
                           <PrintIcon />
                         </IconButton>
@@ -1176,189 +1367,6 @@ const Manufacturing = () => {
         )}
 
         {currentTab === 3 && (
-          <>
-            <Paper sx={{ p: 2, mb: 3 }}>
-              <Grid container spacing={2} alignItems="center">
-                <Grid item xs={12} sm={4}>
-                  <FormControl fullWidth>
-                    <InputLabel>Contractor</InputLabel>
-                    <Select
-                      value={assignmentFilters.contractor_name}
-                      label="Contractor"
-                      onChange={(e) => setAssignmentFilters(prev => ({
-                        ...prev,
-                        contractor_name: e.target.value
-                      }))}
-                      endAdornment={
-                        assignmentFilters.contractor_name && (
-                          <IconButton
-                            size="small"
-                            sx={{ mr: 2 }}
-                            onClick={() => setAssignmentFilters(prev => ({
-                              ...prev,
-                              contractor_name: ''
-                            }))}
-                          >
-                            <ClearIcon fontSize="small" />
-                          </IconButton>
-                        )
-                      }
-                    >
-                      <MenuItem value="">
-                        <em>All Contractors</em>
-                      </MenuItem>
-                      {manufacturingContractors.map((contractor) => (
-                        <MenuItem key={contractor.id} value={contractor.name}>
-                          {contractor.name}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <TextField
-                    fullWidth
-                    label="Start Date"
-                    type="date"
-                    value={assignmentFilters.start_date}
-                    onChange={(e) => setAssignmentFilters(prev => ({
-                      ...prev,
-                      start_date: e.target.value
-                    }))}
-                    InputLabelProps={{
-                      shrink: true,
-                    }}
-                    InputProps={{
-                      endAdornment: assignmentFilters.start_date && (
-                        <IconButton
-                          size="small"
-                          onClick={() => setAssignmentFilters(prev => ({
-                            ...prev,
-                            start_date: ''
-                          }))}
-                        >
-                          <ClearIcon fontSize="small" />
-                        </IconButton>
-                      )
-                    }}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <TextField
-                    fullWidth
-                    label="End Date"
-                    type="date"
-                    value={assignmentFilters.end_date}
-                    onChange={(e) => setAssignmentFilters(prev => ({
-                      ...prev,
-                      end_date: e.target.value
-                    }))}
-                    InputLabelProps={{
-                      shrink: true,
-                    }}
-                    InputProps={{
-                      endAdornment: assignmentFilters.end_date && (
-                        <IconButton
-                          size="small"
-                          onClick={() => setAssignmentFilters(prev => ({
-                            ...prev,
-                            end_date: ''
-                          }))}
-                        >
-                          <ClearIcon fontSize="small" />
-                        </IconButton>
-                      ),
-                      inputProps: {
-                        min: assignmentFilters.start_date || undefined
-                      }
-                    }}
-                  />
-                </Grid>
-              </Grid>
-            </Paper>
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Contractor</TableCell>
-                    <TableCell>Raw Material</TableCell>
-                    <TableCell>Raw Material Qty</TableCell>
-                    <TableCell>Expected Output (kg)</TableCell>
-                    <TableCell>Duration</TableCell>
-                    <TableCell>Start Date</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell align="right">Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {assignments.map((assignment) => (
-                    <TableRow key={assignment.id} hover>
-                      <TableCell>
-                        {manufacturingContractors.find(c => c.id === assignment.contractor_id)?.name || 'Unknown'}
-                      </TableCell>
-                      <TableCell>
-                        {rawMaterials.find(r => r.id === assignment.raw_material_id)?.product_name || 'N/A'}
-                      </TableCell>
-                      <TableCell>{assignment.raw_material_quantity || 'N/A'}</TableCell>
-                      <TableCell>{assignment.quantity}</TableCell>
-                      <TableCell>{`${assignment.duration} ${assignment.duration_type}(s)`}</TableCell>
-                      <TableCell>{new Date(assignment.start_date).toLocaleDateString()}</TableCell>
-                      <TableCell>
-                        <Chip
-                          label={assignment.status}
-                          color={getStatusColor(assignment.status)}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell align="right">
-                        <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
-                          {assignment.status === 'active' && (
-                            <>
-                              <IconButton
-                                size="small"
-                                color="success"
-                                onClick={() => handleUpdateAssignmentStatus(assignment.id, 'completed')}
-                                title="Mark as Completed"
-                              >
-                                <CheckCircleIcon />
-                              </IconButton>
-                              <IconButton
-                                size="small"
-                                color="error"
-                                onClick={() => handleUpdateAssignmentStatus(assignment.id, 'cancelled')}
-                                title="Cancel Assignment"
-                              >
-                                <CancelIcon />
-                              </IconButton>
-                            </>
-                          )}
-                          <IconButton
-                            size="small"
-                            onClick={() => handleOpenAssignmentDialog(assignment)}
-                            sx={{ color: 'primary.main' }}
-                            title="Edit Assignment"
-                          >
-                            <EditIcon />
-                          </IconButton>
-                          <IconButton
-                            size="small"
-                            onClick={() => handleDeleteAssignment(assignment.id)}
-                            sx={{ color: 'error.main' }}
-                            title="Delete Assignment"
-                          >
-                            <DeleteIcon />
-                          </IconButton>
-                        </Box>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </>
-        )}
-
-        {currentTab === 4 && (
           <Box>
             <Paper sx={{ p: 2, mb: 3 }}>
               <Grid container spacing={2} alignItems="center">
@@ -1368,19 +1376,23 @@ const Manufacturing = () => {
                     <Select
                       value={assignmentFilters.contractor_name}
                       label="Contractor"
-                      onChange={(e) => setAssignmentFilters(prev => ({
-                        ...prev,
-                        contractor_name: e.target.value
-                      }))}
+                      onChange={(e) =>
+                        setAssignmentFilters((prev) => ({
+                          ...prev,
+                          contractor_name: e.target.value,
+                        }))
+                      }
                       endAdornment={
                         assignmentFilters.contractor_name && (
                           <IconButton
                             size="small"
                             sx={{ mr: 2 }}
-                            onClick={() => setAssignmentFilters(prev => ({
-                              ...prev,
-                              contractor_name: ''
-                            }))}
+                            onClick={() =>
+                              setAssignmentFilters((prev) => ({
+                                ...prev,
+                                contractor_name: "",
+                              }))
+                            }
                           >
                             <ClearIcon fontSize="small" />
                           </IconButton>
@@ -1404,10 +1416,12 @@ const Manufacturing = () => {
                     label="Start Date"
                     type="date"
                     value={assignmentFilters.start_date}
-                    onChange={(e) => setAssignmentFilters(prev => ({
-                      ...prev,
-                      start_date: e.target.value
-                    }))}
+                    onChange={(e) =>
+                      setAssignmentFilters((prev) => ({
+                        ...prev,
+                        start_date: e.target.value,
+                      }))
+                    }
                     InputLabelProps={{
                       shrink: true,
                     }}
@@ -1415,14 +1429,16 @@ const Manufacturing = () => {
                       endAdornment: assignmentFilters.start_date && (
                         <IconButton
                           size="small"
-                          onClick={() => setAssignmentFilters(prev => ({
-                            ...prev,
-                            start_date: ''
-                          }))}
+                          onClick={() =>
+                            setAssignmentFilters((prev) => ({
+                              ...prev,
+                              start_date: "",
+                            }))
+                          }
                         >
                           <ClearIcon fontSize="small" />
                         </IconButton>
-                      )
+                      ),
                     }}
                   />
                 </Grid>
@@ -1432,10 +1448,12 @@ const Manufacturing = () => {
                     label="End Date"
                     type="date"
                     value={assignmentFilters.end_date}
-                    onChange={(e) => setAssignmentFilters(prev => ({
-                      ...prev,
-                      end_date: e.target.value
-                    }))}
+                    onChange={(e) =>
+                      setAssignmentFilters((prev) => ({
+                        ...prev,
+                        end_date: e.target.value,
+                      }))
+                    }
                     InputLabelProps={{
                       shrink: true,
                     }}
@@ -1443,17 +1461,19 @@ const Manufacturing = () => {
                       endAdornment: assignmentFilters.end_date && (
                         <IconButton
                           size="small"
-                          onClick={() => setAssignmentFilters(prev => ({
-                            ...prev,
-                            end_date: ''
-                          }))}
+                          onClick={() =>
+                            setAssignmentFilters((prev) => ({
+                              ...prev,
+                              end_date: "",
+                            }))
+                          }
                         >
                           <ClearIcon fontSize="small" />
                         </IconButton>
                       ),
                       inputProps: {
-                        min: assignmentFilters.start_date || undefined
-                      }
+                        min: assignmentFilters.start_date || undefined,
+                      },
                     }}
                   />
                 </Grid>
@@ -1472,12 +1492,12 @@ const Manufacturing = () => {
                   <Paper
                     sx={{
                       p: 2,
-                      height: '100%',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      cursor: 'pointer',
-                      '&:hover': {
-                        bgcolor: 'action.hover',
+                      height: "100%",
+                      display: "flex",
+                      flexDirection: "column",
+                      cursor: "pointer",
+                      "&:hover": {
+                        bgcolor: "action.hover",
                       },
                     }}
                     onClick={() => handleOpenReport(assignment)}
@@ -1486,7 +1506,11 @@ const Manufacturing = () => {
                       <Typography variant="h6" gutterBottom>
                         {assignment.contractor_name}
                       </Typography>
-                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        gutterBottom
+                      >
                         {assignment.raw_material_name} • {assignment.status}
                       </Typography>
                     </Box>
@@ -1523,11 +1547,12 @@ const Manufacturing = () => {
                         Efficiency
                       </Typography>
                       <Typography variant="body2">
-                        {assignment.efficiency}% • Duration: {assignment.duration} {assignment.duration_type}(s)
+                        {assignment.efficiency}% • Duration:{" "}
+                        {assignment.duration} {assignment.duration_type}(s)
                       </Typography>
                     </Box>
 
-                    <Box sx={{ mt: 'auto', pt: 2 }}>
+                    <Box sx={{ mt: "auto", pt: 2 }}>
                       <Button
                         variant="outlined"
                         fullWidth
@@ -1548,135 +1573,50 @@ const Manufacturing = () => {
         )}
       </Paper>
 
-      <Dialog open={openOrderDialog} onClose={handleCloseOrderDialog}>
-        <DialogTitle>
-          {selectedOrder ? 'Edit Manufacturing Order' : 'New Manufacturing Order'}
-        </DialogTitle>
+      <Dialog
+        open={openAssignmentDialog}
+        onClose={handleCloseAssignmentDialog}
+      >
+        <DialogTitle>Assign Raw Material to Contractor</DialogTitle>
         <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Product"
-                name="product_id"
-                select
-                value={orderFormData.product_id}
-                onChange={(e) => setOrderFormData(prev => ({
-                  ...prev,
-                  product_id: e.target.value
-                }))}
-              >
-                {products.map((product) => (
-                  <MenuItem key={product.id} value={product.id}>
-                    {product.name}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Quantity"
-                name="quantity"
-                type="number"
-                value={orderFormData.quantity}
-                onChange={(e) => setOrderFormData(prev => ({
-                  ...prev,
-                  quantity: e.target.value
-                }))}
-              />
-            </Grid>
-            <Grid item xs={6}>
-              <TextField
-                required
-                fullWidth
-                label="Start Date"
-                name="start_date"
-                type="date"
-                value={orderFormData.start_date}
-                onChange={(e) => setOrderFormData(prev => ({
-                  ...prev,
-                  start_date: e.target.value
-                }))}
-                InputLabelProps={{ shrink: true }}
-                error={!orderFormData.start_date}
-                helperText={!orderFormData.start_date ? 'Start date is required' : ''}
-              />
-            </Grid>
-            <Grid item xs={6}>
-              <TextField
-                fullWidth
-                label="End Date"
-                name="end_date"
-                type="date"
-                value={orderFormData.end_date}
-                onChange={(e) => setOrderFormData(prev => ({
-                  ...prev,
-                  end_date: e.target.value
-                }))}
-                InputLabelProps={{ shrink: true }}
-                helperText="Optional"
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Notes"
-                name="notes"
-                multiline
-                rows={4}
-                value={orderFormData.notes}
-                onChange={(e) => setOrderFormData(prev => ({
-                  ...prev,
-                  notes: e.target.value
-                }))}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Status"
-                name="status"
-                select
-                value={orderFormData.status}
-                onChange={(e) => setOrderFormData(prev => ({
-                  ...prev,
-                  status: e.target.value
-                }))}
-              >
-                {STATUS_OPTIONS.map((status) => (
-                  <MenuItem key={status} value={status}>
-                    {status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ')}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseOrderDialog}>Cancel</Button>
-          <Button variant="contained" onClick={handleOrderSubmit}>
-            {selectedOrder ? 'Update' : 'Create'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog open={openAssignmentDialog} onClose={() => setOpenAssignmentDialog(false)}>
-        <DialogTitle>Assign Cinnamon to Contractor</DialogTitle>
-        <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
+          <Grid container spacing={2}>
+            {(assignmentDialogSource === 'header' || !assignmentFormData.contractor_id) && (
+              <Grid item xs={12}>
+                <FormControl fullWidth>
+                  <InputLabel>Contractor</InputLabel>
+                  <Select
+                    value={assignmentFormData.contractor_id}
+                    onChange={(e) =>
+                      setAssignmentFormData((prev) => ({
+                        ...prev,
+                        contractor_id: e.target.value,
+                      }))
+                    }
+                    required
+                  >
+                    {manufacturingContractors.map((contractor) => (
+                      <MenuItem key={contractor.id} value={contractor.id}>
+                        {contractor.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+            )}
             <Grid item xs={12}>
               <FormControl fullWidth>
                 <InputLabel>Raw Material</InputLabel>
                 <Select
                   value={assignmentFormData.raw_material_id}
-                  onChange={(e) => setAssignmentFormData(prev => ({
-                    ...prev,
-                    raw_material_id: e.target.value
-                  }))}
+                  onChange={(e) =>
+                    setAssignmentFormData((prev) => ({
+                      ...prev,
+                      raw_material_id: e.target.value,
+                    }))
+                  }
                   required
                 >
-                  {rawMaterials.map(material => (
+                  {rawMaterials.map((material) => (
                     <MenuItem key={material.id} value={material.id}>
                       {material.product_name} (Stock: {material.quantity} {material.unit})
                     </MenuItem>
@@ -1690,23 +1630,12 @@ const Manufacturing = () => {
                 label="Raw Material Quantity"
                 type="number"
                 value={assignmentFormData.raw_material_quantity}
-                onChange={(e) => setAssignmentFormData(prev => ({
-                  ...prev,
-                  raw_material_quantity: e.target.value
-                }))}
-                required
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Expected Output Quantity (kg)"
-                type="number"
-                value={assignmentFormData.quantity}
-                onChange={(e) => setAssignmentFormData(prev => ({
-                  ...prev,
-                  quantity: e.target.value
-                }))}
+                onChange={(e) =>
+                  setAssignmentFormData((prev) => ({
+                    ...prev,
+                    raw_material_quantity: e.target.value,
+                  }))
+                }
                 required
               />
             </Grid>
@@ -1716,10 +1645,12 @@ const Manufacturing = () => {
                 label="Duration"
                 type="number"
                 value={assignmentFormData.duration}
-                onChange={(e) => setAssignmentFormData(prev => ({
-                  ...prev,
-                  duration: e.target.value
-                }))}
+                onChange={(e) =>
+                  setAssignmentFormData((prev) => ({
+                    ...prev,
+                    duration: e.target.value,
+                  }))
+                }
                 required
               />
             </Grid>
@@ -1728,10 +1659,12 @@ const Manufacturing = () => {
                 <InputLabel>Duration Type</InputLabel>
                 <Select
                   value={assignmentFormData.duration_type}
-                  onChange={(e) => setAssignmentFormData(prev => ({
-                    ...prev,
-                    duration_type: e.target.value
-                  }))}
+                  onChange={(e) =>
+                    setAssignmentFormData((prev) => ({
+                      ...prev,
+                      duration_type: e.target.value,
+                    }))
+                  }
                 >
                   <MenuItem value="day">Days</MenuItem>
                   <MenuItem value="week">Weeks</MenuItem>
@@ -1745,10 +1678,12 @@ const Manufacturing = () => {
                 label="Start Date"
                 type="date"
                 value={assignmentFormData.start_date}
-                onChange={(e) => setAssignmentFormData(prev => ({
-                  ...prev,
-                  start_date: e.target.value
-                }))}
+                onChange={(e) =>
+                  setAssignmentFormData((prev) => ({
+                    ...prev,
+                    start_date: e.target.value,
+                  }))
+                }
                 InputLabelProps={{ shrink: true }}
                 required
               />
@@ -1760,10 +1695,12 @@ const Manufacturing = () => {
                 multiline
                 rows={2}
                 value={assignmentFormData.notes}
-                onChange={(e) => setAssignmentFormData(prev => ({
-                  ...prev,
-                  notes: e.target.value
-                }))}
+                onChange={(e) =>
+                  setAssignmentFormData((prev) => ({
+                    ...prev,
+                    notes: e.target.value,
+                  }))
+                }
               />
             </Grid>
           </Grid>
@@ -1773,14 +1710,22 @@ const Manufacturing = () => {
           <Button
             variant="contained"
             onClick={handleAssignmentSubmit}
-            disabled={!assignmentFormData.quantity || !assignmentFormData.raw_material_id || !assignmentFormData.raw_material_quantity}
+            disabled={
+              !assignmentFormData.contractor_id ||
+              !assignmentFormData.raw_material_id ||
+              !assignmentFormData.raw_material_quantity ||
+              !assignmentFormData.duration
+            }
           >
             Assign
           </Button>
         </DialogActions>
       </Dialog>
 
-      <Dialog open={openPaymentDialog} onClose={() => setOpenPaymentDialog(false)}>
+      <Dialog
+        open={openPaymentDialog}
+        onClose={() => setOpenPaymentDialog(false)}
+      >
         <DialogTitle>Process Advance Payment</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -1790,10 +1735,12 @@ const Manufacturing = () => {
                 label="Amount"
                 type="number"
                 value={advancePaymentData.amount}
-                onChange={(e) => setAdvancePaymentData(prev => ({
-                  ...prev,
-                  amount: e.target.value
-                }))}
+                onChange={(e) =>
+                  setAdvancePaymentData((prev) => ({
+                    ...prev,
+                    amount: e.target.value,
+                  }))
+                }
                 required
               />
             </Grid>
@@ -1804,10 +1751,12 @@ const Manufacturing = () => {
                 multiline
                 rows={2}
                 value={advancePaymentData.notes}
-                onChange={(e) => setAdvancePaymentData(prev => ({
-                  ...prev,
-                  notes: e.target.value
-                }))}
+                onChange={(e) =>
+                  setAdvancePaymentData((prev) => ({
+                    ...prev,
+                    notes: e.target.value,
+                  }))
+                }
               />
             </Grid>
           </Grid>
@@ -1822,7 +1771,7 @@ const Manufacturing = () => {
 
       <Dialog open={openDialog} onClose={handleCloseDialog}>
         <DialogTitle>
-          {selectedContractor ? 'Edit Contractor' : 'New Contractor'}
+          {selectedContractor ? "Edit Contractor" : "New Contractor"}
         </DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -1873,7 +1822,7 @@ const Manufacturing = () => {
         <DialogActions>
           <Button onClick={handleCloseDialog}>Cancel</Button>
           <Button variant="contained" onClick={handleContractorSubmit}>
-            {selectedContractor ? 'Update' : 'Create'}
+            {selectedContractor ? "Update" : "Create"}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1894,7 +1843,7 @@ const Manufacturing = () => {
         onClose={() => {
           setOpenReassignDialog(false);
           setContractorToDelete(null);
-          setNewContractorId('');
+          setNewContractorId("");
         }}
         maxWidth="sm"
         fullWidth
@@ -1903,7 +1852,8 @@ const Manufacturing = () => {
         <DialogContent>
           <Box sx={{ mt: 2 }}>
             <Alert severity="info" sx={{ mb: 2 }}>
-              This contractor has active assignments. Please select a new contractor to take over these assignments before deleting.
+              This contractor has active assignments. Please select a new
+              contractor to take over these assignments before deleting.
             </Alert>
 
             <FormControl fullWidth sx={{ mb: 2 }}>
@@ -1914,7 +1864,9 @@ const Manufacturing = () => {
                 label="New Contractor"
               >
                 {manufacturingContractors
-                  .filter(c => c.id !== contractorToDelete && c.status === 'active')
+                  .filter(
+                    (c) => c.id !== contractorToDelete && c.status === "active"
+                  )
                   .map((contractor) => (
                     <MenuItem key={contractor.id} value={contractor.id}>
                       {contractor.name} ({contractor.contractor_id})
@@ -1929,7 +1881,7 @@ const Manufacturing = () => {
             onClick={() => {
               setOpenReassignDialog(false);
               setContractorToDelete(null);
-              setNewContractorId('');
+              setNewContractorId("");
             }}
           >
             Cancel
@@ -1945,6 +1897,68 @@ const Manufacturing = () => {
       </Dialog>
 
       <ReportDialog />
+
+      <Dialog open={openCompletionDialog} onClose={handleCloseCompletionDialog}>
+        <DialogTitle>
+          Complete Manufacturing Assignment
+        </DialogTitle>
+        <DialogContent>
+          <Box component="form" onSubmit={handleCompletionSubmit} sx={{ mt: 2 }}>
+            <Grid container spacing={2}>
+              <Grid item xs={12}>
+                <FormControl fullWidth>
+                  <InputLabel>Finished Good</InputLabel>
+                  <Select
+                    value={completionFormData.finished_good_id}
+                    onChange={(e) =>
+                      setCompletionFormData({
+                        ...completionFormData,
+                        finished_good_id: e.target.value,
+                      })
+                    }
+                    required
+                  >
+                    {finishedGoods.map((good) => (
+                      <MenuItem key={good.id} value={good.id}>
+                        {good.product_name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Quantity Received (kg)"
+                  type="number"
+                  value={completionFormData.quantity_received}
+                  onChange={(e) =>
+                    setCompletionFormData({
+                      ...completionFormData,
+                      quantity_received: e.target.value,
+                    })
+                  }
+                />
+                {selectedAssignment && (
+                  <FormHelperText>
+                    Original assigned quantity: {selectedAssignment.raw_material_quantity} kg
+                  </FormHelperText>
+                )}
+              </Grid>
+            </Grid>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseCompletionDialog}>Cancel</Button>
+          <Button
+            onClick={handleCompletionSubmit}
+            variant="contained"
+            disabled={!completionFormData.quantity_received || !completionFormData.finished_good_id}
+          >
+            Complete Assignment
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

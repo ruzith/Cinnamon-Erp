@@ -10,7 +10,6 @@ const contractorSchema = Joi.object({
 
 const assignmentSchema = Joi.object({
   contractor_id: Joi.number().integer().required(),
-  quantity: Joi.number().positive().required(),
   duration: Joi.number().integer().positive().required(),
   duration_type: Joi.string().valid('day', 'week', 'month').required(),
   start_date: Joi.date().required(),

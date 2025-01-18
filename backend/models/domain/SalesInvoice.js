@@ -15,7 +15,7 @@ class SalesInvoice extends BaseModel {
     );
     const count = result[0].count + 1;
 
-    return `SAL${year}${month}${count.toString().padStart(4, '0')}`;
+    return `SAL-${year}${month}-${count.toString().padStart(4, '0')}`;
   }
 
   async findByInvoiceNumber(invoiceNumber) {
@@ -143,7 +143,7 @@ class SalesInvoice extends BaseModel {
             'OUT',
             item.quantity,
             invoiceNumber,
-            'Sales Invoice'
+            `Product sold through sales invoice ${invoiceNumber}`
           ]);
         }
       }
@@ -187,7 +187,7 @@ class SalesInvoice extends BaseModel {
             type: 'IN',
             quantity: item.quantity,
             reference: invoice[0].invoice_number,
-            notes: 'Sales Return'
+            notes: `Product returned from sales invoice ${invoice[0].invoice_number}`
           }
         );
       }

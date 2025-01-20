@@ -114,4 +114,4 @@ export const assetSlice = createSlice({
 });
 
 export const { reset, setCurrentAsset } = assetSlice.actions;
-export default assetSlice.reducer; 
+export default assetSlice.reducer;

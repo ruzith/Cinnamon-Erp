@@ -1780,6 +1780,101 @@ const generateEmployeeWorkHours = async (connection, count = 100) => {
   return workHours;
 };
 
+// Add this helper function near the top with other helper functions
+const generateManufacturingAdvancePayments = async (connection) => {
+  const [contractors] = await connection.query('SELECT id FROM manufacturing_contractors');
+  const [users] = await connection.query('SELECT id FROM users WHERE role = "admin" LIMIT 1');
+  const adminId = users[0].id;
+
+  return Array.from({ length: 15 }, () => {
+    const date = faker.date.recent({ days: 30 });
+    const year = date.getFullYear();
+    const nextNumber = faker.number.int({ min: 1, max: 9999 }).toString().padStart(4, '0');
+
+    return {
+      contractor_id: faker.helpers.arrayElement(contractors).id,
+      amount: faker.number.float({ min: 5000, max: 50000, precision: 2 }),
+      payment_date: faker.date.recent({ days: 30 }),
+      receipt_number: `MAP${year}${nextNumber}`,
+      notes: faker.helpers.arrayElement([
+        'Advance payment for upcoming work',
+        'Initial payment for manufacturing contract',
+        'Requested advance for raw materials',
+        null
+      ]),
+      status: faker.helpers.arrayElement(['pending', 'paid', 'used', 'cancelled']),
+      created_by: adminId,
+      created_at: date,
+      updated_at: date
+    };
+  });
+};
+
+// Modify generateManufacturingPayments to use array parameters instead of object
+const generateManufacturingPayments = async (connection) => {
+  const [contractors] = await connection.execute('SELECT id FROM manufacturing_contractors');
+  const [assignments] = await connection.execute('SELECT id, contractor_id FROM cinnamon_assignments');
+  const [users] = await connection.execute('SELECT id FROM users WHERE role = "admin"');
+
+  const payments = [];
+  for (const assignment of assignments) {
+    // Generate 1-3 payments per assignment
+    const numPayments = faker.number.int({ min: 1, max: 3 });
+
+    for (let i = 0; i < numPayments; i++) {
+      const quantity = faker.number.float({ min: 50, max: 500, multipleOf: 0.01 });
+      const pricePerKg = faker.number.float({ min: 200, max: 400, multipleOf: 0.01 });
+      const amount = quantity * pricePerKg;
+
+      const date = new Date();
+      const year = date.getFullYear().toString().substr(-2);
+      const receiptNumber = `MP${year}${faker.string.numeric(4)}`;
+
+      payments.push([
+        assignment.contractor_id,
+        assignment.id,
+        receiptNumber,
+        quantity,
+        pricePerKg,
+        amount,
+        faker.date.recent({ days: 30 }).toISOString().split('T')[0],
+        faker.lorem.sentence(),
+        faker.helpers.arrayElement(['pending', 'paid', 'cancelled']),
+        users[0].id
+      ]);
+    }
+  }
+  return payments;
+};
+
+// Modify generateManufacturingPaymentUsages to use array parameters
+const generateManufacturingPaymentUsages = async (connection, payments) => {
+  const [advancePayments] = await connection.execute(
+    'SELECT id, contractor_id, amount FROM manufacturing_advance_payments WHERE status = "paid"'
+  );
+
+  const usages = [];
+  for (const payment of payments) {
+    const contractorAdvances = advancePayments.filter(ap => ap.contractor_id === payment[0]); // contractor_id is first element
+    if (contractorAdvances.length === 0) continue;
+
+    let remainingAmount = payment[5]; // amount is sixth element
+    for (const advance of contractorAdvances) {
+      if (remainingAmount <= 0) break;
+
+      const amountToUse = Math.min(remainingAmount, advance.amount);
+      usages.push([
+        payment.id,
+        advance.id,
+        amountToUse
+      ]);
+
+      remainingAmount -= amountToUse;
+    }
+  }
+  return usages;
+};
+
 const seedData = async () => {
   const connection = await pool.getConnection();
 
@@ -1796,6 +1891,7 @@ const seedData = async () => {
       'asset_categories', 'purchase_items', 'purchase_invoices',
       'sales_items', 'sales_invoices', 'inventory_transactions',
       'inventory', 'manufacturing_orders', 'cinnamon_assignments',
+      'manufacturing_advance_payments', // Add this line
       'land_assignments', 'cutting_contractors', 'manufacturing_contractors',
       'wells', 'leases', 'lands', 'land_categories', 'employee_group_members', 'employee_groups',
       'employees', 'designations', 'products', 'product_categories', 'tasks',
@@ -1969,7 +2065,7 @@ const seedData = async () => {
 
     // Then seed manufacturing advance payments
     console.log('Seeding manufacturing advance payments...');
-    const manufacturingAdvancePayments = await generateAdvancePayments(connection);
+    const manufacturingAdvancePayments = await generateManufacturingAdvancePayments(connection);
     for (const payment of manufacturingAdvancePayments) {
       await connection.query('INSERT INTO manufacturing_advance_payments SET ?', payment);
     }
@@ -2337,6 +2433,48 @@ const seedData = async () => {
         'UPDATE purchase_invoices SET subtotal = ?, total_amount = ? WHERE id = ?',
         [totalAmount, totalAmount, invoiceId]
       );
+    }
+
+    // Modify the seedData function to include the new seeding
+    // Add this inside the try block of seedData, after seeding advance payments
+    console.log('Seeding manufacturing payments...');
+    const manufacturingPayments = await generateManufacturingPayments(connection);
+    const insertedPayments = [];
+    for (const payment of manufacturingPayments) {
+      const [result] = await connection.execute(
+        `INSERT INTO manufacturing_payments
+         (contractor_id, assignment_id, receipt_number, quantity_kg, price_per_kg, amount, payment_date, notes, status, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        payment
+      );
+      insertedPayments.push({ ...payment, id: result.insertId });
+    }
+
+    console.log('Seeding manufacturing payment usages...');
+    const paymentUsages = await generateManufacturingPaymentUsages(connection, insertedPayments);
+    for (const usage of paymentUsages) {
+      await connection.execute(
+        'INSERT INTO manufacturing_payment_usages (payment_id, advance_payment_id, amount_used) VALUES (?, ?, ?)',
+        usage
+      );
+
+      // Update advance payment status if fully used
+      const [advancePayment] = await connection.execute(
+        'SELECT amount FROM manufacturing_advance_payments WHERE id = ?',
+        [usage[1]] // advance_payment_id is second element
+      );
+
+      const [totalUsed] = await connection.execute(
+        'SELECT SUM(amount_used) as total FROM manufacturing_payment_usages WHERE advance_payment_id = ?',
+        [usage[1]]
+      );
+
+      if (totalUsed[0].total >= advancePayment[0].amount) {
+        await connection.execute(
+          'UPDATE manufacturing_advance_payments SET status = "used" WHERE id = ?',
+          [usage[1]]
+        );
+      }
     }
 
     await connection.commit();

@@ -494,7 +494,6 @@ const Inventory = () => {
           sx={{ borderBottom: 1, borderColor: 'divider', px: 2, pt: 2 }}
         >
           <Tab label="Inventory Items" />
-          <Tab label="Transactions History" />
           <Tab label="Stock History" />
         </Tabs>
 
@@ -507,7 +506,6 @@ const Inventory = () => {
                   <TableCell>Category</TableCell>
                   <TableCell align="right">Quantity</TableCell>
                   <TableCell>Stock Level</TableCell>
-                  <TableCell align="right">Price/Assignment</TableCell>
                   <TableCell>Location</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell align="right">Actions</TableCell>
@@ -516,7 +514,18 @@ const Inventory = () => {
               <TableBody>
                 {inventory.map((item) => (
                   <TableRow key={item.id} hover>
-                    <TableCell>{item.product_name}</TableCell>
+                    <TableCell>
+                      <Box>
+                        <Typography variant="body1">
+                          {item.product_name}
+                        </Typography>
+                        {item.description && (
+                          <Typography variant="body2" color="text.secondary">
+                            {item.description}
+                          </Typography>
+                        )}
+                      </Box>
+                    </TableCell>
                     <TableCell>
                       <Chip
                         label={item.category === 'finished_good' ? 'Finished Good' : 'Raw Material'}
@@ -533,27 +542,6 @@ const Inventory = () => {
                         color={getStockLevelColor(item)}
                         size="small"
                       />
-                    </TableCell>
-                    <TableCell align="right">
-                      {item.category === 'finished_good'
-                        ? (
-                            <>
-                              {formatCurrency(item.purchase_price)}
-                              {item.manufacturing_id && Array.isArray(manufacturingPurchases) &&
-                                manufacturingPurchases.find(p => p.id === item.manufacturing_id) &&
-                                ` (Invoice: ${manufacturingPurchases.find(p => p.id === item.manufacturing_id).invoice_number})`}
-                            </>
-                          )
-                        : (
-                            <>
-                              {item.cutting_assignment_id && cuttingTasks.find(t => t.id === item.cutting_assignment_id) &&
-                                `Cutting: ${cuttingTasks.find(t => t.id === item.cutting_assignment_id).land_number}`}
-                              {item.cutting_assignment_id && item.purchase_assignment_id && ' | '}
-                              {item.purchase_assignment_id && cinnamonAssignments.find(a => a.id === item.purchase_assignment_id) &&
-                                `Purchase: ${cinnamonAssignments.find(a => a.id === item.purchase_assignment_id).raw_material_name}`}
-                            </>
-                          )
-                      }
                     </TableCell>
                     <TableCell>{item.location}</TableCell>
                     <TableCell>
@@ -587,149 +575,6 @@ const Inventory = () => {
         </TabPanel>
 
         <TabPanel value={tabValue} index={1}>
-          <Paper sx={{ p: 2, mb: 3 }}>
-            <Grid container spacing={2} alignItems="center">
-              <Grid item xs={12} sm={4}>
-                <FormControl fullWidth size="small">
-                  <InputLabel id="product-filter-label">Product</InputLabel>
-                  <Select
-                    labelId="product-filter-label"
-                    value={productFilter}
-                    label="Product"
-                    onChange={(e) => setProductFilter(e.target.value)}
-                    endAdornment={
-                      productFilter && (
-                        <IconButton
-                          size="small"
-                          sx={{ mr: 2 }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setProductFilter('');
-                          }}
-                        >
-                          <ClearIcon fontSize="small" />
-                        </IconButton>
-                      )
-                    }
-                  >
-                    <MenuItem value="">
-                      <em>All Products</em>
-                    </MenuItem>
-                    {uniqueProducts.map((product) => (
-                      <MenuItem key={product} value={product}>
-                        {product}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  fullWidth
-                  label="Start Date"
-                  type="date"
-                  size="small"
-                  value={dateFilters.start_date}
-                  onChange={(e) => setDateFilters(prev => ({
-                    ...prev,
-                    start_date: e.target.value
-                  }))}
-                  InputLabelProps={{
-                    shrink: true,
-                  }}
-                  InputProps={{
-                    endAdornment: dateFilters.start_date && (
-                      <IconButton
-                        size="small"
-                        onClick={() => setDateFilters(prev => ({
-                          ...prev,
-                          start_date: ''
-                        }))}
-                      >
-                        <ClearIcon fontSize="small" />
-                      </IconButton>
-                    )
-                  }}
-                />
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  fullWidth
-                  label="End Date"
-                  type="date"
-                  size="small"
-                  value={dateFilters.end_date}
-                  onChange={(e) => setDateFilters(prev => ({
-                    ...prev,
-                    end_date: e.target.value
-                  }))}
-                  InputLabelProps={{
-                    shrink: true,
-                  }}
-                  InputProps={{
-                    endAdornment: dateFilters.end_date && (
-                      <IconButton
-                        size="small"
-                        onClick={() => setDateFilters(prev => ({
-                          ...prev,
-                          end_date: ''
-                        }))}
-                      >
-                        <ClearIcon fontSize="small" />
-                      </IconButton>
-                    ),
-                    inputProps: {
-                      min: dateFilters.start_date || undefined
-                    }
-                  }}
-                />
-              </Grid>
-            </Grid>
-          </Paper>
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Date</TableCell>
-                  <TableCell>Product</TableCell>
-                  <TableCell>Type</TableCell>
-                  <TableCell>Quantity</TableCell>
-                  <TableCell>Reference</TableCell>
-                  <TableCell>Notes</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {filteredTransactions.map((transaction) => {
-                  const isIncrease = transaction.type === 'IN';
-                  return (
-                    <TableRow key={transaction.id} hover>
-                      <TableCell>{new Date(transaction.created_at).toLocaleDateString()}</TableCell>
-                      <TableCell>{transaction.product_name}</TableCell>
-                      <TableCell>
-                        <Chip
-                          label={transaction.type}
-                          color={isIncrease ? 'success' : transaction.type === 'OUT' ? 'error' : 'warning'}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Typography
-                          color={isIncrease ? 'success.main' : 'error.main'}
-                        >
-                          {isIncrease ? '+' : '-'}{Math.abs(transaction.quantity)}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>{transaction.reference}</TableCell>
-                      <TableCell>{transaction.notes}</TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </TabPanel>
-
-        <TabPanel value={tabValue} index={2}>
           <Paper sx={{ p: 2, mb: 3 }}>
             <Grid container spacing={2} alignItems="center">
               <Grid item xs={12} sm={4}>
@@ -970,7 +815,7 @@ const Inventory = () => {
                 helperText={formData.category === 'raw_material' ? 'Not applicable for raw materials' : ''}
               />
             </Grid>
-            {formData.category === 'raw_material' && (
+            {/* {formData.category === 'raw_material' && (
               <>
                 <Grid item xs={12} sm={6}>
                   <FormControl fullWidth>
@@ -1033,7 +878,7 @@ const Inventory = () => {
                   </Select>
                 </FormControl>
               </Grid>
-            )}
+            )} */}
             <Grid item xs={12}>
               <TextField
                 fullWidth

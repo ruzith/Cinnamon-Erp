@@ -1429,13 +1429,14 @@ const Accounting = () => {
                   label="Date"
                   type="date"
                   fullWidth
+                  required
                   InputLabelProps={{ shrink: true }}
                   value={transactionFormData.date}
                   onChange={handleTransactionInputChange}
                 />
               </Grid>
               <Grid item xs={6}>
-                <FormControl fullWidth>
+                <FormControl fullWidth required>
                   <InputLabel>Type</InputLabel>
                   <Select
                     name="type"
@@ -1452,7 +1453,7 @@ const Accounting = () => {
                 </FormControl>
               </Grid>
               <Grid item xs={6}>
-                <FormControl fullWidth>
+                <FormControl fullWidth required>
                   <InputLabel>Category</InputLabel>
                   <Select
                     name="category"
@@ -1474,12 +1475,13 @@ const Accounting = () => {
                   label="Amount"
                   type="number"
                   fullWidth
+                  required
                   value={transactionFormData.amount}
                   onChange={handleTransactionInputChange}
                 />
               </Grid>
               <Grid item xs={6}>
-                <FormControl fullWidth>
+                <FormControl fullWidth required>
                   <InputLabel>Account</InputLabel>
                   <Select
                     name="account"
@@ -1497,7 +1499,7 @@ const Accounting = () => {
                 </FormControl>
               </Grid>
               <Grid item xs={6}>
-                <FormControl fullWidth>
+                <FormControl fullWidth required>
                   <InputLabel>Payment Method</InputLabel>
                   <Select
                     name="paymentMethod"

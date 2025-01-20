@@ -343,6 +343,10 @@ const Sales = () => {
       }));
 
       const subtotal = transformedItems.reduce((sum, item) => sum + item.sub_total, 0);
+      const taxPercentage = parseFloat(saleFormData.tax) || 0;
+      const taxAmount = (subtotal * taxPercentage) / 100;
+      const discount = parseFloat(saleFormData.discount) || 0;
+      const total = subtotal + taxAmount - discount;
 
       const formattedData = {
         customer_id: saleFormData.customerId,
@@ -352,20 +356,18 @@ const Sales = () => {
         payment_method: saleFormData.paymentMethod,
         notes: saleFormData.notes,
         shipping_address: saleFormData.shippingAddress,
-        tax: parseFloat(saleFormData.tax) || 0,
-        discount: parseFloat(saleFormData.discount) || 0,
+        tax: taxPercentage, // Send tax as percentage
+        discount: discount,
         sub_total: subtotal,
-        total: calculateTotal(),
+        total: total,
         date: new Date().toISOString().split('T')[0]
       };
 
       let response;
       if (selectedSale) {
-        // Update existing sale
         response = await axios.put(`/api/sales/${selectedSale.id}`, formattedData);
         console.log('Updated sale:', response.data);
       } else {
-        // Create new sale
         response = await axios.post('/api/sales', formattedData);
         console.log('Created sale:', response.data);
       }
@@ -538,9 +540,10 @@ const Sales = () => {
 
   const calculateTotal = () => {
     const subtotal = productRows.reduce((sum, row) => sum + (row.sub_total || 0), 0);
-    const tax = parseFloat(saleFormData.tax) || 0;
+    const taxPercentage = parseFloat(saleFormData.tax) || 0;
+    const taxAmount = (subtotal * taxPercentage) / 100;
     const discount = parseFloat(saleFormData.discount) || 0;
-    return subtotal + tax - discount;
+    return subtotal + taxAmount - discount;
   };
 
   const [formData, setFormData] = useState({
@@ -728,7 +731,9 @@ const Sales = () => {
                 <Grid container spacing={2}>
                   <Grid item xs={12}>
                     <FormControl fullWidth size="small">
-                      <InputLabel>Select Customer</InputLabel>
+                      <InputLabel
+                      required
+                      >Select Customer</InputLabel>
                       <Select
                         name="customerId"
                         value={saleFormData.customerId}
@@ -875,7 +880,10 @@ const Sales = () => {
                             target: { name: 'tax', value: e.target.value }
                           })}
                           sx={{ width: '100px' }}
-                          InputProps={{ inputProps: { min: 0, step: "0.01" } }}
+                          InputProps={{
+                            inputProps: { min: 0, max: 100 },
+                            endAdornment: <Typography variant="caption">%</Typography>
+                          }}
                         />
                       </Box>
                       <Box sx={{

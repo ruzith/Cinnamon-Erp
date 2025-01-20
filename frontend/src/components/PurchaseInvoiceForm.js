@@ -230,7 +230,9 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor, onSuccess, con
                 <Grid container spacing={2}>
                   <Grid item xs={8}>
                     <FormControl fullWidth size="small">
-                      <InputLabel>Select Cutting Contractor</InputLabel>
+                      <InputLabel
+                      required
+                      >Select Cutting Contractor</InputLabel>
                       <Select
                         value={formData.contractor}
                         onChange={(e) => {

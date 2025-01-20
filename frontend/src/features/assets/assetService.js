@@ -54,4 +54,4 @@ const assetService = {
   getAssetUsageReport
 }
 
-export default assetService 
+export default assetService

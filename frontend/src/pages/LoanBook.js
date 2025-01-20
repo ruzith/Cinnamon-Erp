@@ -410,7 +410,7 @@ const LoanBook = () => {
           type: "revenue",
           category: "loan_repayment",
           amount: paymentFormData.amount,
-          description: `Loan repayment from ${selectedLoan?.borrower_name}`,
+          description: `Loan repayment from ${selectedLoan?.borrowerName}`,
           reference: paymentFormData.reference || `LOAN-REPAY-${Date.now()}`,
           paymentMethod: paymentFormData.paymentMethod,
           status: "completed",
@@ -425,6 +425,11 @@ const LoanBook = () => {
       handleClosePaymentDialog();
     } catch (error) {
       console.error("Error processing payment:", error);
+      if (error.response?.data?.message === "Validation failed") {
+        alert(Object.values(error.response.data.errors)[0]);
+      } else {
+        alert(error.response?.data?.message || 'Error processing payment');
+      }
     }
   };
 
@@ -876,7 +881,7 @@ const LoanBook = () => {
         }}
       >
         <Typography variant="h4" sx={{ fontWeight: 600 }}>
-          Loan Management
+          Loan Book
         </Typography>
         <Button
           variant="contained"
@@ -1377,7 +1382,9 @@ const LoanBook = () => {
             <Grid item xs={12}>
               {loanFormData.borrower_type === 'employee' && (
                 <FormControl fullWidth>
-                  <InputLabel>Select Employee</InputLabel>
+                  <InputLabel
+                  required
+                  >Select Employee</InputLabel>
                   <Select
                     name="borrower_id"
                     value={loanFormData.borrower_id}
@@ -1395,7 +1402,9 @@ const LoanBook = () => {
 
               {loanFormData.borrower_type === 'contractor' && (
                 <FormControl fullWidth>
-                  <InputLabel>Select Contractor</InputLabel>
+                  <InputLabel
+                  required
+                  >Select Contractor</InputLabel>
                   <Select
                     name="borrower_id"
                     value={loanFormData.borrower_id}
@@ -1419,6 +1428,7 @@ const LoanBook = () => {
                 fullWidth
                 value={loanFormData.amount}
                 onChange={handleLoanInputChange}
+                required
               />
             </Grid>
             <Grid item xs={6}>
@@ -1429,6 +1439,7 @@ const LoanBook = () => {
                 fullWidth
                 value={loanFormData.interestRate}
                 onChange={handleLoanInputChange}
+                required
               />
             </Grid>
             <Grid item xs={6}>
@@ -1439,6 +1450,7 @@ const LoanBook = () => {
                 fullWidth
                 value={loanFormData.term}
                 onChange={handleLoanInputChange}
+                required
               />
             </Grid>
             <Grid item xs={6}>
@@ -1449,6 +1461,7 @@ const LoanBook = () => {
                   value={loanFormData.paymentFrequency}
                   label="Payment Frequency"
                   onChange={handleLoanInputChange}
+                  required
                 >
                   <MenuItem value="weekly">Weekly</MenuItem>
                   <MenuItem value="monthly">Monthly</MenuItem>
@@ -1466,6 +1479,7 @@ const LoanBook = () => {
                 InputLabelProps={{ shrink: true }}
                 value={loanFormData.startDate}
                 onChange={handleLoanInputChange}
+                required
               />
             </Grid>
             <Grid item xs={6}>
@@ -1477,6 +1491,7 @@ const LoanBook = () => {
                 InputLabelProps={{ shrink: true }}
                 value={loanFormData.endDate}
                 onChange={handleLoanInputChange}
+                required
               />
             </Grid>
             <Grid item xs={12}>
@@ -1568,6 +1583,7 @@ const LoanBook = () => {
                 fullWidth
                 value={paymentFormData.amount}
                 onChange={handlePaymentInputChange}
+                required
               />
             </Grid>
             <Grid item xs={6}>
@@ -1579,6 +1595,7 @@ const LoanBook = () => {
                 InputLabelProps={{ shrink: true }}
                 value={paymentFormData.date}
                 onChange={handlePaymentInputChange}
+                required
               />
             </Grid>
             <Grid item xs={6}>

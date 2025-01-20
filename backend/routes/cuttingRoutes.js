@@ -34,6 +34,7 @@ const {
   markAdvancePaymentAsPaid,
   markPaymentAsPaid
 } = require('../controllers/cuttingController');
+const { generateAdvancePaymentReceipt } = require('../utils/receiptTemplates');
 
 router.use(protect);
 
@@ -97,6 +98,18 @@ router.route('/advance-payments')
 router.route('/advance-payments/:id')
   .put(authorize(['admin', 'accountant']), updateAdvancePayment)
   .delete(authorize(['admin', 'accountant']), deleteAdvancePayment);
+
+router.route('/advance-payments/receipt')
+  .post(protect, async (req, res) => {
+    try {
+      const { payment, settings } = req.body;
+      const receiptHtml = generateAdvancePaymentReceipt(payment, settings);
+      res.json({ receiptHtml });
+    } catch (error) {
+      console.error('Error generating receipt:', error);
+      res.status(500).json({ message: 'Error generating receipt' });
+    }
+  });
 
 router.route('/advance-payments/contractor/:id')
   .get(getAdvancePaymentsByContractor);

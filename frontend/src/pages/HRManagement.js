@@ -1357,7 +1357,9 @@ export default function HRManagement() {
         <DialogTitle>New Salary Advance</DialogTitle>
         <DialogContent>
           <FormControl fullWidth sx={{ mt: 2 }}>
-            <InputLabel>Employee</InputLabel>
+            <InputLabel
+            required
+            >Employee</InputLabel>
             <Select
               value={selectedEmployee}
               onChange={(e) => setSelectedEmployee(e.target.value)}
@@ -1376,6 +1378,7 @@ export default function HRManagement() {
             value={advanceAmount}
             onChange={(e) => setAdvanceAmount(e.target.value)}
             sx={{ mt: 2 }}
+            required
           />
         </DialogContent>
         <DialogActions>

@@ -29,6 +29,10 @@ import {
   InputAdornment,
   TableSortLabel,
   FormHelperText,
+  List,
+  ListItem,
+  ListItemText,
+  Checkbox,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -38,7 +42,7 @@ import {
   Inventory as ProductIcon,
   Engineering as WorkerIcon,
   Grade as QualityIcon,
-  Payment as PaymentIcon,
+  CreditCard as CreditCardIcon,
   ShoppingCart as ShoppingCartIcon,
   Speed as SpeedIcon,
   Grade as GradeIcon,
@@ -48,6 +52,8 @@ import {
   Timeline as TimelineIcon,
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
+  Money as MoneyIcon,
+  Paid as PaidIcon,
 } from "@mui/icons-material";
 import axios from "axios";
 import PurchaseInvoiceForm from "../components/PurchaseInvoiceForm";
@@ -55,9 +61,16 @@ import { useCurrencyFormatter } from "../utils/currencyUtils";
 import { formatDate, getCurrentDateTime } from "../utils/dateUtils";
 import SummaryCard from "../components/common/SummaryCard";
 import { fetchCuttingContractors } from "../features/cutting/cuttingSlice";
-import { useSnackbar } from 'notistack';
+import { useSnackbar } from "notistack";
 
 const STATUS_OPTIONS = ["planned", "in_progress", "completed", "cancelled"];
+
+const ADVANCE_PAYMENT_STATUSES = {
+  pending: { color: "warning", label: "Pending" },
+  paid: { color: "success", label: "Paid" },
+  used: { color: "info", label: "Used" },
+  cancelled: { color: "error", label: "Cancelled" },
+};
 
 const Manufacturing = () => {
   const [manufacturingOrders, setManufacturingOrders] = useState([]);
@@ -91,9 +104,7 @@ const Manufacturing = () => {
     notes: "",
   });
   const [advancePaymentData, setAdvancePaymentData] = useState({
-    contractor_id: "",
     amount: "",
-    payment_date: new Date().toISOString().split("T")[0],
     notes: "",
   });
   const [openAssignmentDialog, setOpenAssignmentDialog] = useState(false);
@@ -125,13 +136,39 @@ const Manufacturing = () => {
   const [openCompletionDialog, setOpenCompletionDialog] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [completionFormData, setCompletionFormData] = useState({
-    assignment_id: '',
-    raw_item_id: '',
-    finished_good_id: '',
-    quantity_received: '',
+    assignment_id: "",
+    raw_item_id: "",
+    finished_good_id: "",
+    quantity_received: "",
   });
   const [finishedGoods, setFinishedGoods] = useState([]);
   const { enqueueSnackbar } = useSnackbar();
+  const [advancePayments, setAdvancePayments] = useState([]);
+  const [selectedPayment, setSelectedPayment] = useState(null);
+  const [reassignDialog, setReassignDialog] = useState(false);
+  const [reassignmentData, setReassignmentData] = useState({
+    oldContractorId: null,
+    newContractorId: "",
+    advancePayments: [],
+    assignments: [],
+    purchaseInvoices: [],
+  });
+  const [openManufacturingPaymentDialog, setOpenManufacturingPaymentDialog] =
+    useState(false);
+  const [manufacturingPaymentFormData, setManufacturingPaymentFormData] =
+    useState({
+      contractor_id: "",
+      assignment_id: "",
+      quantity_kg: "",
+      price_per_kg: "",
+      total_amount: "",
+      notes: "",
+      status: "pending",
+      id: null,
+      finished_good_id: "",
+      selectedAdvancePayments: [],
+    });
+  const [manufacturingPayments, setManufacturingPayments] = useState([]);
 
   useEffect(() => {
     fetchProducts();
@@ -141,6 +178,8 @@ const Manufacturing = () => {
     fetchRawMaterials();
     fetchPurchases();
     fetchFinishedGoods();
+    fetchAdvancePayments();
+    fetchManufacturingPayments();
   }, []);
 
   const fetchProducts = async () => {
@@ -180,6 +219,27 @@ const Manufacturing = () => {
       setFinishedGoods(response.data);
     } catch (error) {
       console.error("Error fetching finished goods:", error);
+    }
+  };
+
+  const fetchAdvancePayments = async () => {
+    try {
+      const response = await axios.get("/api/manufacturing/advance-payments");
+      setAdvancePayments(response.data);
+    } catch (error) {
+      console.error("Error fetching advance payments:", error);
+    }
+  };
+
+  const fetchManufacturingPayments = async () => {
+    try {
+      const response = await axios.get("/api/manufacturing/payments");
+      setManufacturingPayments(response.data);
+    } catch (error) {
+      console.error("Error fetching manufacturing payments:", error);
+      enqueueSnackbar("Error fetching manufacturing payments", {
+        variant: "error",
+      });
     }
   };
 
@@ -253,16 +313,35 @@ const Manufacturing = () => {
 
   const handleDeleteContractor = async (contractorId) => {
     try {
-      await axios.delete(`/api/manufacturing/contractors/${contractorId}`);
-      fetchManufacturingContractors();
-    } catch (error) {
-      if (error.response?.data?.assignmentCount > 0) {
-        setContractorToDelete(contractorId);
-        setOpenReassignDialog(true);
+      const response = await axios.get(
+        `/api/manufacturing/contractors/${contractorId}/related-data`
+      );
+      const relatedData = response.data;
+
+      if (relatedData.hasRelatedData) {
+        setReassignmentData({
+          oldContractorId: contractorId,
+          newContractorId: "",
+          advancePayments: relatedData.advancePayments || [],
+          assignments: relatedData.assignments || [],
+          purchaseInvoices: relatedData.purchaseInvoices || [],
+        });
+        setReassignDialog(true);
       } else {
-        console.error("Error deleting contractor:", error);
-        alert(error.response?.data?.message || "Error deleting contractor");
+        await axios.delete(`/api/manufacturing/contractors/${contractorId}`);
+        enqueueSnackbar("Contractor deleted successfully", {
+          variant: "success",
+        });
+        fetchManufacturingContractors();
       }
+    } catch (error) {
+      console.error("Error deleting contractor:", error);
+      enqueueSnackbar(
+        error.response?.data?.message || "Error deleting contractor",
+        {
+          variant: "error",
+        }
+      );
     }
   };
 
@@ -309,7 +388,7 @@ const Manufacturing = () => {
   };
 
   const handleOpenAssignmentDialog = (assignment = null, contractor = null) => {
-    setAssignmentDialogSource(contractor ? 'table' : 'header');
+    setAssignmentDialogSource(contractor ? "table" : "header");
 
     setAssignmentFormData({
       contractor_id: contractor ? contractor.id : "",
@@ -379,39 +458,84 @@ const Manufacturing = () => {
     }
   };
 
-  const handleAdvancePayment = async (e) => {
-    e.preventDefault();
-    try {
-      const response = await axios.post(
-        "/api/manufacturing/advance-payments",
-        advancePaymentData
-      );
-
-      if (response.data.receiptHtml) {
-        const receiptWindow = window.open("", "_blank");
-        if (receiptWindow) {
-          receiptWindow.document.write(response.data.receiptHtml);
-          receiptWindow.document.close();
-
-          receiptWindow.onload = function () {
-            receiptWindow.print();
-          };
-        } else {
-          alert("Please allow pop-ups to print receipts");
-        }
-      }
-
-      await fetchManufacturingContractors();
-      setOpenPaymentDialog(false);
+  const handleOpenAdvancePaymentDialog = (contractor = null) => {
+    if (contractor) {
+      setAdvancePaymentData({
+        contractor_id: contractor.id,
+        amount: "",
+        notes: "",
+      });
+    } else {
       setAdvancePaymentData({
         contractor_id: "",
         amount: "",
-        payment_date: new Date().toISOString().split("T")[0],
         notes: "",
       });
+    }
+    setOpenPaymentDialog(true);
+  };
+
+  const handleAdvancePaymentSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const paymentData = {
+        ...advancePaymentData,
+        contractor_id: parseInt(advancePaymentData.contractor_id),
+      };
+
+      if (selectedPayment) {
+        // Update existing payment
+        await axios.put(
+          `/api/manufacturing/advance-payments/${selectedPayment.id}`,
+          paymentData
+        );
+        enqueueSnackbar("Advance payment updated successfully", {
+          variant: "success",
+        });
+      } else {
+        // Create new payment
+        const response = await axios.post(
+          "/api/manufacturing/advance-payments",
+          paymentData
+        );
+
+        if (response.data.receiptHtml) {
+          const receiptWindow = window.open("", "_blank");
+          if (receiptWindow) {
+            receiptWindow.document.write(response.data.receiptHtml);
+            receiptWindow.document.close();
+            receiptWindow.onload = function () {
+              receiptWindow.print();
+            };
+          } else {
+            enqueueSnackbar("Please allow pop-ups to print receipts", {
+              variant: "warning",
+            });
+          }
+        }
+        enqueueSnackbar("Advance payment processed successfully", {
+          variant: "success",
+        });
+      }
+
+      setOpenPaymentDialog(false);
+      setSelectedPayment(null);
+      setAdvancePaymentData({
+        amount: "",
+        notes: "",
+      });
+      await Promise.all([
+        fetchAdvancePayments(),
+        fetchManufacturingContractors(),
+      ]);
     } catch (error) {
       console.error("Error processing advance payment:", error);
-      alert(error.response?.data?.message || "Error processing payment");
+      enqueueSnackbar(
+        error.response?.data?.message || "Error processing advance payment",
+        {
+          variant: "error",
+        }
+      );
     }
   };
 
@@ -437,37 +561,25 @@ const Manufacturing = () => {
     }
   };
 
-  const handleOpenPaymentDialog = (contractor = null) => {
-    if (contractor) {
-      setAdvancePaymentData((prev) => ({
-        ...prev,
-        contractor_id: contractor.id,
-        notes: `Advance payment for ${contractor.name}`,
-      }));
-    } else {
-      setAdvancePaymentData({
-        contractor_id: "",
-        amount: "",
-        payment_date: new Date().toISOString().split("T")[0],
-        notes: "",
-      });
-    }
-    setOpenPaymentDialog(true);
-  };
-
   const handleTabChange = (event, newValue) => {
     setCurrentTab(newValue);
   };
 
+  const handleProcessPayment = (contractor) => {
+    setManufacturingPaymentFormData({
+      contractor_id: contractor.id,
+      assignment_id: "",
+      quantity_kg: "",
+      price_per_kg: "",
+      total_amount: "",
+      notes: "",
+      status: "pending",
+    });
+    setOpenManufacturingPaymentDialog(true);
+  };
+
   const renderContractorActions = (contractor) => (
-    <Box
-      sx={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "flex-end",
-        gap: 1,
-      }}
-    >
+    <Box sx={{ display: "flex", gap: 1, justifyContent: "flex-end" }}>
       <Button
         size="small"
         color="success"
@@ -478,10 +590,11 @@ const Manufacturing = () => {
       <Box sx={{ display: "flex", gap: 0.5 }}>
         <IconButton
           size="small"
-          onClick={() => handleOpenPaymentDialog(contractor)}
-          sx={{ color: "warning.main", ml: 1 }}
+          onClick={() => handleOpenAdvancePaymentDialog(contractor)}
+          sx={{ color: "warning.main" }}
+          title="Advance Payment"
         >
-          <PaymentIcon />
+          <MoneyIcon />
         </IconButton>
         <IconButton
           size="small"
@@ -867,8 +980,8 @@ const Manufacturing = () => {
     setCompletionFormData({
       assignment_id: assignment.id,
       raw_item_id: assignment.raw_material_id,
-      finished_good_id: '',
-      quantity_received: '',
+      finished_good_id: "",
+      quantity_received: "",
     });
     setOpenCompletionDialog(true);
   };
@@ -877,17 +990,20 @@ const Manufacturing = () => {
     setOpenCompletionDialog(false);
     setSelectedAssignment(null);
     setCompletionFormData({
-      assignment_id: '',
-      raw_item_id: '',
-      finished_good_id: '',
-      quantity_received: '',
+      assignment_id: "",
+      raw_item_id: "",
+      finished_good_id: "",
+      quantity_received: "",
     });
   };
 
   const handleCompletionSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('/api/manufacturing/assignments/complete', completionFormData);
+      await axios.post(
+        "/api/manufacturing/assignments/complete",
+        completionFormData
+      );
       handleCloseCompletionDialog();
       // Refresh all relevant data
       await Promise.all([
@@ -895,10 +1011,497 @@ const Manufacturing = () => {
         fetchManufacturingContractors(),
         fetchRawMaterials(),
       ]);
-      enqueueSnackbar('Assignment completed successfully', { variant: 'success' });
+      enqueueSnackbar("Assignment completed successfully", {
+        variant: "success",
+      });
     } catch (error) {
-      console.error('Error completing assignment:', error);
-      enqueueSnackbar(error.response?.data?.message || 'Error completing assignment', { variant: 'error' });
+      console.error("Error completing assignment:", error);
+      enqueueSnackbar(
+        error.response?.data?.message || "Error completing assignment",
+        { variant: "error" }
+      );
+    }
+  };
+
+  const handleMarkAdvancePaymentAsPaid = async (paymentId) => {
+    try {
+      await axios.put(
+        `/api/manufacturing/advance-payments/${paymentId}/mark-paid`
+      );
+      enqueueSnackbar("Advance payment marked as paid", { variant: "success" });
+      await fetchAdvancePayments();
+    } catch (error) {
+      console.error("Error marking advance payment as paid:", error);
+      enqueueSnackbar(
+        error.response?.data?.message || "Error marking payment as paid",
+        { variant: "error" }
+      );
+    }
+  };
+
+  const handleDeleteAdvancePayment = async (paymentId) => {
+    if (
+      !window.confirm("Are you sure you want to delete this advance payment?")
+    )
+      return;
+
+    try {
+      await axios.delete(`/api/manufacturing/advance-payments/${paymentId}`);
+      enqueueSnackbar("Advance payment deleted successfully", {
+        variant: "success",
+      });
+      await fetchAdvancePayments();
+    } catch (error) {
+      console.error("Error deleting advance payment:", error);
+      enqueueSnackbar(
+        error.response?.data?.message || "Error deleting advance payment",
+        {
+          variant: "error",
+        }
+      );
+    }
+  };
+
+  const handleEditAdvancePayment = (payment) => {
+    setSelectedPayment(payment);
+    setAdvancePaymentData({
+      amount: payment.amount,
+      notes: payment.notes || "",
+    });
+    setOpenPaymentDialog(true);
+  };
+
+  const handleCloseAdvancePaymentDialog = () => {
+    setOpenPaymentDialog(false);
+    setSelectedPayment(null);
+    setAdvancePaymentData({
+      amount: "",
+      notes: "",
+    });
+  };
+
+  const handleReassignmentClose = () => {
+    setReassignDialog(false);
+    setReassignmentData({
+      oldContractorId: null,
+      newContractorId: "",
+      advancePayments: [],
+      assignments: [],
+      purchaseInvoices: [],
+    });
+  };
+
+  const handleReassignmentSubmit = async () => {
+    if (!reassignmentData.newContractorId) {
+      enqueueSnackbar("Please select a new contractor", { variant: "error" });
+      return;
+    }
+
+    try {
+      await axios.delete(
+        `/api/manufacturing/contractors/${reassignmentData.oldContractorId}?forceDelete=true&newContractorId=${reassignmentData.newContractorId}`
+      );
+
+      // Refresh the data
+      await Promise.all([
+        fetchManufacturingContractors(),
+        fetchAssignments(),
+        fetchAdvancePayments(),
+      ]);
+
+      handleReassignmentClose();
+      enqueueSnackbar("Contractor data reassigned and deleted successfully", {
+        variant: "success",
+      });
+    } catch (error) {
+      console.error("Error in reassignment:", error);
+      enqueueSnackbar("Failed to reassign data and delete contractor", {
+        variant: "error",
+      });
+    }
+  };
+
+  const ReassignmentDialog = () => (
+    <Dialog
+      open={reassignDialog}
+      onClose={handleReassignmentClose}
+      maxWidth="md"
+      fullWidth
+    >
+      <DialogTitle>Reassign Contractor Data</DialogTitle>
+      <DialogContent>
+        <Box sx={{ mt: 2 }}>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            This contractor has related data that needs to be reassigned before
+            deletion. Please select a new contractor to transfer the following
+            items:
+          </Alert>
+
+          <FormControl fullWidth sx={{ mb: 3 }}>
+            <InputLabel>New Contractor</InputLabel>
+            <Select
+              value={reassignmentData.newContractorId}
+              onChange={(e) =>
+                setReassignmentData((prev) => ({
+                  ...prev,
+                  newContractorId: e.target.value,
+                }))
+              }
+              label="New Contractor"
+            >
+              {manufacturingContractors
+                .filter(
+                  (c) =>
+                    c.id !== reassignmentData.oldContractorId &&
+                    c.status === "active"
+                )
+                .map((contractor) => (
+                  <MenuItem key={contractor.id} value={contractor.id}>
+                    {contractor.name} ({contractor.contractor_id})
+                  </MenuItem>
+                ))}
+            </Select>
+          </FormControl>
+
+          <List>
+            {reassignmentData.assignments.length > 0 && (
+              <ListItem>
+                <ListItemText
+                  primary={`${reassignmentData.assignments.length} Active Assignments`}
+                  secondary={reassignmentData.assignments
+                    .map(
+                      (a) =>
+                        `Assignment #${a.id}: ${a.raw_material_quantity}kg of ${
+                          a.raw_material_name || "material"
+                        }`
+                    )
+                    .join(", ")}
+                />
+              </ListItem>
+            )}
+
+            {reassignmentData.advancePayments.length > 0 && (
+              <ListItem>
+                <ListItemText
+                  primary={`${reassignmentData.advancePayments.length} Advance Payments`}
+                  secondary={reassignmentData.advancePayments
+                    .map(
+                      (p) =>
+                        `Payment #${p.receipt_number}: ${formatCurrency(
+                          p.amount
+                        )}`
+                    )
+                    .join(", ")}
+                />
+              </ListItem>
+            )}
+
+            {reassignmentData.purchaseInvoices.length > 0 && (
+              <ListItem>
+                <ListItemText
+                  primary={`${reassignmentData.purchaseInvoices.length} Purchase Invoices`}
+                  secondary={reassignmentData.purchaseInvoices
+                    .map(
+                      (i) =>
+                        `Invoice #${i.invoice_number}: ${formatCurrency(
+                          i.total_amount
+                        )}`
+                    )
+                    .join(", ")}
+                />
+              </ListItem>
+            )}
+          </List>
+        </Box>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={handleReassignmentClose}>Cancel</Button>
+        <Button
+          onClick={handleReassignmentSubmit}
+          variant="contained"
+          color="primary"
+          disabled={!reassignmentData.newContractorId}
+        >
+          Reassign and Delete
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+
+  const handleOpenManufacturingPaymentDialog = async (assignment) => {
+    try {
+      console.log("Opening payment dialog with assignment:", assignment);
+
+      // Fetch available advance payments for this contractor
+      const response = await axios.get(
+        `/api/manufacturing/contractors/${assignment.contractor_id}/advance-payments?status=paid`
+      );
+      const contractorAdvancePayments = response.data.payments || [];
+
+      // Set the form data with the assignment details
+      setManufacturingPaymentFormData({
+        contractor_id: assignment.contractor_id,
+        assignment_id: assignment.id,
+        quantity_kg: assignment.completed_quantity || assignment.quantity || "",
+        price_per_kg: "",
+        total_amount: "",
+        notes: "",
+        status: "pending",
+        id: null,
+        finished_good_id: assignment.finished_good_id || "",
+        selectedAdvancePayments: [],
+      });
+
+      // Update the advance payments state with only this contractor's payments
+      setAdvancePayments(contractorAdvancePayments);
+
+      setOpenManufacturingPaymentDialog(true);
+    } catch (error) {
+      console.error("Error preparing manufacturing payment dialog:", error);
+      enqueueSnackbar("Error preparing payment form", { variant: "error" });
+    }
+  };
+
+  const handleCloseManufacturingPaymentDialog = () => {
+    setOpenManufacturingPaymentDialog(false);
+    setManufacturingPaymentFormData({
+      contractor_id: "",
+      assignment_id: "",
+      quantity_kg: "",
+      price_per_kg: "",
+      total_amount: "",
+      notes: "",
+      status: "pending",
+      id: null,
+      finished_good_id: "",
+      selectedAdvancePayments: [],
+    });
+    // Reset advance payments to empty array
+    setAdvancePayments([]);
+  };
+
+  const handleManufacturingPaymentSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const formattedData = {
+        contractor_id: Number(manufacturingPaymentFormData.contractor_id),
+        assignment_id: Number(manufacturingPaymentFormData.assignment_id),
+        quantity_kg: Number(manufacturingPaymentFormData.quantity_kg),
+        price_per_kg: Number(manufacturingPaymentFormData.price_per_kg),
+        amount: Number(manufacturingPaymentFormData.total_amount),
+        notes: manufacturingPaymentFormData.notes || null,
+        status: manufacturingPaymentFormData.status || "pending",
+        // Add selected advance payments
+        advance_payment_ids: manufacturingPaymentFormData.selectedAdvancePayments || []
+      };
+
+      if (manufacturingPaymentFormData.id) {
+        // Edit existing payment
+        await axios.put(
+          `/api/manufacturing/payments/${manufacturingPaymentFormData.id}`,
+          formattedData
+        );
+        enqueueSnackbar("Manufacturing payment updated successfully", {
+          variant: "success",
+        });
+      } else {
+        // Create new payment
+        const response = await axios.post(
+          "/api/manufacturing/payments",
+          formattedData
+        );
+        if (response.data.receiptHtml) {
+          const receiptWindow = window.open("", "_blank");
+          if (receiptWindow) {
+            receiptWindow.document.write(response.data.receiptHtml);
+            receiptWindow.document.close();
+            receiptWindow.onload = function () {
+              receiptWindow.print();
+            };
+          } else {
+            enqueueSnackbar("Please allow pop-ups to print receipts", {
+              variant: "warning",
+            });
+          }
+        }
+        enqueueSnackbar("Manufacturing payment processed successfully", {
+          variant: "success",
+        });
+      }
+
+      handleCloseManufacturingPaymentDialog();
+      // Refresh data
+      await Promise.all([
+        fetchManufacturingContractors(),
+        fetchAssignments(),
+        fetchAdvancePayments(),
+        fetchManufacturingPayments(),
+      ]);
+    } catch (error) {
+      console.error("Error processing manufacturing payment:", error);
+      enqueueSnackbar(
+        error.response?.data?.message ||
+          "Error processing manufacturing payment",
+        { variant: "error" }
+      );
+    }
+  };
+
+  const handleEditManufacturingPayment = (payment) => {
+    const price_per_kg = (
+      parseFloat(payment.amount) / parseFloat(payment.quantity_kg)
+    ).toFixed(2);
+    setManufacturingPaymentFormData({
+      id: payment.id,
+      contractor_id: payment.contractor_id,
+      assignment_id: payment.assignment_id,
+      quantity_kg: payment.quantity_kg,
+      price_per_kg: price_per_kg,
+      total_amount: payment.amount,
+      notes: payment.notes,
+      status: payment.status,
+    });
+    setOpenManufacturingPaymentDialog(true);
+  };
+
+  const handleDeleteManufacturingPayment = async (paymentId) => {
+    if (!window.confirm("Are you sure you want to delete this payment?"))
+      return;
+
+    try {
+      await axios.delete(`/api/manufacturing/payments/${paymentId}`);
+      enqueueSnackbar("Manufacturing payment deleted successfully", {
+        variant: "success",
+      });
+      await Promise.all([
+        fetchManufacturingContractors(),
+        fetchAssignments(),
+        fetchAdvancePayments(),
+        fetchManufacturingPayments(),
+      ]);
+    } catch (error) {
+      console.error("Error deleting payment:", error);
+      enqueueSnackbar(
+        error.response?.data?.message || "Error deleting payment",
+        { variant: "error" }
+      );
+    }
+  };
+
+  const handleMarkManufacturingPaymentAsPaid = async (paymentId) => {
+    try {
+      await axios.put(`/api/manufacturing/payments/${paymentId}/mark-paid`);
+      enqueueSnackbar("Manufacturing payment marked as paid", {
+        variant: "success",
+      });
+      await Promise.all([
+        fetchManufacturingContractors(),
+        fetchAssignments(),
+        fetchAdvancePayments(),
+      ]);
+    } catch (error) {
+      console.error("Error marking payment as paid:", error);
+      enqueueSnackbar(
+        error.response?.data?.message || "Error marking payment as paid",
+        { variant: "error" }
+      );
+    }
+  };
+
+  useEffect(() => {
+    if (
+      manufacturingPaymentFormData.quantity_kg &&
+      manufacturingPaymentFormData.price_per_kg
+    ) {
+      const quantity = parseFloat(manufacturingPaymentFormData.quantity_kg);
+      const pricePerKg = parseFloat(manufacturingPaymentFormData.price_per_kg);
+      const total = quantity * pricePerKg;
+
+      setManufacturingPaymentFormData((prev) => ({
+        ...prev,
+        total_amount: total,
+      }));
+    }
+  }, [
+    manufacturingPaymentFormData.quantity_kg,
+    manufacturingPaymentFormData.price_per_kg,
+  ]);
+
+  const handleAssignmentChange = (e) => {
+    const assignmentId = e.target.value;
+    const selectedAssignment = assignments.find((a) => a.id === assignmentId);
+
+    setManufacturingPaymentFormData((prev) => ({
+      ...prev,
+      assignment_id: assignmentId,
+      // Pre-fill quantity from the selected assignment
+      quantity_kg:
+        selectedAssignment?.completed_quantity ||
+        selectedAssignment?.quantity ||
+        "",
+    }));
+  };
+
+  // First, add these handler functions if they don't exist
+
+  const handlePrintPaymentReceipt = async (payment) => {
+    try {
+      const [settingsResponse, receiptResponse] = await Promise.all([
+        axios.get("/api/settings"),
+        axios.post("/api/manufacturing/payments/receipt", {
+          payment,
+          settings: null, // Will be populated with settings response
+        }),
+      ]);
+
+      const receiptHtml = receiptResponse.data.receiptHtml;
+      const printWindow = window.open("", "_blank");
+      printWindow.document.write(receiptHtml);
+      printWindow.document.close();
+      printWindow.print();
+    } catch (error) {
+      console.error("Error generating receipt:", error);
+      enqueueSnackbar("Error generating receipt", { variant: "error" });
+    }
+  };
+
+  const handleMarkPaymentAsPaid = async (paymentId) => {
+    try {
+      await axios.put(`/api/manufacturing/payments/${paymentId}/mark-paid`);
+      enqueueSnackbar("Payment marked as paid successfully", {
+        variant: "success",
+      });
+      fetchManufacturingPayments();
+    } catch (error) {
+      console.error("Error marking payment as paid:", error);
+      enqueueSnackbar(
+        error.response?.data?.message || "Error marking payment as paid",
+        {
+          variant: "error",
+        }
+      );
+    }
+  };
+
+  // Add this function with other handler functions
+  const handlePrintAdvancePayment = async (payment) => {
+    try {
+      const [settingsResponse, receiptResponse] = await Promise.all([
+        axios.get('/api/settings'),
+        axios.post('/api/manufacturing/advance-payments/receipt', {
+          payment,
+          settings: null // Will be populated with settings response
+        })
+      ]);
+
+      const receiptHtml = receiptResponse.data.receiptHtml;
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write(receiptHtml);
+      printWindow.document.close();
+      printWindow.print();
+    } catch (error) {
+      console.error('Error generating receipt:', error);
+      enqueueSnackbar('Error generating receipt', { variant: 'error' });
     }
   };
 
@@ -1036,6 +1639,8 @@ const Manufacturing = () => {
           <Tab label="Assignments" />
           <Tab label="Contractors" />
           <Tab label="Purchases" />
+          <Tab label="Advanced Payments" />
+          <Tab label="Payments" />
           <Tab label="Reports" />
         </Tabs>
 
@@ -1204,18 +1809,44 @@ const Manufacturing = () => {
                             <Button
                               size="small"
                               color="success"
-                              onClick={() => handleOpenCompletionDialog(assignment)}
+                              onClick={() =>
+                                handleOpenCompletionDialog(assignment)
+                              }
                             >
                               Completed
                             </Button>
                           )}
+                          {assignment.status === "completed" && (
+                            <IconButton
+                              size="small"
+                              onClick={() =>
+                                handleOpenManufacturingPaymentDialog(assignment)
+                              }
+                              sx={{ color: "info.main" }}
+                              title="Manufacturing Payment"
+                            >
+                              <CreditCardIcon />
+                            </IconButton>
+                          )}
+                          <IconButton
+                            size="small"
+                            onClick={() =>
+                              handleOpenAdvancePaymentDialog({
+                                id: assignment.contractor_id,
+                                name: assignment.contractor_name,
+                              })
+                            }
+                            sx={{ color: "warning.main" }}
+                            title="Advance Payment"
+                          >
+                            <MoneyIcon />
+                          </IconButton>
                           <IconButton
                             size="small"
                             onClick={() =>
                               handleOpenAssignmentDialog(assignment)
                             }
                             sx={{ color: "primary.main" }}
-                            title="Edit Assignment"
                           >
                             <EditIcon />
                           </IconButton>
@@ -1225,7 +1856,6 @@ const Manufacturing = () => {
                               handleDeleteAssignment(assignment.id)
                             }
                             sx={{ color: "error.main" }}
-                            title="Delete Assignment"
                           >
                             <DeleteIcon />
                           </IconButton>
@@ -1367,6 +1997,200 @@ const Manufacturing = () => {
         )}
 
         {currentTab === 3 && (
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Contractor</TableCell>
+                  <TableCell>Amount</TableCell>
+                  <TableCell>Date</TableCell>
+                  <TableCell>Notes</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {advancePayments.map((payment) => (
+                  <TableRow key={payment.id} hover>
+                    <TableCell>{payment.contractor_name}</TableCell>
+                    <TableCell>
+                      {formatCurrency(payment.amount, false)}
+                    </TableCell>
+                    <TableCell>
+                      {new Date(payment.created_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>{payment.notes}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={payment.status}
+                        color={
+                          payment.status === "paid"
+                            ? "success"
+                            : payment.status === "approved"
+                            ? "info"
+                            : payment.status === "pending"
+                            ? "warning"
+                            : "error"
+                        }
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "flex-end",
+                          gap: 1,
+                        }}
+                      >
+                        {payment.status !== "paid" &&
+                          payment.status !== "used" && (
+                            <Button
+                              size="small"
+                              color="success"
+                              onClick={() =>
+                                handleMarkAdvancePaymentAsPaid(payment.id)
+                              }
+                            >
+                              Paid
+                            </Button>
+                          )}
+                        <IconButton
+                          size="small"
+                          onClick={() => handlePrintAdvancePayment(payment)}
+                          sx={{ color: "info.main" }}
+                        >
+                          <PrintIcon />
+                        </IconButton>
+                        {payment.status !== "used" && (
+                          <>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleEditAdvancePayment(payment)}
+                              sx={{ color: "primary.main" }}
+                            >
+                              <EditIcon />
+                            </IconButton>
+                            <IconButton
+                              size="small"
+                              onClick={() =>
+                                handleDeleteAdvancePayment(payment.id)
+                              }
+                              sx={{ color: "error.main" }}
+                            >
+                              <DeleteIcon />
+                            </IconButton>
+                          </>
+                        )}
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+
+        {currentTab === 4 && (
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Receipt Number</TableCell>
+                  <TableCell>Contractor</TableCell>
+                  <TableCell>Amount</TableCell>
+                  <TableCell>Quantity (kg)</TableCell>
+                  <TableCell>Payment Date</TableCell>
+                  <TableCell>Notes</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {manufacturingPayments.map((payment) => (
+                  <TableRow key={payment.id} hover>
+                    <TableCell>{payment.receipt_number}</TableCell>
+                    <TableCell>{payment.contractor_name}</TableCell>
+                    <TableCell>
+                      {formatCurrency(payment.amount, false)}
+                    </TableCell>
+                    <TableCell>{payment.quantity_kg}</TableCell>
+                    <TableCell>
+                      {new Date(payment.payment_date).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>{payment.notes}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={payment.status}
+                        color={
+                          payment.status === "paid"
+                            ? "success"
+                            : payment.status === "pending"
+                            ? "warning"
+                            : "error"
+                        }
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "flex-end",
+                          gap: 1,
+                        }}
+                      >
+                        {payment.status !== "paid" && (
+                          <Button
+                            size="small"
+                            color="success"
+                            onClick={() => handleMarkPaymentAsPaid(payment.id)}
+                          >
+                            Paid
+                          </Button>
+                        )}
+                        <IconButton
+                          size="small"
+                          onClick={() => handlePrintPaymentReceipt(payment)}
+                          sx={{ color: "info.main" }}
+                        >
+                          <PrintIcon />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => {
+                            setSelectedPayment(payment);
+                            setManufacturingPaymentFormData({
+                              ...payment,
+                              id: payment.id,
+                            });
+                            setOpenManufacturingPaymentDialog(true);
+                          }}
+                          sx={{ color: "primary.main" }}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() =>
+                            handleDeleteManufacturingPayment(payment.id)
+                          }
+                          sx={{ color: "error.main" }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+
+        {currentTab === 5 && (
           <Box>
             <Paper sx={{ p: 2, mb: 3 }}>
               <Grid container spacing={2} alignItems="center">
@@ -1573,17 +2397,17 @@ const Manufacturing = () => {
         )}
       </Paper>
 
-      <Dialog
-        open={openAssignmentDialog}
-        onClose={handleCloseAssignmentDialog}
-      >
+      <Dialog open={openAssignmentDialog} onClose={handleCloseAssignmentDialog}>
         <DialogTitle>Assign Raw Material to Contractor</DialogTitle>
         <DialogContent>
           <Grid container spacing={2}>
-            {(assignmentDialogSource === 'header' || !assignmentFormData.contractor_id) && (
+            {(assignmentDialogSource === "header" ||
+              !assignmentFormData.contractor_id) && (
               <Grid item xs={12}>
                 <FormControl fullWidth>
-                  <InputLabel>Contractor</InputLabel>
+                  <InputLabel
+                  required
+                  >Contractor</InputLabel>
                   <Select
                     value={assignmentFormData.contractor_id}
                     onChange={(e) =>
@@ -1605,7 +2429,9 @@ const Manufacturing = () => {
             )}
             <Grid item xs={12}>
               <FormControl fullWidth>
-                <InputLabel>Raw Material</InputLabel>
+                <InputLabel
+                required
+                >Raw Material</InputLabel>
                 <Select
                   value={assignmentFormData.raw_material_id}
                   onChange={(e) =>
@@ -1618,7 +2444,8 @@ const Manufacturing = () => {
                 >
                   {rawMaterials.map((material) => (
                     <MenuItem key={material.id} value={material.id}>
-                      {material.product_name} (Stock: {material.quantity} {material.unit})
+                      {material.product_name} (Stock: {material.quantity}{" "}
+                      {material.unit})
                     </MenuItem>
                   ))}
                 </Select>
@@ -1724,47 +2551,59 @@ const Manufacturing = () => {
 
       <Dialog
         open={openPaymentDialog}
-        onClose={() => setOpenPaymentDialog(false)}
+        onClose={handleCloseAdvancePaymentDialog}
       >
-        <DialogTitle>Process Advance Payment</DialogTitle>
+        <DialogTitle>
+          {selectedPayment ? "Edit Advance Payment" : "Process Advance Payment"}
+        </DialogTitle>
         <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Amount"
-                type="number"
-                value={advancePaymentData.amount}
-                onChange={(e) =>
-                  setAdvancePaymentData((prev) => ({
-                    ...prev,
-                    amount: e.target.value,
-                  }))
-                }
-                required
-              />
+          <Box
+            component="form"
+            onSubmit={handleAdvancePaymentSubmit}
+            sx={{ mt: 2 }}
+          >
+            <Grid container spacing={2}>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Amount"
+                  type="number"
+                  value={advancePaymentData.amount}
+                  onChange={(e) =>
+                    setAdvancePaymentData((prev) => ({
+                      ...prev,
+                      amount: e.target.value,
+                    }))
+                  }
+                  required
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Notes"
+                  multiline
+                  rows={2}
+                  value={advancePaymentData.notes}
+                  onChange={(e) =>
+                    setAdvancePaymentData((prev) => ({
+                      ...prev,
+                      notes: e.target.value,
+                    }))
+                  }
+                />
+              </Grid>
             </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Notes"
-                multiline
-                rows={2}
-                value={advancePaymentData.notes}
-                onChange={(e) =>
-                  setAdvancePaymentData((prev) => ({
-                    ...prev,
-                    notes: e.target.value,
-                  }))
-                }
-              />
-            </Grid>
-          </Grid>
+          </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenPaymentDialog(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleAdvancePayment}>
-            Process Payment
+          <Button onClick={handleCloseAdvancePaymentDialog}>Cancel</Button>
+          <Button
+            onClick={handleAdvancePaymentSubmit}
+            variant="contained"
+            disabled={!advancePaymentData.amount}
+          >
+            {selectedPayment ? "Update Payment" : "Process Payment"}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1838,76 +2677,24 @@ const Manufacturing = () => {
         contractors={cuttingContractors}
       />
 
-      <Dialog
-        open={openReassignDialog}
-        onClose={() => {
-          setOpenReassignDialog(false);
-          setContractorToDelete(null);
-          setNewContractorId("");
-        }}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Reassign Contractor Work</DialogTitle>
-        <DialogContent>
-          <Box sx={{ mt: 2 }}>
-            <Alert severity="info" sx={{ mb: 2 }}>
-              This contractor has active assignments. Please select a new
-              contractor to take over these assignments before deleting.
-            </Alert>
-
-            <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel>New Contractor</InputLabel>
-              <Select
-                value={newContractorId}
-                onChange={(e) => setNewContractorId(e.target.value)}
-                label="New Contractor"
-              >
-                {manufacturingContractors
-                  .filter(
-                    (c) => c.id !== contractorToDelete && c.status === "active"
-                  )
-                  .map((contractor) => (
-                    <MenuItem key={contractor.id} value={contractor.id}>
-                      {contractor.name} ({contractor.contractor_id})
-                    </MenuItem>
-                  ))}
-              </Select>
-            </FormControl>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button
-            onClick={() => {
-              setOpenReassignDialog(false);
-              setContractorToDelete(null);
-              setNewContractorId("");
-            }}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleReassignAndDelete}
-            color="primary"
-            disabled={!newContractorId}
-          >
-            Reassign and Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ReassignmentDialog />
 
       <ReportDialog />
 
       <Dialog open={openCompletionDialog} onClose={handleCloseCompletionDialog}>
-        <DialogTitle>
-          Complete Manufacturing Assignment
-        </DialogTitle>
+        <DialogTitle>Complete Manufacturing Assignment</DialogTitle>
         <DialogContent>
-          <Box component="form" onSubmit={handleCompletionSubmit} sx={{ mt: 2 }}>
+          <Box
+            component="form"
+            onSubmit={handleCompletionSubmit}
+            sx={{ mt: 2 }}
+          >
             <Grid container spacing={2}>
               <Grid item xs={12}>
                 <FormControl fullWidth>
-                  <InputLabel>Finished Good</InputLabel>
+                  <InputLabel
+                  required
+                  >Finished Good</InputLabel>
                   <Select
                     value={completionFormData.finished_good_id}
                     onChange={(e) =>
@@ -1932,6 +2719,7 @@ const Manufacturing = () => {
                   label="Quantity Received (kg)"
                   type="number"
                   value={completionFormData.quantity_received}
+                  required
                   onChange={(e) =>
                     setCompletionFormData({
                       ...completionFormData,
@@ -1941,7 +2729,8 @@ const Manufacturing = () => {
                 />
                 {selectedAssignment && (
                   <FormHelperText>
-                    Original assigned quantity: {selectedAssignment.raw_material_quantity} kg
+                    Original assigned quantity:{" "}
+                    {selectedAssignment.raw_material_quantity} kg
                   </FormHelperText>
                 )}
               </Grid>
@@ -1953,9 +2742,169 @@ const Manufacturing = () => {
           <Button
             onClick={handleCompletionSubmit}
             variant="contained"
-            disabled={!completionFormData.quantity_received || !completionFormData.finished_good_id}
+            disabled={
+              !completionFormData.quantity_received ||
+              !completionFormData.finished_good_id
+            }
           >
             Complete Assignment
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={openManufacturingPaymentDialog}
+        onClose={handleCloseManufacturingPaymentDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          {manufacturingPaymentFormData.id
+            ? "Edit Manufacturing Payment"
+            : "Process Manufacturing Payment"}
+        </DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <FormControl fullWidth required>
+                <InputLabel>Finished Good</InputLabel>
+                <Select
+                  value={manufacturingPaymentFormData.finished_good_id || ""}
+                  onChange={(e) =>
+                    setManufacturingPaymentFormData((prev) => ({
+                      ...prev,
+                      finished_good_id: e.target.value,
+                    }))
+                  }
+                  label="Finished Good"
+                  disabled // Disable since it should come from the assignment
+                >
+                  {finishedGoods.map((good) => (
+                    <MenuItem key={good.id} value={good.id}>
+                      {good.product_name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Quantity (kg)"
+                type="number"
+                value={manufacturingPaymentFormData.quantity_kg || ""}
+                InputProps={{
+                  readOnly: true,
+                }}
+                disabled
+                required
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Price per kg"
+                type="number"
+                value={manufacturingPaymentFormData.price_per_kg}
+                onChange={(e) => {
+                  setManufacturingPaymentFormData((prev) => ({
+                    ...prev,
+                    price_per_kg: e.target.value,
+                  }));
+                }}
+                required
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Total Amount"
+                type="number"
+                value={manufacturingPaymentFormData.total_amount}
+                onChange={(e) =>
+                  setManufacturingPaymentFormData((prev) => ({
+                    ...prev,
+                    total_amount: e.target.value,
+                  }))
+                }
+                required
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Notes"
+                multiline
+                rows={2}
+                value={manufacturingPaymentFormData.notes}
+                onChange={(e) =>
+                  setManufacturingPaymentFormData((prev) => ({
+                    ...prev,
+                    notes: e.target.value,
+                  }))
+                }
+              />
+            </Grid>
+            {/* Add advance payments section */}
+            <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel>Available Advance Payments</InputLabel>
+                <Select
+                  multiple
+                  value={manufacturingPaymentFormData.selectedAdvancePayments || []}
+                  onChange={(e) =>
+                    setManufacturingPaymentFormData((prev) => ({
+                      ...prev,
+                      selectedAdvancePayments: e.target.value,
+                    }))
+                  }
+                  label="Available Advance Payments"
+                  renderValue={(selected) => {
+                    const selectedPayments = advancePayments.filter(
+                      (payment) => selected.includes(payment.id)
+                    );
+                    return selectedPayments
+                      .map(
+                        (payment) =>
+                          `${formatCurrency(payment.amount, false)} (${new Date(
+                            payment.payment_date
+                          ).toLocaleDateString()})`
+                      )
+                      .join(", ");
+                  }}
+                >
+                  {advancePayments
+                    .filter((payment) => payment.status === "paid")
+                    .map((payment) => (
+                      <MenuItem key={payment.id} value={payment.id}>
+                        <Checkbox
+                          checked={
+                            manufacturingPaymentFormData.selectedAdvancePayments?.includes(
+                              payment.id
+                            ) || false
+                          }
+                        />
+                        <ListItemText
+                          primary={`${formatCurrency(payment.amount, false)}`}
+                          secondary={`Date: ${new Date(
+                            payment.payment_date
+                          ).toLocaleDateString()}`}
+                        />
+                      </MenuItem>
+                    ))}
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseManufacturingPaymentDialog}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleManufacturingPaymentSubmit}
+            disabled={!manufacturingPaymentFormData.assignment_id}
+          >
+            {manufacturingPaymentFormData.id ? "Update Payment" : "Process Payment"}
           </Button>
         </DialogActions>
       </Dialog>

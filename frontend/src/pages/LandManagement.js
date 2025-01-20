@@ -834,7 +834,18 @@ const LandManagement = () => {
               <TableBody>
                 {lands.map((land) => (
                   <TableRow key={land.id} hover>
-                    <TableCell>{land.name}</TableCell>
+                    <TableCell>
+                      <Box>
+                        <Typography variant="body1">
+                          {land.name}
+                        </Typography>
+                        {land.description && (
+                          <Typography variant="body2" color="text.secondary">
+                            {land.description}
+                          </Typography>
+                        )}
+                      </Box>
+                    </TableCell>
                     <TableCell>{land.land_number}</TableCell>
                     <TableCell>{land.size} ha</TableCell>
                     <TableCell>

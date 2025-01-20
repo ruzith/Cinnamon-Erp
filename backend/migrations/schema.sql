@@ -18,6 +18,9 @@ DROP TABLE IF EXISTS manufacturing_materials;
 DROP TABLE IF EXISTS purchase_items;
 DROP TABLE IF EXISTS cutting_payment_usages;
 DROP TABLE IF EXISTS cutting_advance_payments;
+DROP TABLE IF EXISTS manufacturing_payment_usages;
+DROP TABLE IF EXISTS manufacturing_payments;
+DROP TABLE IF EXISTS manufacturing_advance_payments;
 DROP TABLE IF EXISTS purchase_invoices;
 DROP TABLE IF EXISTS sales_items;
 DROP TABLE IF EXISTS sales_invoices;
@@ -29,7 +32,6 @@ DROP TABLE IF EXISTS cutting_payments;
 DROP TABLE IF EXISTS cutting_advance_payments;
 DROP TABLE IF EXISTS cutting_tasks;
 DROP TABLE IF EXISTS land_assignments;
-DROP TABLE IF EXISTS manufacturing_advance_payments;
 DROP TABLE IF EXISTS cinnamon_assignments;
 DROP TABLE IF EXISTS manufacturing_orders;
 DROP TABLE IF EXISTS manufacturing_contractors;
@@ -703,10 +705,12 @@ CREATE TABLE manufacturing_advance_payments (
   payment_date DATE NOT NULL,
   receipt_number VARCHAR(50) NOT NULL UNIQUE,
   notes TEXT,
-  status ENUM('unused', 'used') DEFAULT 'unused',
+  status ENUM('pending', 'paid', 'used', 'cancelled') DEFAULT 'pending',
+  created_by INT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (contractor_id) REFERENCES manufacturing_contractors(id)
+  FOREIGN KEY (contractor_id) REFERENCES manufacturing_contractors(id),
+  FOREIGN KEY (created_by) REFERENCES users(id)
 );
 -- Asset Attachments table
 CREATE TABLE asset_attachments (
@@ -935,4 +939,34 @@ CREATE TABLE employee_work_hours (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (employee_id) REFERENCES employees(id)
+);
+-- Manufacturing Payments table
+CREATE TABLE manufacturing_payments (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  contractor_id INT NOT NULL,
+  assignment_id INT NOT NULL,
+  receipt_number VARCHAR(50) NOT NULL UNIQUE,
+  quantity_kg DECIMAL(10, 2) NOT NULL,
+  price_per_kg DECIMAL(10, 2) NOT NULL,
+  amount DECIMAL(15, 2) NOT NULL,
+  payment_date DATE NOT NULL,
+  notes TEXT,
+  status ENUM('pending', 'paid', 'cancelled') DEFAULT 'pending',
+  created_by INT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (contractor_id) REFERENCES manufacturing_contractors(id),
+  FOREIGN KEY (assignment_id) REFERENCES cinnamon_assignments(id),
+  FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+-- Manufacturing Payment Usages table
+CREATE TABLE manufacturing_payment_usages (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  payment_id INT NOT NULL,
+  advance_payment_id INT NOT NULL,
+  amount_used DECIMAL(15, 2) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (payment_id) REFERENCES manufacturing_payments(id),
+  FOREIGN KEY (advance_payment_id) REFERENCES manufacturing_advance_payments(id)
 );

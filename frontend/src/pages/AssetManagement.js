@@ -168,8 +168,6 @@ const AssetManagement = () => {
   const [openHistoryDialog, setOpenHistoryDialog] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [categories, setCategories] = useState([]);
-  const [touched, setTouched] = useState({});
-  const [formErrors, setFormErrors] = useState({});
 
   const [assetFormData, setAssetFormData] = useState({
     assetNumber: '',
@@ -293,8 +291,6 @@ const AssetManagement = () => {
 
   const handleCloseDialog = () => {
     setOpenDialog(false);
-    setTouched({});
-    setFormErrors({});
     setAssetFormData({
       assetNumber: '',
       name: '',
@@ -332,58 +328,7 @@ const AssetManagement = () => {
     }));
   };
 
-  const handleBlur = (event) => {
-    const { name } = event.target;
-    setTouched(prev => ({ ...prev, [name]: true }));
-  };
-
-  const validateField = (name, value) => {
-    switch (name) {
-      case 'purchaseDate':
-        return !value ? "Purchase date is required" : "";
-      case 'name':
-        return !value?.trim() ? "Name is required" : "";
-      case 'assetNumber':
-        return !value?.trim() ? "Asset number is required" : "";
-      default:
-        return "";
-    }
-  };
-
   const handleAssetSubmit = async () => {
-    // Clear previous errors
-    setFormErrors({});
-
-    // Basic frontend validation
-    const errors = {};
-    if (!assetFormData.name?.trim()) {
-      errors.name = "Name is required";
-    }
-
-    if (!assetFormData.purchaseDate) {
-      errors.purchaseDate = "Purchase date is required";
-    } else {
-      const purchaseDate = new Date(assetFormData.purchaseDate);
-      if (purchaseDate > new Date()) {
-        errors.purchaseDate = "Purchase date cannot be in the future";
-      }
-    }
-
-    if (assetFormData.purchasePrice &&
-        (isNaN(parseFloat(assetFormData.purchasePrice)) || parseFloat(assetFormData.purchasePrice) < 0)) {
-      errors.purchasePrice = "Purchase price must be a valid positive number";
-    }
-
-    if (assetFormData.currentValue &&
-        (isNaN(parseFloat(assetFormData.currentValue)) || parseFloat(assetFormData.currentValue) < 0)) {
-      errors.currentValue = "Current value must be a valid positive number";
-    }
-
-    if (Object.keys(errors).length > 0) {
-      setFormErrors(errors);
-      return;
-    }
-
     try {
       const assetData = {
         assetNumber: assetFormData.assetNumber,
@@ -397,39 +342,25 @@ const AssetManagement = () => {
       };
 
       if (selectedAsset) {
-        // Update existing asset
         await axios.put(`/api/assets/${selectedAsset.id}`, assetData);
       } else {
-        // Create new asset
         await axios.post('/api/assets', assetData);
       }
       handleCloseDialog();
       fetchAssets();
     } catch (error) {
       console.error('Error saving asset:', error);
-      setFormErrors(error.response?.data?.errors || { submit: error.message });
+      if (error.response?.data?.message === "Validation failed") {
+        alert(Object.values(error.response.data.errors)[0]);
+      } else {
+        alert(error.response?.data?.message || 'An error occurred while saving the asset');
+      }
     }
   };
 
   const handleMaintenanceSubmit = async (e) => {
     e.preventDefault();
 
-    // Basic validation
-    const errors = {};
-    if (!maintenanceFormData.type) {
-      errors.type = "Type is required";
-    }
-    if (!maintenanceFormData.date) {
-      errors.date = "Date is required";
-    }
-
-    if (Object.keys(errors).length > 0) {
-      // Handle errors (e.g., set state to show error messages)
-      console.error('Validation errors:', errors);
-      return;
-    }
-
-    // Transform the maintenance data to ensure proper values
     const maintenanceData = {
       assetId: selectedAsset.id,
       type: maintenanceFormData.type,
@@ -448,6 +379,11 @@ const AssetManagement = () => {
       handleCloseMaintenanceDialog();
     } catch (error) {
       console.error('Error saving maintenance record:', error);
+      if (error.response?.data?.message === "Validation failed") {
+        alert(Object.values(error.response.data.errors)[0]);
+      } else {
+        alert(error.response?.data?.message || 'An error occurred while saving the maintenance record');
+      }
     }
   };
 
@@ -787,27 +723,21 @@ const AssetManagement = () => {
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
-                required
                 label="Asset Number"
                 name="assetNumber"
                 value={assetFormData.assetNumber}
                 onChange={handleAssetInputChange}
-                onBlur={handleBlur}
-                error={touched.assetNumber && !assetFormData.assetNumber}
-                helperText={touched.assetNumber && !assetFormData.assetNumber ? "Asset number is required" : ""}
+                required
               />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
-                required
                 label="Asset Name"
                 name="name"
                 value={assetFormData.name}
                 onChange={handleAssetInputChange}
-                onBlur={handleBlur}
-                error={touched.name && !assetFormData.name}
-                helperText={touched.name && !assetFormData.name ? "Name is required" : ""}
+                required
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -831,16 +761,13 @@ const AssetManagement = () => {
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
-                required
                 label="Purchase Date"
                 name="purchaseDate"
                 type="date"
                 value={assetFormData.purchaseDate}
                 onChange={handleAssetInputChange}
-                onBlur={handleBlur}
                 InputLabelProps={{ shrink: true }}
-                error={touched.purchaseDate && !assetFormData.purchaseDate}
-                helperText={touched.purchaseDate && !assetFormData.purchaseDate ? "Purchase date is required" : ""}
+                required
               />
             </Grid>
             <Grid item xs={12} sm={6}>

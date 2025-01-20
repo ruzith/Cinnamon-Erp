@@ -54,17 +54,17 @@ export const menuItems = [
     },
     {
         path: '/manufacturing',
-        text: 'Manufacturing',
+        text: 'Manufacturing Management',
         icon: <FactoryIcon />
     },
     {
         path: '/inventory',
-        text: 'Inventory',
+        text: 'Inventory Management',
         icon: <InventoryIcon />
     },
     {
         path: '/sales',
-        text: 'Sales',
+        text: 'Sales Management',
         icon: <StorefrontIcon />
     },
     {
@@ -74,7 +74,7 @@ export const menuItems = [
     },
     {
         path: '/accounting',
-        text: 'Accounting',
+        text: 'Accounting Management',
         icon: <AccountBalanceIcon />
     },
     {

@@ -882,3 +882,196 @@ exports.generateManufacturingInvoice = (invoice, settings) => {
     </html>
   `;
 };
+
+exports.generateManufacturingPaymentReceipt = (payment, settings) => {
+  const formattedDate = new Date(payment.payment_date).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Manufacturing Payment Receipt - ${payment.receipt_number}</title>
+      <style>
+        @media print {
+          @page {
+            size: A4;
+            margin: 20mm;
+          }
+        }
+        body {
+          font-family: Arial, sans-serif;
+          padding: 20px;
+          max-width: 800px;
+          margin: 0 auto;
+          color: #333;
+          line-height: 1.6;
+        }
+        .watermark {
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%) rotate(-45deg);
+          font-size: 100px;
+          opacity: 0.05;
+          z-index: -1;
+          color: #000;
+          white-space: nowrap;
+        }
+        .company-header {
+          text-align: center;
+          margin-bottom: 20px;
+          padding-bottom: 20px;
+          border-bottom: 2px solid #333;
+        }
+        .company-name {
+          font-size: 24px;
+          font-weight: bold;
+          margin: 0;
+          color: #1976d2;
+        }
+        .company-details {
+          font-size: 14px;
+          color: #666;
+          margin: 5px 0;
+        }
+        .document-title {
+          font-size: 20px;
+          font-weight: bold;
+          text-align: center;
+          margin: 20px 0;
+          color: #333;
+          text-transform: uppercase;
+        }
+        .slip-header {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 30px;
+          padding: 15px;
+          background-color: #f5f5f5;
+          border-radius: 5px;
+        }
+        .contractor-info, .payment-info {
+          flex: 1;
+        }
+        .info-label {
+          font-weight: bold;
+          color: #666;
+          font-size: 12px;
+          text-transform: uppercase;
+        }
+        .info-value {
+          font-size: 14px;
+          margin-bottom: 10px;
+        }
+        .payment-details {
+          margin: 20px 0;
+          border: 1px solid #ddd;
+          border-radius: 5px;
+        }
+        .detail-row {
+          display: flex;
+          justify-content: space-between;
+          padding: 12px 20px;
+          border-bottom: 1px solid #eee;
+        }
+        .detail-row:last-child {
+          border-bottom: none;
+        }
+        .detail-label {
+          font-weight: bold;
+          color: #333;
+        }
+        .amount {
+          font-family: monospace;
+          font-size: 14px;
+        }
+        .total-section {
+          margin-top: 20px;
+          padding: 15px 20px;
+          background-color: #1976d2;
+          color: white;
+          border-radius: 5px;
+        }
+        .footer {
+          margin-top: 50px;
+          padding-top: 20px;
+          border-top: 1px solid #ddd;
+          font-size: 12px;
+          color: #666;
+          text-align: center;
+        }
+        .company-registration {
+          font-size: 12px;
+          color: #666;
+          margin: 5px 0;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="watermark">PAYMENT SLIP</div>
+      <div class="company-header">
+        <h1 class="company-name">${settings?.company_name || 'COMPANY NAME'}</h1>
+        <p class="company-details">${settings?.company_address || ''}</p>
+        <p class="company-details">Phone: ${settings?.company_phone || ''}</p>
+        <p class="company-registration">VAT No: ${settings?.vat_number || ''} | Tax No: ${settings?.tax_number || ''}</p>
+      </div>
+
+      <div class="document-title">Manufacturing Payment Receipt</div>
+
+      <div class="slip-header">
+        <div class="contractor-info">
+          <div class="info-label">Contractor Name</div>
+          <div class="info-value">${payment.contractor_name}</div>
+          <div class="info-label">Receipt Number</div>
+          <div class="info-value">${payment.receipt_number}</div>
+        </div>
+        <div class="payment-info">
+          <div class="info-label">Payment Date</div>
+          <div class="info-value">${formattedDate}</div>
+          <div class="info-label">Status</div>
+          <div class="info-value">${payment.status.toUpperCase()}</div>
+        </div>
+      </div>
+
+      <div class="payment-details">
+        <div class="detail-row">
+          <span class="detail-label">Quantity</span>
+          <span class="amount">${payment.quantity_kg} kg</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Price per kg</span>
+          <span class="amount">Rs. ${(payment.amount / payment.quantity_kg).toFixed(2)}</span>
+        </div>
+      </div>
+
+      <div class="total-section detail-row">
+        <span class="detail-label">Total Amount</span>
+        <span class="amount">Rs. ${Number(payment.amount).toLocaleString()}</span>
+      </div>
+
+      ${payment.notes ? `
+      <div style="margin: 20px 0; padding: 15px; background-color: #f5f5f5; border-radius: 5px;">
+        <div class="info-label">Notes</div>
+        <div style="font-size: 14px; margin-top: 5px;">${payment.notes}</div>
+      </div>
+      ` : ''}
+
+      <div class="footer">
+        <p>Generated on ${new Date().toLocaleString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })} IST</p>
+        <p>For any queries, please contact ${settings?.company_name || ''} at ${settings?.company_phone || ''}</p>
+      </div>
+    </body>
+    </html>
+  `;
+};

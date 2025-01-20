@@ -658,7 +658,7 @@ const Dashboard = () => {
             </Grid>
           </DashboardSection>
 
-          <DashboardSection title="Manufacturing" delay={200}>
+          <DashboardSection title="Manufacturing Management" delay={200}>
             <Grid container spacing={3}>
               <Grid item xs={12} sm={6} md={3}>
                 <EnhancedSummaryCard

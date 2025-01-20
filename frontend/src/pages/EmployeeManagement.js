@@ -724,6 +724,19 @@ const EmployeeManagement = () => {
     </Dialog>
   );
 
+  const handleFormSubmitSuccess = async () => {
+    try {
+      // Refetch designations
+      const designationsResponse = await axios.get('/api/designations');
+      setDesignations(designationsResponse.data);
+
+      // Refetch employee groups
+      await fetchEmployeeGroups();
+    } catch (error) {
+      console.error('Error refetching data:', error);
+    }
+  };
+
   return (
     <Box sx={{ p: 3 }}>
       {/* Header */}
@@ -1123,6 +1136,7 @@ const EmployeeManagement = () => {
             employee={selectedEmployee}
             setIsEditing={setSelectedEmployee}
             onClose={handleCloseDialog}
+            onSubmitSuccess={handleFormSubmitSuccess}
           />
         </DialogContent>
       </Dialog>

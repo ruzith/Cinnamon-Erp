@@ -463,7 +463,7 @@ router.delete('/:id', protect, authorize('admin'), async (req, res) => {
 
     // Check if loan exists and get its status
     const [loan] = await connection.execute(
-      'SELECT status FROM loans WHERE id = ?',
+      'SELECT status, remaining_balance FROM loans WHERE id = ?',
       [loanId]
     );
 
@@ -473,13 +473,8 @@ router.delete('/:id', protect, authorize('admin'), async (req, res) => {
       return res.status(404).json({ message: 'Loan not found' });
     }
 
-    // Check if loan has any payments
-    const [payments] = await connection.execute(
-      'SELECT COUNT(*) as count FROM loan_payments WHERE loan_id = ?',
-      [loanId]
-    );
-
-    if (payments[0].count > 0 && loan[0].status !== 'voided') {
+    // Check if loan has payments and is not voided
+    if (loan[0].remaining_balance < loan[0].amount && loan[0].status !== 'voided') {
       await connection.rollback();
       connection.release();
       return res.status(400).json({
@@ -487,21 +482,21 @@ router.delete('/:id', protect, authorize('admin'), async (req, res) => {
       });
     }
 
-    // Delete loan schedule
+    // Delete in correct order to maintain referential integrity:
+
+    // 1. First delete loan payments (they reference both loan and schedule)
+    await connection.execute(
+      'DELETE FROM loan_payments WHERE loan_id = ?',
+      [loanId]
+    );
+
+    // 2. Then delete loan schedule
     await connection.execute(
       'DELETE FROM loan_schedule WHERE loan_id = ?',
       [loanId]
     );
 
-    // If loan is voided, we can also delete its payments
-    if (loan[0].status === 'voided') {
-      await connection.execute(
-        'DELETE FROM loan_payments WHERE loan_id = ?',
-        [loanId]
-      );
-    }
-
-    // Delete loan record
+    // 3. Finally delete the loan
     await connection.execute(
       'DELETE FROM loans WHERE id = ?',
       [loanId]
@@ -522,7 +517,7 @@ router.delete('/:id', protect, authorize('admin'), async (req, res) => {
   }
 });
 
-// Add this new route for voiding loans
+// Fix the void loan route
 router.patch('/:id/void', protect, authorize('admin'), async (req, res) => {
   const connection = await pool.getConnection();
   try {
@@ -550,11 +545,13 @@ router.patch('/:id/void', protect, authorize('admin'), async (req, res) => {
     );
 
     await connection.commit();
-    connection.release();
 
-    // Get updated loan details
-    const loan = await Loan.getWithDetails(loanId);
-    res.json(loan);
+    // Get updated loan details using instance method
+    const loanModel = new Loan();
+    const updatedLoan = await loanModel.getWithDetails(loanId);
+
+    connection.release();
+    res.json(updatedLoan);
 
   } catch (error) {
     await connection.rollback();

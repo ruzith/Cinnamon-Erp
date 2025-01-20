@@ -224,7 +224,13 @@ const TaskManagement = () => {
       } else {
         await axios.post('/api/tasks', processedFormData);
       }
-      fetchTasks();
+
+      // Fetch both tasks and categories to update the UI
+      await Promise.all([
+        fetchTasks(),
+        fetchCategories()
+      ]);
+
       handleCloseDialog();
     } catch (error) {
       console.error('Error saving task:', error);
@@ -1261,7 +1267,9 @@ const TaskManagement = () => {
         <DialogContent>
           <Box sx={{ mt: 2 }}>
             <FormControl fullWidth>
-              <InputLabel>Assign To</InputLabel>
+              <InputLabel
+              required
+              >Assign To</InputLabel>
               <Select
                 value={selectedEmployee}
                 label="Assign To"

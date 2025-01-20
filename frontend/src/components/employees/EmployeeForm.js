@@ -22,7 +22,7 @@ const SALARY_TYPES = {
   MONTHLY: 'monthly'
 };
 
-const EmployeeForm = ({ employee, setIsEditing, onClose }) => {
+const EmployeeForm = ({ employee, setIsEditing, onClose, onSubmitSuccess }) => {
   const dispatch = useDispatch();
   const { designations } = useSelector((state) => state.designations);
   const { employeeGroups } = useSelector((state) => state.employeeGroups);
@@ -77,14 +77,15 @@ const EmployeeForm = ({ employee, setIsEditing, onClose }) => {
       if (employee) {
         await dispatch(updateEmployee({ id: employee.id, employeeData: formData })).unwrap();
         await dispatch(getEmployees()).unwrap();
-        onClose && onClose();
       } else {
         await dispatch(createEmployee(formData)).unwrap();
         await dispatch(getEmployees()).unwrap();
-        onClose && onClose();
       }
-      // Refresh employee groups using the proper thunk
-      await dispatch(getEmployeeGroups()).unwrap();
+
+      // Call the success callback to trigger refetching in parent
+      onSubmitSuccess && onSubmitSuccess();
+
+      onClose && onClose();
     } catch (error) {
       console.error('Error saving employee:', error);
     }

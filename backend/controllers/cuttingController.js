@@ -264,19 +264,44 @@ exports.reassignContractor = async (req, res) => {
 // @access  Private
 exports.getAssignments = async (req, res) => {
   try {
-    const [rows] = await CuttingContractor.pool.execute(`
-      SELECT la.*,
-             cc.name as contractor_name,
-             l.land_number,
-             l.location
+    const { contractor_name, start_date, end_date } = req.query;
+
+    let query = `
+      SELECT
+        la.*,
+        cc.name as contractor_name,
+        l.land_number,
+        l.location
       FROM land_assignments la
       JOIN cutting_contractors cc ON la.contractor_id = cc.id
       JOIN lands l ON la.land_id = l.id
-      ORDER BY la.created_at DESC
-    `);
-    res.status(200).json(rows);
+      WHERE 1=1
+    `;
+
+    const params = [];
+
+    if (contractor_name) {
+      query += ` AND cc.name LIKE ?`;
+      params.push(`%${contractor_name}%`);
+    }
+
+    if (start_date) {
+      query += ` AND la.start_date >= ?`;
+      params.push(start_date);
+    }
+
+    if (end_date) {
+      query += ` AND la.end_date <= ?`;
+      params.push(end_date);
+    }
+
+    query += ` ORDER BY la.created_at DESC`;
+
+    const [assignments] = await CuttingContractor.pool.execute(query, params);
+    res.json(assignments);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Error fetching cutting assignments:', error);
+    res.status(500).json({ message: 'Error fetching assignments' });
   }
 };
 

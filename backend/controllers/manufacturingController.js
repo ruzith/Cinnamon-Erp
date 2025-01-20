@@ -108,102 +108,83 @@ exports.deleteContractor = async (req, res) => {
       return res.status(404).json({ message: 'Contractor not found' });
     }
 
-    // Check for active assignments
+    // Get all related data
     const [assignments] = await connection.execute(
       'SELECT * FROM cinnamon_assignments WHERE contractor_id = ? AND status = "active"',
       [req.params.id]
     );
 
-    // Check for pending payments
-    const [payments] = await connection.execute(
-      'SELECT COUNT(*) as count FROM manufacturing_advance_payments WHERE contractor_id = ?',
+    const [advancePayments] = await connection.execute(
+      'SELECT * FROM manufacturing_advance_payments WHERE contractor_id = ?',
       [req.params.id]
     );
 
     // If there are pending payments or active assignments and forceDelete is not true
-    if ((payments[0].count > 0 || assignments.length > 0) && forceDelete !== 'true') {
+    if ((advancePayments.length > 0 || assignments.length > 0) && forceDelete !== 'true') {
       await connection.rollback();
       connection.release();
       return res.status(400).json({
-        message: 'Cannot delete contractor with pending payments',
-        pendingPayments: payments[0].count,
+        message: 'Contractor has related data that needs to be reassigned',
+        hasAdvancePayments: advancePayments.length > 0,
+        hasAssignments: assignments.length > 0,
+        advancePayments,
+        assignments,
+        pendingPayments: advancePayments.length,
         assignmentCount: assignments.length
       });
     }
 
-    if (assignments.length > 0) {
-      if (forceDelete === 'true' && newContractorId) {
-        // Verify new contractor exists and is active
-        const [newContractor] = await connection.execute(
-          'SELECT * FROM manufacturing_contractors WHERE id = ? AND status = "active"',
-          [newContractorId]
-        );
+    if ((assignments.length > 0 || advancePayments.length > 0) && forceDelete === 'true' && newContractorId) {
+      // Verify new contractor exists and is active
+      const [newContractor] = await connection.execute(
+        'SELECT * FROM manufacturing_contractors WHERE id = ? AND status = "active"',
+        [newContractorId]
+      );
 
-        if (!newContractor[0]) {
-          await connection.rollback();
-          connection.release();
-          return res.status(400).json({ message: 'Invalid or inactive new contractor' });
-        }
+      if (!newContractor[0]) {
+        await connection.rollback();
+        connection.release();
+        return res.status(400).json({ message: 'Invalid or inactive new contractor' });
+      }
 
-        // Update all assignments
+      // Update all assignments
+      if (assignments.length > 0) {
         await connection.execute(
           'UPDATE cinnamon_assignments SET contractor_id = ? WHERE contractor_id = ?',
           [newContractorId, req.params.id]
         );
+      }
 
-        // Update all payments if forceDelete is true
+      // Update all advance payments
+      if (advancePayments.length > 0) {
         await connection.execute(
           'UPDATE manufacturing_advance_payments SET contractor_id = ? WHERE contractor_id = ?',
           [newContractorId, req.params.id]
         );
-
-        // Delete the contractor
-        await connection.execute(
-          'DELETE FROM manufacturing_contractors WHERE id = ?',
-          [req.params.id]
-        );
-
-        await connection.commit();
-        connection.release();
-
-        return res.status(200).json({
-          message: 'Contractor deleted successfully',
-          reassignedAssignments: assignments
-        });
-      } else {
-        await connection.rollback();
-        connection.release();
-        return res.status(400).json({
-          message: 'Cannot delete contractor with active assignments',
-          activeAssignments: assignments,
-          assignmentCount: assignments.length
-        });
       }
     }
 
-    // If no assignments, but there are payments and forceDelete is true
-    if (payments[0].count > 0 && forceDelete === 'true' && newContractorId) {
-      // Update all payments to new contractor
-      await connection.execute(
-        'UPDATE manufacturing_advance_payments SET contractor_id = ? WHERE contractor_id = ?',
-        [newContractorId, req.params.id]
-      );
-    }
-
+    // Delete the contractor
     await connection.execute(
       'DELETE FROM manufacturing_contractors WHERE id = ?',
       [req.params.id]
     );
 
     await connection.commit();
-    connection.release();
+    res.status(200).json({
+      message: 'Contractor deleted successfully',
+      reassignedData: {
+        assignments: assignments.length > 0 ? assignments : [],
+        advancePayments: advancePayments.length > 0 ? advancePayments : []
+      }
+    });
 
-    return res.status(200).json({ message: 'Contractor deleted successfully' });
   } catch (error) {
     console.error('Error in deleteContractor:', error);
     await connection.rollback();
-    connection.release();
     res.status(500).json({ message: error.message });
+  } finally {
+    connection.release();
   }
 };
 
@@ -336,7 +317,7 @@ exports.updateAssignment = async (req, res) => {
   const connection = await pool.getConnection();
 
   try {
-    const { quantity, duration, duration_type, start_date, notes, raw_material_id, raw_material_quantity } = req.body;
+    const { duration, duration_type, start_date, notes, raw_material_id, raw_material_quantity } = req.body;
 
     await connection.beginTransaction();
 
@@ -350,9 +331,23 @@ exports.updateAssignment = async (req, res) => {
       throw new Error('Assignment not found');
     }
 
+    // Calculate end date based on duration and duration_type
+    const end_date = new Date(start_date);
+    switch (duration_type) {
+      case 'day':
+        end_date.setDate(end_date.getDate() + parseInt(duration));
+        break;
+      case 'week':
+        end_date.setDate(end_date.getDate() + (parseInt(duration) * 7));
+        break;
+      case 'month':
+        end_date.setMonth(end_date.getMonth() + parseInt(duration));
+        break;
+    }
+
     // If raw material is being changed or quantity is increased
     if (raw_material_id !== existingAssignment[0].raw_material_id ||
-        raw_material_quantity > existingAssignment[0].raw_material_quantity) {
+        parseFloat(raw_material_quantity) > parseFloat(existingAssignment[0].raw_material_quantity)) {
 
       // Check stock for new material
       const [inventory] = await connection.execute(
@@ -360,7 +355,7 @@ exports.updateAssignment = async (req, res) => {
         [raw_material_id]
       );
 
-      const additionalQuantity = raw_material_quantity - (existingAssignment[0].raw_material_quantity || 0);
+      const additionalQuantity = parseFloat(raw_material_quantity) - parseFloat(existingAssignment[0].raw_material_quantity || 0);
 
       if (!inventory[0] || inventory[0].quantity < additionalQuantity) {
         throw new Error('Insufficient raw material stock');
@@ -387,13 +382,13 @@ exports.updateAssignment = async (req, res) => {
       }
 
       // Deduct new material from stock
-      await connection.execute(
-        'UPDATE inventory SET quantity = quantity - ? WHERE id = ?',
-        [additionalQuantity, raw_material_id]
-      );
-
-      // Record allocation transaction
       if (additionalQuantity > 0) {
+        await connection.execute(
+          'UPDATE inventory SET quantity = quantity - ? WHERE id = ?',
+          [additionalQuantity, raw_material_id]
+        );
+
+        // Record allocation transaction
         await connection.execute(
           'INSERT INTO inventory_transactions (item_id, type, quantity, reference, notes) VALUES (?, ?, ?, ?, ?)',
           [
@@ -410,11 +405,25 @@ exports.updateAssignment = async (req, res) => {
     // Update the assignment
     await connection.execute(
       `UPDATE cinnamon_assignments
-       SET quantity = ?, duration = ?, duration_type = ?,
-           start_date = ?, notes = ?, raw_material_id = ?,
-           raw_material_quantity = ?
+       SET duration = ?,
+           duration_type = ?,
+           start_date = ?,
+           end_date = ?,
+           notes = ?,
+           raw_material_id = ?,
+           raw_material_quantity = ?,
+           updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-      [quantity, duration, duration_type, start_date, notes, raw_material_id, raw_material_quantity, req.params.id]
+      [
+        duration,
+        duration_type,
+        start_date,
+        end_date,
+        notes || '',
+        raw_material_id,
+        raw_material_quantity,
+        req.params.id
+      ]
     );
 
     // Get the updated assignment with details
@@ -431,6 +440,7 @@ exports.updateAssignment = async (req, res) => {
     res.status(200).json(updatedAssignment[0]);
   } catch (error) {
     await connection.rollback();
+    console.error('Error updating assignment:', error);
     res.status(400).json({ message: error.message });
   } finally {
     connection.release();
@@ -442,17 +452,17 @@ exports.updateAssignment = async (req, res) => {
 // @access  Private
 exports.getAdvancePayments = async (req, res) => {
   try {
-    const { contractorId } = req.params;
-    const { status } = req.query;
+    const [rows] = await pool.execute(`
+      SELECT
+        map.*,
+        mc.name as contractor_name,
+        mc.contractor_id as contractor_code
+      FROM manufacturing_advance_payments map
+      JOIN manufacturing_contractors mc ON map.contractor_id = mc.id
+      ORDER BY map.created_at DESC
+    `);
 
-    let payments;
-    if (status === 'unused') {
-      payments = await AdvancePayment.getUnusedPaymentsByContractor(contractorId);
-    } else {
-      payments = await AdvancePayment.findBy({ contractor_id: contractorId });
-    }
-
-    res.json(payments);
+    res.json(rows);
   } catch (error) {
     console.error('Error fetching advance payments:', error);
     res.status(500).json({ message: 'Error fetching advance payments' });
@@ -464,248 +474,101 @@ exports.getAdvancePayments = async (req, res) => {
 // @access  Private/Admin
 exports.createAdvancePayment = async (req, res) => {
   const connection = await pool.getConnection();
-
   try {
-    // Validate the request body
-    const { error } = validateAdvancePayment(req.body);
-    if (error) {
-      return res.status(400).json({ message: error.details[0].message });
-    }
-
-    const { contractor_id, amount, payment_date, notes } = req.body;
-
     await connection.beginTransaction();
 
-    // Check if contractor exists and is active
+    const { contractor_id, amount, notes } = req.body;
+    const payment_date = new Date().toISOString().slice(0, 10);
+
+    // Get contractor details - add better error handling
     const [contractors] = await connection.execute(
-      'SELECT * FROM manufacturing_contractors WHERE id = ? AND status = "active"',
+      'SELECT * FROM manufacturing_contractors WHERE id = ?',
       [contractor_id]
     );
 
-    if (!contractors[0]) {
-      await connection.rollback();
-      return res.status(400).json({ message: 'Invalid or inactive contractor' });
+    if (!contractors.length) {
+      throw new Error(`Contractor with ID ${contractor_id} not found`);
     }
 
     const contractor = contractors[0];
 
-    // Generate receipt number
-    const date = new Date(payment_date);
-    const year = date.getFullYear().toString().substr(-2);
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const [countResult] = await connection.execute(
-      'SELECT COUNT(*) as count FROM manufacturing_advance_payments'
-    );
-    const count = countResult[0].count + 1;
-    const receipt_number = `ADV${year}${month}${count.toString().padStart(4, '0')}`;
+    // Validate amount
+    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+      throw new Error('Invalid amount');
+    }
 
-    // Insert the payment record
+    // Generate receipt number
+    const [lastReceipt] = await connection.execute(
+      'SELECT receipt_number FROM manufacturing_advance_payments ORDER BY id DESC LIMIT 1'
+    );
+    const lastNumber = lastReceipt[0]?.receipt_number?.slice(-4) || '0000';
+    const nextNumber = (parseInt(lastNumber) + 1).toString().padStart(4, '0');
+    const receipt_number = `MAP${new Date().getFullYear()}${nextNumber}`;
+
+    // Insert payment record with initial status as 'pending'
     const [result] = await connection.execute(
       `INSERT INTO manufacturing_advance_payments
-       (contractor_id, amount, payment_date, receipt_number, notes)
-       VALUES (?, ?, ?, ?, ?)`,
-      [contractor_id, amount, payment_date, receipt_number, notes]
+       (contractor_id, amount, payment_date, notes, receipt_number, status, created_by)
+       VALUES (?, ?, ?, ?, ?, 'pending', ?)`,
+      [contractor_id, parseFloat(amount), payment_date, notes || '', receipt_number, req.user.id]
     );
-
-    // Get company settings
-    const [settings] = await connection.execute(
-      'SELECT * FROM settings WHERE id = 1'
-    );
-    const companyInfo = settings[0] || {};
-
-    // Generate receipt HTML
-    const receiptHtml = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <title>Advance Payment Receipt - ${receipt_number}</title>
-        <style>
-          @media print {
-            @page { margin: 15mm; }
-          }
-          body {
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            background: #fff;
-          }
-          .watermark {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) rotate(-45deg);
-            font-size: 100px;
-            opacity: 0.03;
-            z-index: -1;
-            color: #000;
-            white-space: nowrap;
-          }
-          .header {
-            text-align: center;
-            margin-bottom: 40px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #1976d2;
-          }
-          .company-name {
-            font-size: 28px;
-            font-weight: bold;
-            color: #1976d2;
-            margin: 0;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-          }
-          .company-details {
-            font-size: 14px;
-            color: #666;
-            margin: 5px 0;
-          }
-          .document-title {
-            font-size: 24px;
-            font-weight: bold;
-            text-align: center;
-            margin: 30px 0;
-            color: #333;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-          }
-          .info-section {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 30px;
-            margin-bottom: 40px;
-            padding: 25px;
-            background-color: #f8f9fa;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-          }
-          .info-group {
-            display: grid;
-            gap: 20px;
-          }
-          .info-item {
-            margin-bottom: 15px;
-          }
-          .info-label {
-            font-weight: 600;
-            color: #666;
-            font-size: 13px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 5px;
-          }
-          .info-value {
-            font-size: 15px;
-            color: #333;
-          }
-          .amount-section {
-            margin: 30px 0;
-            padding: 20px;
-            background-color: #1976d2;
-            color: white;
-            border-radius: 8px;
-            text-align: right;
-          }
-          .amount-label {
-            font-size: 16px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-          }
-          .amount-value {
-            font-size: 24px;
-            font-weight: bold;
-            margin-top: 5px;
-          }
-          .footer {
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #eee;
-            text-align: center;
-            font-size: 12px;
-            color: #666;
-          }
-          .receipt-number {
-            font-family: monospace;
-            font-size: 16px;
-            color: #1976d2;
-            font-weight: bold;
-            letter-spacing: 1px;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="watermark">ADVANCE PAYMENT</div>
-
-        <div class="header">
-          <h1 class="company-name">${companyInfo.company_name || 'Company Name'}</h1>
-          <div class="company-details">${companyInfo.company_address || 'Company Address'}</div>
-          <div class="company-details">Tel: ${companyInfo.company_phone || 'N/A'}</div>
-        </div>
-
-        <div class="document-title">Advance Payment Receipt</div>
-
-        <div class="info-section">
-          <div class="info-group">
-            <div class="info-item">
-              <div class="info-label">Receipt Number</div>
-              <div class="info-value receipt-number">${receipt_number}</div>
-            </div>
-            <div class="info-item">
-              <div class="info-label">Date</div>
-              <div class="info-value">${new Date(payment_date).toLocaleDateString()}</div>
-            </div>
-          </div>
-          <div class="info-group">
-            <div class="info-item">
-              <div class="info-label">Contractor Details</div>
-              <div class="info-value">${contractor.name}</div>
-              <div class="info-value" style="color: #666; font-size: 13px;">ID: ${contractor.contractor_id}</div>
-              <div class="info-value" style="color: #666; font-size: 13px;">Tel: ${contractor.phone || 'N/A'}</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="amount-section">
-          <div class="amount-label">Advance Payment Amount</div>
-          <div class="amount-value">Rs. ${parseFloat(amount).toFixed(2)}</div>
-        </div>
-
-        ${notes ? `
-        <div style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px;">
-          <div class="info-label">Notes</div>
-          <div style="margin-top: 5px;">${notes}</div>
-        </div>
-        ` : ''}
-
-        <div class="footer">
-          <p>This is a computer generated receipt</p>
-          <p>Generated on: ${new Date().toLocaleString()}</p>
-        </div>
-      </body>
-      </html>
-    `;
 
     await connection.commit();
 
     res.json({
       message: 'Advance payment created successfully',
-      receiptHtml,
       payment: {
         id: result.insertId,
         contractor_name: contractor.name,
-        amount,
+        amount: parseFloat(amount),
         payment_date,
         receipt_number,
-        notes
+        notes,
+        status: 'pending'
       }
     });
 
   } catch (error) {
     await connection.rollback();
     console.error('Error creating advance payment:', error);
+    res.status(error.message.includes('not found') ? 404 : 500)
+      .json({ message: error.message });
+  } finally {
+    connection.release();
+  }
+};
+
+// @desc    Mark advance payment as paid
+// @route   PUT /api/manufacturing/advance-payments/:id/mark-paid
+// @access  Private/Admin
+exports.markAdvancePaymentAsPaid = async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const [payment] = await connection.execute(
+      'SELECT * FROM manufacturing_advance_payments WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (!payment[0]) {
+      throw new Error('Payment not found');
+    }
+
+    if (payment[0].status !== 'pending') {
+      throw new Error('Only pending payments can be marked as paid');
+    }
+
+    await connection.execute(
+      'UPDATE manufacturing_advance_payments SET status = "paid" WHERE id = ?',
+      [req.params.id]
+    );
+
+    await connection.commit();
+    res.json({ message: 'Payment marked as paid successfully' });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error marking payment as paid:', error);
     res.status(500).json({ message: error.message });
   } finally {
     connection.release();
@@ -1853,7 +1716,7 @@ exports.createPurchaseInvoice = async (req, res) => {
       ) VALUES (?, ?, CURDATE(), DATE_ADD(CURDATE(), INTERVAL 15 DAY), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         invoiceNumber,
-        contractor, // Keep contractor_id
+        contractor,
         totalAmount,
         totalAmount,
         cuttingRate,
@@ -2340,5 +2203,128 @@ exports.completeAssignment = async (req, res) => {
     res.status(500).json({ message: error.message });
   } finally {
     connection.release(); // Release the connection back to the pool
+  }
+};
+
+// @desc    Update advance payment
+// @route   PUT /api/manufacturing/advance-payments/:id
+// @access  Private/Admin
+exports.updateAdvancePayment = async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const [payment] = await connection.execute(
+      'SELECT * FROM manufacturing_advance_payments WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (!payment[0]) {
+      throw new Error('Payment not found');
+    }
+
+    if (!['pending', 'paid'].includes(payment[0].status)) {
+      throw new Error('Only pending or paid payments can be updated');
+    }
+
+    const { amount, notes } = req.body;
+
+    await connection.execute(
+      `UPDATE manufacturing_advance_payments
+       SET amount = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [amount, notes, req.params.id]
+    );
+
+    await connection.commit();
+    res.json({ message: 'Advance payment updated successfully' });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error updating advance payment:', error);
+    res.status(500).json({ message: error.message });
+  } finally {
+    connection.release();
+  }
+};
+
+// @desc    Delete advance payment
+// @route   DELETE /api/manufacturing/advance-payments/:id
+// @access  Private/Admin
+exports.deleteAdvancePayment = async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const [payment] = await connection.execute(
+      'SELECT * FROM manufacturing_advance_payments WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (!payment[0]) {
+      throw new Error('Payment not found');
+    }
+
+    if (!['pending', 'paid'].includes(payment[0].status)) {
+      throw new Error('Only pending or paid payments can be deleted');
+    }
+
+    await connection.execute(
+      'DELETE FROM manufacturing_advance_payments WHERE id = ?',
+      [req.params.id]
+    );
+
+    await connection.commit();
+    res.json({ message: 'Advance payment deleted successfully' });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error deleting advance payment:', error);
+    res.status(500).json({ message: error.message });
+  } finally {
+    connection.release();
+  }
+};
+
+// Add this new endpoint
+exports.getContractorRelatedData = async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    const contractorId = req.params.id;
+
+    // Get all related data in parallel
+    const [
+      [assignments],
+      [advancePayments],
+      [purchaseInvoices]
+    ] = await Promise.all([
+      connection.execute(
+        'SELECT ca.*, i.product_name as raw_material_name FROM cinnamon_assignments ca LEFT JOIN inventory i ON ca.raw_material_id = i.id WHERE ca.contractor_id = ? AND ca.status = "active"',
+        [contractorId]
+      ),
+      connection.execute(
+        'SELECT * FROM manufacturing_advance_payments WHERE contractor_id = ?',
+        [contractorId]
+      ),
+      connection.execute(
+        'SELECT * FROM purchase_invoices WHERE contractor_id = ?',
+        [contractorId]
+      )
+    ]);
+
+    const hasRelatedData = assignments.length > 0 ||
+                          advancePayments.length > 0 ||
+                          purchaseInvoices.length > 0;
+
+    res.json({
+      hasRelatedData,
+      assignments,
+      advancePayments,
+      purchaseInvoices
+    });
+
+  } catch (error) {
+    console.error('Error getting contractor related data:', error);
+    res.status(500).json({ message: error.message });
+  } finally {
+    connection.release();
   }
 };

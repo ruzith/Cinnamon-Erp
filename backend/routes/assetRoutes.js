@@ -191,9 +191,85 @@ router.post('/:assetId/maintenance', protect, async (req, res) => {
       created_by: req.user.id
     };
 
-    const maintenance = await AssetMaintenance.createWithAttachments(maintenanceData);
-    res.status(201).json(maintenance);
+    // Start a transaction
+    const connection = await Asset.pool.getConnection();
+    await connection.beginTransaction();
+
+    try {
+      // Create maintenance record
+      const maintenance = await AssetMaintenance.createWithAttachments(maintenanceData);
+
+      // Get account IDs by their codes
+      const [accounts] = await connection.execute(
+        'SELECT id, code FROM accounts WHERE code IN (?, ?)',
+        ['5003', '1001']
+      );
+
+      const maintenanceExpenseAccount = accounts.find(a => a.code === '5003');
+      const cashAccount = accounts.find(a => a.code === '1001');
+
+      if (!maintenanceExpenseAccount || !cashAccount) {
+        throw new Error('Required accounts not found');
+      }
+
+      // Create accounting transaction
+      const [result] = await connection.execute(`
+        INSERT INTO transactions (
+          date,
+          reference,
+          description,
+          type,
+          category,
+          amount,
+          status,
+          payment_method,
+          created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        maintenanceData.date || new Date(),
+        `MAINT-${maintenance.id}`,
+        `Maintenance cost for asset ${asset.name} (${asset.code})`,
+        'expense',
+        'maintenance_expense',
+        maintenanceData.cost,
+        'posted',
+        'bank',
+        req.user.id
+      ]);
+
+      const transactionId = result.insertId;
+
+      // Create transaction entries (double-entry accounting)
+      await connection.execute(`
+        INSERT INTO transactions_entries (transaction_id, account_id, description, debit, credit)
+        VALUES
+        (?, ?, ?, ?, ?), -- Maintenance Expense (debit)
+        (?, ?, ?, ?, ?)  -- Cash/Bank (credit)
+      `, [
+        transactionId, maintenanceExpenseAccount.id, 'Maintenance expense', maintenanceData.cost, 0,
+        transactionId, cashAccount.id, 'Cash payment for maintenance', 0, maintenanceData.cost
+      ]);
+
+      // Update account balances
+      await connection.execute(
+        'UPDATE accounts SET balance = balance - ? WHERE id = ?',
+        [maintenanceData.cost, cashAccount.id]
+      );
+      await connection.execute(
+        'UPDATE accounts SET balance = balance + ? WHERE id = ?',
+        [maintenanceData.cost, maintenanceExpenseAccount.id]
+      );
+
+      await connection.commit();
+      res.status(201).json(maintenance);
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   } catch (error) {
+    console.error('Error creating maintenance record:', error);
     res.status(400).json({ message: error.message });
   }
 });

@@ -23,4 +23,4 @@ const salesInvoiceSchema = Joi.object({
   status: Joi.string().valid('draft', 'confirmed', 'cancelled').default('draft'),
 });
 
-exports.validateSalesInvoice = (data) => salesInvoiceSchema.validate(data); 
+exports.validateSalesInvoice = (data) => salesInvoiceSchema.validate(data);

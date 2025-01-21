@@ -492,6 +492,7 @@ CREATE TABLE sales_invoices (
   total DECIMAL(10, 2) NOT NULL,
   payment_method ENUM('cash', 'card', 'bank-transfer', 'other') NOT NULL,
   payment_status ENUM('pending', 'partial', 'paid') DEFAULT 'pending',
+  payment_date DATE DEFAULT NULL,
   notes TEXT,
   created_by INT NOT NULL,
   status ENUM('draft', 'confirmed', 'cancelled') DEFAULT 'draft',
@@ -615,7 +616,7 @@ CREATE TABLE loan_payments (
   loan_id INT NOT NULL,
   amount DECIMAL(15, 2) NOT NULL,
   payment_date DATE NOT NULL,
-  payment_method ENUM('cash', 'bank_transfer', 'check', 'credit_card') NOT NULL,
+  payment_method ENUM('cash', 'bank', 'check', 'card') NOT NULL DEFAULT 'cash',
   reference VARCHAR(50) UNIQUE,
   notes TEXT,
   status ENUM('pending', 'completed', 'cancelled') DEFAULT 'completed',
@@ -738,28 +739,22 @@ CREATE TABLE accounts (
   balance DECIMAL(15, 2) DEFAULT 0,
   is_system_account BOOLEAN DEFAULT FALSE,
   status ENUM('active', 'inactive') DEFAULT 'active',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 -- Transactions table
 CREATE TABLE transactions (
   id INT PRIMARY KEY AUTO_INCREMENT,
   date DATE NOT NULL,
-  type ENUM(
-    'revenue',
-    'expense',
-    'credit_payment',
-    'manufacturing_payment',
-    'salary'
-  ) NOT NULL,
+  reference VARCHAR(50) NOT NULL,
+  description TEXT,
+  type ENUM('revenue', 'expense', 'asset', 'liability', 'equity', 'salary', 'manufacturing_payment', 'credit_payment') NOT NULL,
   category VARCHAR(50) NOT NULL,
   amount DECIMAL(15, 2) NOT NULL,
-  description TEXT NOT NULL,
-  reference VARCHAR(50) UNIQUE,
+  status ENUM('draft', 'posted', 'cancelled') DEFAULT 'draft',
+  payment_method ENUM('cash', 'bank', 'check', 'card') NOT NULL DEFAULT 'cash',
   employee_id INT,
-  notes TEXT,
-  payment_method ENUM('cash', 'bank_transfer', 'check', 'credit_card'),
-  status ENUM('draft', 'posted', 'void') DEFAULT 'draft',
-  created_by INT NOT NULL,
+  created_by INT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (employee_id) REFERENCES employees(id),
@@ -970,3 +965,14 @@ CREATE TABLE manufacturing_payment_usages (
   FOREIGN KEY (payment_id) REFERENCES manufacturing_payments(id),
   FOREIGN KEY (advance_payment_id) REFERENCES manufacturing_advance_payments(id)
 );
+
+INSERT INTO accounts (code, name, type, category, status) VALUES
+('1001', 'Cash Account', 'asset', 'current', 'active'),
+('1002', 'Accounts Receivable', 'asset', 'current', 'active'),
+('2001', 'Accounts Payable', 'liability', 'current-liability', 'active'),
+('3001', 'Capital', 'equity', 'capital', 'active'),
+('4001', 'Sales Revenue', 'revenue', 'operational', 'active'),
+('5001', 'Salary Expense', 'expense', 'operational', 'active'),
+('5002', 'Manufacturing Expense', 'expense', 'operational', 'active'),
+('5003', 'General Expenses', 'expense', 'operational', 'active')
+ON DUPLICATE KEY UPDATE status = 'active';

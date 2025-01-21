@@ -31,7 +31,8 @@ const {
   markAdvancePaymentAsPaid,
   updateAdvancePayment,
   deleteAdvancePayment,
-  getContractorRelatedData
+  getContractorRelatedData,
+  markPaymentAsPaid
 } = require('../controllers/manufacturingController');
 const ManufacturingOrder = require('../models/domain/ManufacturingOrder');
 const { validateOrder } = require('../validators/manufacturingValidator');
@@ -130,7 +131,7 @@ router.post('/assignments/complete', protect, authorize('admin'), completeAssign
 router.get('/advance-payments', protect, getAdvancePayments);
 router.post('/advance-payments', protect, authorize('admin', 'accountant'), createAdvancePayment);
 router.get('/contractors/:id/advance-payments', protect, getContractorAdvancePayments);
-router.put('/advance-payments/:id/mark-paid', protect, authorize('admin', 'accountant'), markAdvancePaymentAsPaid);
+router.put('/advance-payments/:id/mark-paid', protect, authorize(['admin', 'accountant']), markAdvancePaymentAsPaid);
 router.put('/advance-payments/:id', protect, authorize('admin', 'accountant'), updateAdvancePayment);
 router.delete('/advance-payments/:id', protect, authorize('admin', 'accountant'), deleteAdvancePayment);
 router.post('/advance-payments/receipt', protect, async (req, res) => {
@@ -235,26 +236,6 @@ router.post('/payments', protect, authorize('admin', 'accountant'), async (req, 
   }
 });
 
-router.put('/payments/:id/mark-paid', protect, authorize('admin', 'accountant'), async (req, res) => {
-  const connection = await pool.getConnection();
-  try {
-    await connection.beginTransaction();
-
-    await connection.execute(
-      'UPDATE manufacturing_payments SET status = "paid" WHERE id = ?',
-      [req.params.id]
-    );
-
-    await connection.commit();
-    res.json({ message: 'Payment marked as paid successfully' });
-  } catch (error) {
-    await connection.rollback();
-    res.status(400).json({ message: error.message });
-  } finally {
-    connection.release();
-  }
-});
-
 router.put('/payments/:id', protect, authorize('admin', 'accountant'), async (req, res) => {
   const connection = await pool.getConnection();
   try {
@@ -331,5 +312,7 @@ router.get('/invoices/:id/print', protect, printInvoice);
 router.get('/purchases', protect, getPurchases);
 router.post('/purchase-invoices', protect, authorize('admin', 'manager'), createPurchaseInvoice);
 router.put('/purchases/:id/mark-paid', protect, authorize('admin', 'accountant'), markPurchaseAsPaid);
+
+router.put('/payments/:id/mark-paid', protect, authorize(['admin', 'accountant']), markPaymentAsPaid);
 
 module.exports = router;

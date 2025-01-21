@@ -49,6 +49,7 @@ import {
 import axios from "axios";
 import { useCurrencyFormatter } from "../utils/currencyUtils";
 import SummaryCard from "../components/common/SummaryCard";
+import { useSnackbar } from "notistack";
 
 const TabPanel = (props) => {
   const { children, value, index, ...other } = props;
@@ -119,6 +120,7 @@ const LoanBook = () => {
   const [allBorrowers, setAllBorrowers] = useState([]);
 
   const { formatCurrency } = useCurrencyFormatter();
+  const { enqueueSnackbar } = useSnackbar();
 
   useEffect(() => {
     fetchLoans();
@@ -312,7 +314,6 @@ const LoanBook = () => {
   const handleLoanSubmit = async (e) => {
     e.preventDefault();
     try {
-      let response;
       // Validate required fields
       const requiredFields = {
         borrower_type: 'Borrower Type',
@@ -334,7 +335,7 @@ const LoanBook = () => {
         .map(([_, label]) => label);
 
       if (missingFields.length > 0) {
-        alert(`Please fill in the following required fields: ${missingFields.join(', ')}`);
+        enqueueSnackbar(`Please fill in the following required fields: ${missingFields.join(', ')}`, { variant: 'error' });
         return;
       }
 
@@ -358,13 +359,26 @@ const LoanBook = () => {
         notes: loanFormData.notes || null
       };
 
+      let response;
       if (selectedLoan) {
         response = await axios.put(
           `/api/loans/${selectedLoan.id}`,
           loanData
         );
       } else {
-        // For new loans, send loan data and accounting metadata separately
+        // Get borrower name based on type and ID
+        const getBorrowerName = () => {
+          if (loanFormData.borrower_type === 'employee') {
+            const employee = employees.find(e => e.id === Number(loanFormData.borrower_id));
+            return employee ? employee.name : 'Unknown Employee';
+          } else if (loanFormData.borrower_type === 'contractor') {
+            const contractor = contractors.find(c => c.id === Number(loanFormData.borrower_id));
+            return contractor ? contractor.name : 'Unknown Contractor';
+          }
+          return 'Unknown Borrower';
+        };
+
+        // For new loans, send loan data and accounting metadata
         const requestData = {
           loan: loanData,
           createAccountingEntry: true,
@@ -372,8 +386,9 @@ const LoanBook = () => {
             type: "credit_payment",
             category: "loan_disbursement",
             amount: Number(loanFormData.amount),
-            description: `Loan disbursement to borrower`,
+            description: `Loan disbursement to ${getBorrowerName()}`,
             reference: `LOAN-${Date.now()}`,
+            paymentMethod: loanFormData.paymentMethod || 'cash',
             status: "completed",
             notes: `Loan disbursement - ${loanFormData.purpose || "No purpose specified"}`
           }
@@ -381,13 +396,17 @@ const LoanBook = () => {
 
         response = await axios.post("/api/loans", requestData);
       }
+
       fetchLoans();
       fetchSummary();
       handleCloseLoanDialog();
+
+      // Show success message
+      enqueueSnackbar('Loan created successfully', { variant: 'success' });
+
     } catch (error) {
       console.error("Error saving loan:", error);
-      console.error("Error details:", error.response?.data);
-      alert(error.response?.data?.message || "Error saving loan");
+      enqueueSnackbar(error.response?.data?.message || "Error saving loan", { variant: 'error' });
     }
   };
 
@@ -398,11 +417,8 @@ const LoanBook = () => {
         loan_id: selectedLoan.id,
         amount: paymentFormData.amount,
         payment_date: paymentFormData.date,
-        reference:
-          paymentFormData.reference ||
-          `LP${Math.floor(Math.random() * 100000000)
-            .toString()
-            .padStart(8, "0")}`,
+        reference: paymentFormData.reference ||
+          `LP${Math.floor(Math.random() * 100000000).toString().padStart(8, "0")}`,
         status: "completed",
         notes: paymentFormData.notes,
         createAccountingEntry: true,
@@ -412,7 +428,7 @@ const LoanBook = () => {
           amount: paymentFormData.amount,
           description: `Loan repayment from ${selectedLoan?.borrowerName}`,
           reference: paymentFormData.reference || `LOAN-REPAY-${Date.now()}`,
-          paymentMethod: paymentFormData.paymentMethod,
+          paymentMethod: paymentFormData.paymentMethod || 'cash',
           status: "completed",
           notes: paymentFormData.notes,
         },
@@ -423,13 +439,12 @@ const LoanBook = () => {
       fetchPayments();
       fetchSummary();
       handleClosePaymentDialog();
+
+      // Show success message
+      enqueueSnackbar('Payment recorded successfully', { variant: 'success' });
     } catch (error) {
       console.error("Error processing payment:", error);
-      if (error.response?.data?.message === "Validation failed") {
-        alert(Object.values(error.response.data.errors)[0]);
-      } else {
-        alert(error.response?.data?.message || 'Error processing payment');
-      }
+      enqueueSnackbar(error.response?.data?.message || 'Error processing payment', { variant: 'error' });
     }
   };
 
@@ -1599,18 +1614,18 @@ const LoanBook = () => {
               />
             </Grid>
             <Grid item xs={6}>
-              <FormControl fullWidth>
+              <FormControl fullWidth required>
                 <InputLabel>Payment Method</InputLabel>
                 <Select
                   name="paymentMethod"
                   value={paymentFormData.paymentMethod}
-                  label="Payment Method"
                   onChange={handlePaymentInputChange}
+                  label="Payment Method"
                 >
                   <MenuItem value="cash">Cash</MenuItem>
                   <MenuItem value="bank_transfer">Bank Transfer</MenuItem>
                   <MenuItem value="check">Check</MenuItem>
-                  <MenuItem value="credit_card">Credit Card</MenuItem>
+                  <MenuItem value="card">Card</MenuItem>
                 </Select>
               </FormControl>
             </Grid>

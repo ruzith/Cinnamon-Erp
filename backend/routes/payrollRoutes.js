@@ -1,35 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/authMiddleware');
-const SalaryStructure = require('../models/domain/SalaryStructure');
 const Payroll = require('../models/domain/Payroll');
 const Employee = require('../models/domain/Employee');
 const SalaryAdvance = require('../models/domain/SalaryAdvance');
-
-// Salary Structure routes
-router.get('/structures', protect, async (req, res) => {
-  try {
-    const structures = await SalaryStructure.find({ status: 'active' });
-    res.json(structures);
-  } catch (error) {
-    console.error('Error fetching salary structures:', error);
-    res.status(500).json({
-      message: 'Error fetching salary structures',
-      error: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
-  }
-});
-
-router.post('/structures', protect, authorize('admin', 'hr'), async (req, res) => {
-  try {
-    const structure = await SalaryStructure.create(req.body);
-    res.status(201).json(structure);
-  } catch (error) {
-    console.error('Error creating salary structure:', error);
-    res.status(400).json({ message: 'Error creating salary structure' });
-  }
-});
 
 // Generate payroll
 router.post('/generate', protect, authorize('admin', 'hr'), async (req, res) => {

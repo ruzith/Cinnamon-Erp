@@ -14,9 +14,64 @@ const createTransaction = async (transactionData) => {
   return response.data
 }
 
-const accountingService = {
-  getTransactions,
-  createTransaction
+// Post transaction
+const postTransaction = async (id) => {
+  const response = await axios.post(`${API_URL}transactions/${id}/post`)
+  return response.data
 }
 
-export default accountingService 
+// Get ledger entries
+const getLedgerEntries = async (accountId, startDate, endDate) => {
+  const response = await axios.get(
+    `${API_URL}ledger/${accountId}?startDate=${startDate}&endDate=${endDate}`
+  )
+  return response.data
+}
+
+// Get trial balance
+const getTrialBalance = async () => {
+  const response = await axios.get(API_URL + 'trial-balance')
+  return response.data
+}
+
+// Get balance sheet
+const getBalanceSheet = async () => {
+  const response = await axios.get(API_URL + 'balance-sheet')
+  return response.data
+}
+
+// Get income statement
+const getIncomeStatement = async (startDate, endDate) => {
+  const response = await axios.get(
+    `${API_URL}income-statement?startDate=${startDate}&endDate=${endDate}`
+  )
+  return response.data
+}
+
+// Get cash flow statement
+const getCashFlow = async (startDate, endDate) => {
+  const response = await axios.get(
+    `${API_URL}cash-flow?startDate=${startDate}&endDate=${endDate}`
+  )
+  return response.data
+}
+
+// Add this new method
+const getAccountingSummary = async () => {
+  const response = await axios.get(API_URL + 'summary')
+  return response.data
+}
+
+const accountingService = {
+  getTransactions,
+  createTransaction,
+  postTransaction,
+  getLedgerEntries,
+  getTrialBalance,
+  getBalanceSheet,
+  getIncomeStatement,
+  getCashFlow,
+  getAccountingSummary
+}
+
+export default accountingService

@@ -96,6 +96,83 @@ class Asset extends BaseModel {
       useful_life_remaining: Math.max(useful_life - age, 0)
     };
   }
+
+  async createMaintenanceTransaction(maintenanceData, userId) {
+    const connection = await this.pool.getConnection();
+
+    try {
+      await connection.beginTransaction();
+
+      // Get account IDs by their codes
+      const [accounts] = await connection.execute(
+        'SELECT id, code FROM accounts WHERE code IN (?, ?)',
+        ['5003', '1001']
+      );
+
+      const maintenanceExpenseAccount = accounts.find(a => a.code === '5003');
+      const cashAccount = accounts.find(a => a.code === '1001');
+
+      if (!maintenanceExpenseAccount || !cashAccount) {
+        throw new Error('Required accounts not found');
+      }
+
+      // Create transaction record
+      const [result] = await connection.execute(`
+        INSERT INTO transactions (
+          date,
+          reference,
+          description,
+          type,
+          category,
+          amount,
+          status,
+          payment_method,
+          created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        maintenanceData.date || new Date(),
+        `MAINT-${maintenanceData.id}`,
+        `Maintenance cost for asset ${maintenanceData.asset_name}`,
+        'expense',
+        'maintenance_expense',
+        maintenanceData.cost,
+        'posted',
+        'bank',
+        userId
+      ]);
+
+      const transactionId = result.insertId;
+
+      // Create transaction entries
+      await connection.execute(`
+        INSERT INTO transactions_entries (transaction_id, account_id, description, debit, credit)
+        VALUES
+        (?, ?, ?, ?, ?),
+        (?, ?, ?, ?, ?)
+      `, [
+        transactionId, maintenanceExpenseAccount.id, 'Maintenance expense', maintenanceData.cost, 0,
+        transactionId, cashAccount.id, 'Cash payment for maintenance', 0, maintenanceData.cost
+      ]);
+
+      // Update account balances
+      await connection.execute(
+        'UPDATE accounts SET balance = balance - ? WHERE id = ?',
+        [maintenanceData.cost, cashAccount.id]
+      );
+      await connection.execute(
+        'UPDATE accounts SET balance = balance + ? WHERE id = ?',
+        [maintenanceData.cost, maintenanceExpenseAccount.id]
+      );
+
+      await connection.commit();
+      return transactionId;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
 }
 
 module.exports = new Asset();

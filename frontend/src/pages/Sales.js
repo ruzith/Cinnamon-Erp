@@ -48,6 +48,7 @@ import SummaryCard from '../components/common/SummaryCard';
 import { useDispatch, useSelector } from 'react-redux';
 import { getCustomers, createCustomer, updateCustomer } from '../features/customers/customerSlice';
 import { useTheme } from '@mui/material/styles';
+import { useSnackbar } from 'notistack';
 
 const TabPanel = (props) => {
   const { children, value, index, ...other } = props;
@@ -113,6 +114,8 @@ const Sales = () => {
   }]);
 
   const theme = useTheme();
+
+  const { enqueueSnackbar } = useSnackbar();
 
   useEffect(() => {
     fetchSales();
@@ -352,11 +355,11 @@ const Sales = () => {
         customer_id: saleFormData.customerId,
         items: transformedItems,
         status: 'confirmed',
-        payment_status: saleFormData.paymentStatus,
+        payment_status: selectedSale ? saleFormData.paymentStatus : 'pending',
         payment_method: saleFormData.paymentMethod,
         notes: saleFormData.notes,
         shipping_address: saleFormData.shippingAddress,
-        tax: taxPercentage, // Send tax as percentage
+        tax: taxPercentage,
         discount: discount,
         sub_total: subtotal,
         total: total,
@@ -553,6 +556,32 @@ const Sales = () => {
     notes: ''
   });
 
+  const handleMarkAsPaid = async (saleId) => {
+    try {
+      const response = await axios.put(`/api/sales/${saleId}/mark-paid`);
+
+      enqueueSnackbar('Sale marked as paid and transaction recorded successfully', {
+        variant: 'success'
+      });
+
+      // Refresh both sales and transactions data
+      fetchSales();
+
+      // If you have access to the accounting context/state, refresh it
+      // This assumes you have a global state management setup
+      // dispatch(fetchTransactions());
+      // or
+      // accountingContext.refreshTransactions();
+
+    } catch (error) {
+      console.error('Error marking sale as paid:', error);
+      enqueueSnackbar(
+        error.response?.data?.message || 'Error marking sale as paid',
+        { variant: 'error' }
+      );
+    }
+  };
+
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
       {/* Header */}
@@ -675,6 +704,16 @@ const Sales = () => {
                     >
                       <VisibilityIcon fontSize="small" />
                     </IconButton>
+                    {sale.payment_status !== 'paid' && (
+                      <Button
+                        size="small"
+                        color="success"
+                        onClick={() => handleMarkAsPaid(sale.id)}
+                        sx={{ ml: 1 }}
+                      >
+                        Paid
+                      </Button>
+                    )}
                     <IconButton
                       size="small"
                       onClick={() => handlePrintInvoice(sale)}
@@ -943,21 +982,23 @@ const Sales = () => {
                           </Select>
                         </FormControl>
                       </Grid>
-                      <Grid item xs={12}>
-                        <FormControl fullWidth size="small">
-                          <InputLabel>Payment Status</InputLabel>
-                          <Select
-                            name="paymentStatus"
-                            value={saleFormData.paymentStatus}
-                            onChange={handleSaleInputChange}
-                            label="Payment Status"
-                          >
-                            <MenuItem value="pending">Pending</MenuItem>
-                            <MenuItem value="partial">Partial</MenuItem>
-                            <MenuItem value="paid">Paid</MenuItem>
-                          </Select>
-                        </FormControl>
-                      </Grid>
+                      {selectedSale && (
+                        <Grid item xs={12}>
+                          <FormControl fullWidth size="small">
+                            <InputLabel>Payment Status</InputLabel>
+                            <Select
+                              name="paymentStatus"
+                              value={saleFormData.paymentStatus}
+                              onChange={handleSaleInputChange}
+                              label="Payment Status"
+                            >
+                              <MenuItem value="pending">Pending</MenuItem>
+                              <MenuItem value="partial">Partial</MenuItem>
+                              <MenuItem value="paid">Paid</MenuItem>
+                            </Select>
+                          </FormControl>
+                        </Grid>
+                      )}
                       <Grid item xs={12}>
                         <TextField
                           fullWidth

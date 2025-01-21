@@ -26,6 +26,7 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { useCurrencies } from './hooks/useCurrencies';
 import { useSettings } from './hooks/useSettings';
 import HRManagement from './pages/HRManagement';
+import { SnackbarProvider } from 'notistack';
 
 function App() {
   const [darkMode, setDarkMode] = useState(() => {
@@ -45,40 +46,42 @@ function App() {
   useSettings();
 
   return (
-    <LocalizationProvider dateAdapter={AdapterDayjs}>
-      <ThemeProvider theme={getTheme(darkMode)}>
-        <CssBaseline />
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+    <SnackbarProvider maxSnack={3}>
+      <LocalizationProvider dateAdapter={AdapterDayjs}>
+        <ThemeProvider theme={getTheme(darkMode)}>
+          <CssBaseline />
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
 
-          <Route path="/*" element={
-            <PrivateRoute>
-              <Layout darkMode={darkMode} toggleDarkMode={toggleDarkMode}>
-                <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/lands/*" element={<LandManagement />} />
-                  <Route path="/users/*" element={<UserManagement />} />
-                  <Route path="/employees/*" element={<EmployeeManagement />} />
-                  <Route path="/tasks/*" element={<TaskManagement />} />
-                  <Route path="/cutting/*" element={<CuttingManagement />} />
-                  <Route path="/manufacturing/*" element={<Manufacturing />} />
-                  <Route path="/inventory/*" element={<Inventory />} />
-                  <Route path="/sales/*" element={<Sales />} />
-                  <Route path="/assets/*" element={<AssetManagement />} />
-                  <Route path="/accounting/*" element={<Accounting />} />
-                  <Route path="/loans/*" element={<LoanBook />} />
-                  <Route path="/reports/*" element={<Reports />} />
-                  <Route path="/settings/*" element={<Settings />} />
-                  <Route path="/hr" element={<HRManagement />} />
-                  <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
-              </Layout>
-            </PrivateRoute>
-          } />
-        </Routes>
-      </ThemeProvider>
-    </LocalizationProvider>
+            <Route path="/*" element={
+              <PrivateRoute>
+                <Layout darkMode={darkMode} toggleDarkMode={toggleDarkMode}>
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/lands/*" element={<LandManagement />} />
+                    <Route path="/users/*" element={<UserManagement />} />
+                    <Route path="/employees/*" element={<EmployeeManagement />} />
+                    <Route path="/tasks/*" element={<TaskManagement />} />
+                    <Route path="/cutting/*" element={<CuttingManagement />} />
+                    <Route path="/manufacturing/*" element={<Manufacturing />} />
+                    <Route path="/inventory/*" element={<Inventory />} />
+                    <Route path="/sales/*" element={<Sales />} />
+                    <Route path="/assets/*" element={<AssetManagement />} />
+                    <Route path="/accounting/*" element={<Accounting />} />
+                    <Route path="/loans/*" element={<LoanBook />} />
+                    <Route path="/reports/*" element={<Reports />} />
+                    <Route path="/settings/*" element={<Settings />} />
+                    <Route path="/hr" element={<HRManagement />} />
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                  </Routes>
+                </Layout>
+              </PrivateRoute>
+            } />
+          </Routes>
+        </ThemeProvider>
+      </LocalizationProvider>
+    </SnackbarProvider>
   );
 }
 

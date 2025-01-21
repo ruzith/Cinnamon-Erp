@@ -715,15 +715,17 @@ const generateCustomers = async (connection, count = 20) => {
   }));
 };
 
-// Add this helper function for generating transactions
+// Update the generateTransactions function
 const generateTransactions = async (connection) => {
   const [users] = await connection.query('SELECT id FROM users');
   const [accounts] = await connection.query('SELECT id FROM accounts');
   const [employees] = await connection.query('SELECT id FROM employees WHERE status = "active"');
   const [manufacturingOrders] = await connection.query('SELECT order_number FROM manufacturing_orders WHERE payment_status = "pending"');
 
-  const transactionTypes = ['revenue', 'expense', 'credit_payment', 'manufacturing_payment', 'salary'];
-  const paymentMethods = ['cash', 'bank_transfer', 'check', 'credit_card'];
+  // Define arrays for random selection
+  const transactionTypes = ['revenue', 'expense', 'asset', 'liability', 'equity', 'salary', 'manufacturing_payment', 'credit_payment'];
+  const paymentMethods = ['cash', 'bank', 'check', 'card'];
+  const statusOptions = ['draft', 'posted', 'cancelled'];
 
   const getRandomCategory = (type) => {
     const categories = {
@@ -731,9 +733,15 @@ const generateTransactions = async (connection) => {
       expense: ['production_expense', 'maintenance_expense', 'utility_expense', 'other_expense'],
       credit_payment: ['credit_contribution'],
       manufacturing_payment: ['manufacturing_cost', 'raw_material_payment'],
-      salary: ['salary_payment']
+      salary: ['salary_payment'],
+      asset: ['fixed_asset', 'current_asset'],
+      liability: ['current_liability', 'long_term_liability'],
+      equity: ['owner_equity', 'retained_earnings']
     };
-    return faker.helpers.arrayElement(categories[type]);
+
+    // Make sure we have a valid category array before selecting
+    const categoryArray = categories[type] || ['other'];
+    return faker.helpers.arrayElement(categoryArray);
   };
 
   return Array.from({ length: 50 }, () => {
@@ -743,32 +751,33 @@ const generateTransactions = async (connection) => {
       to: '2025-12-31'
     });
 
+    // Get a valid user ID
+    const userId = users.length > 0 ? faker.helpers.arrayElement(users).id : 1;
+
+    // Get a valid employee ID for salary transactions
+    const employeeId = type === 'salary' && employees.length > 0
+      ? faker.helpers.arrayElement(employees).id
+      : null;
+
+    // Get reference number
+    const reference = type === 'manufacturing_payment' && manufacturingOrders.length > 0
+      ? faker.helpers.arrayElement(manufacturingOrders).order_number
+      : `TRX${faker.string.numeric(8)}`;
+
     const transaction = {
       date: date,
+      reference: reference,
+      description: faker.lorem.sentence(),
       type: type,
       category: getRandomCategory(type),
       amount: faker.number.float({ min: 1000, max: 100000, multipleOf: 0.01 }),
-      description: faker.lorem.sentence(),
-      status: faker.helpers.arrayElement(['draft', 'posted', 'void']),
+      status: faker.helpers.arrayElement(statusOptions),
       payment_method: faker.helpers.arrayElement(paymentMethods),
-      notes: faker.lorem.sentence(),
-      created_by: faker.helpers.arrayElement(users).id,
+      employee_id: employeeId,
+      created_by: userId,
       created_at: date,
       updated_at: date
     };
-
-    // Add employee_id for salary transactions
-    if (type === 'salary' && employees.length > 0) {
-      transaction.employee_id = faker.helpers.arrayElement(employees).id;
-    }
-
-    // Add reference for manufacturing payments
-    if (type === 'manufacturing_payment' && manufacturingOrders.length > 0) {
-      transaction.reference = faker.helpers.arrayElement(manufacturingOrders).order_number;
-    } else {
-      // Generate a unique reference for other transactions
-      transaction.reference = `TRX${faker.string.numeric(8)}`;
-    }
 
     return transaction;
   });
@@ -913,14 +922,13 @@ const generateLoanSchedule = (loan) => {
   return scheduleItems;
 };
 
-// Update the loan payments generation function
+// Update the generateLoanPayments function to match schema
 const generateLoanPayments = async (connection, loan) => {
   const [schedule] = await connection.query(
     'SELECT * FROM loan_schedule WHERE loan_id = ? AND status = "paid"',
     [loan.id]
   );
 
-  // Get admin user for created_by field
   const [users] = await connection.query('SELECT id FROM users WHERE role = "admin" LIMIT 1');
   const adminId = users[0].id;
 
@@ -928,9 +936,13 @@ const generateLoanPayments = async (connection, loan) => {
     loan_id: loan.id,
     amount: item.payment_amount,
     payment_date: item.due_date,
+    payment_method: faker.helpers.arrayElement(['cash', 'bank', 'check', 'card']),
     reference: `PAY-${faker.string.alphanumeric(8).toUpperCase()}`,
     notes: 'Regular payment',
-    created_by: adminId,  // Add created_by field
+    status: 'completed',
+    created_by: adminId,
+    created_by_name: 'Admin User',
+    schedule_item_id: item.id,
     created_at: faker.date.between({
       from: item.due_date,
       to: new Date(item.due_date).setDate(new Date(item.due_date).getDate() + 3)
@@ -1270,8 +1282,6 @@ const generateGrades = () => [
   }
 ];
 
-// Add these functions after generateSalaryStructures
-
 // Helper function to generate payroll items
 const generatePayrollItems = async (connection, payrollId) => {
   const [employees] = await connection.query('SELECT * FROM employees');
@@ -1527,8 +1537,7 @@ const generateRevenueTransactions = async (connection) => {
       amount: amount,
       description: faker.commerce.productDescription(),
       reference: `REV${faker.string.numeric(8)}`,
-      payment_method: faker.helpers.arrayElement(['cash', 'bank_transfer', 'check']),
-      notes: faker.lorem.sentence(),
+      payment_method: faker.helpers.arrayElement(['cash', 'bank', 'check', 'card']),
       status: 'posted',
       created_by: faker.helpers.arrayElement(users).id,
       created_at: date,
@@ -1540,13 +1549,15 @@ const generateRevenueTransactions = async (connection) => {
         account_id: cashAccount[0].id,
         description: 'Cash receipt',
         debit: amount,
-        credit: 0
+        credit: 0,
+        created_at: date
       },
       {
         account_id: faker.helpers.arrayElement(accounts).id,
         description: 'Revenue recognition',
         debit: 0,
-        credit: amount
+        credit: amount,
+        created_at: date
       }
     ];
 
@@ -1786,23 +1797,26 @@ const generateManufacturingAdvancePayments = async (connection) => {
   const [users] = await connection.query('SELECT id FROM users WHERE role = "admin" LIMIT 1');
   const adminId = users[0].id;
 
+  const statusOptions = ['pending', 'paid', 'used', 'cancelled'];
+  const noteOptions = [
+    'Advance payment for upcoming work',
+    'Initial payment for manufacturing contract',
+    'Requested advance for raw materials',
+    null
+  ];
+
   return Array.from({ length: 15 }, () => {
     const date = faker.date.recent({ days: 30 });
     const year = date.getFullYear();
     const nextNumber = faker.number.int({ min: 1, max: 9999 }).toString().padStart(4, '0');
 
     return {
-      contractor_id: faker.helpers.arrayElement(contractors).id,
-      amount: faker.number.float({ min: 5000, max: 50000, precision: 2 }),
+      contractor_id: contractors.length > 0 ? faker.helpers.arrayElement(contractors).id : null,
+      amount: faker.number.float({ min: 5000, max: 50000, multipleOf: 0.01 }),
       payment_date: faker.date.recent({ days: 30 }),
       receipt_number: `MAP${year}${nextNumber}`,
-      notes: faker.helpers.arrayElement([
-        'Advance payment for upcoming work',
-        'Initial payment for manufacturing contract',
-        'Requested advance for raw materials',
-        null
-      ]),
-      status: faker.helpers.arrayElement(['pending', 'paid', 'used', 'cancelled']),
+      notes: faker.helpers.arrayElement(noteOptions),
+      status: faker.helpers.arrayElement(statusOptions),
       created_by: adminId,
       created_at: date,
       updated_at: date
@@ -1810,15 +1824,20 @@ const generateManufacturingAdvancePayments = async (connection) => {
   });
 };
 
-// Modify generateManufacturingPayments to use array parameters instead of object
+// Update the generateManufacturingPayments function
 const generateManufacturingPayments = async (connection) => {
   const [contractors] = await connection.execute('SELECT id FROM manufacturing_contractors');
   const [assignments] = await connection.execute('SELECT id, contractor_id FROM cinnamon_assignments');
   const [users] = await connection.execute('SELECT id FROM users WHERE role = "admin"');
 
+  const statusOptions = ['pending', 'paid', 'cancelled'];
   const payments = [];
+
+  if (assignments.length === 0 || !users[0]) {
+    return payments;
+  }
+
   for (const assignment of assignments) {
-    // Generate 1-3 payments per assignment
     const numPayments = faker.number.int({ min: 1, max: 3 });
 
     for (let i = 0; i < numPayments; i++) {
@@ -1839,7 +1858,7 @@ const generateManufacturingPayments = async (connection) => {
         amount,
         faker.date.recent({ days: 30 }).toISOString().split('T')[0],
         faker.lorem.sentence(),
-        faker.helpers.arrayElement(['pending', 'paid', 'cancelled']),
+        faker.helpers.arrayElement(statusOptions),
         users[0].id
       ]);
     }
@@ -2335,15 +2354,40 @@ const seedData = async () => {
     const revenueTransactions = await generateRevenueTransactions(connection);
     for (const { transaction, entries } of revenueTransactions) {
       // Insert transaction
-      const [result] = await connection.query('INSERT INTO transactions SET ?', transaction);
+      const [result] = await connection.query(
+        `INSERT INTO transactions
+         (date, type, category, amount, description, reference, payment_method, status, created_by, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          transaction.date,
+          transaction.type,
+          transaction.category,
+          transaction.amount,
+          transaction.description,
+          transaction.reference,
+          transaction.payment_method,
+          transaction.status,
+          transaction.created_by,
+          transaction.created_at,
+          transaction.updated_at
+        ]
+      );
 
       // Insert transaction entries
       for (const entry of entries) {
-        await connection.query('INSERT INTO transactions_entries SET ?', {
-          ...entry,
-          transaction_id: result.insertId,
-          created_at: transaction.created_at
-        });
+        await connection.query(
+          `INSERT INTO transactions_entries
+           (transaction_id, account_id, description, debit, credit, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [
+            result.insertId,
+            entry.account_id,
+            entry.description,
+            entry.debit,
+            entry.credit,
+            entry.created_at
+          ]
+        );
 
         // Update account balances for posted transactions
         if (transaction.status === 'posted') {

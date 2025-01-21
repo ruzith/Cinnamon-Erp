@@ -39,30 +39,100 @@ router.post('/', protect, authorize('admin', 'accountant'), async (req, res) => 
       });
     }
 
-    // Create new instance of Loan class
-    const loanModel = new Loan();
-    const createdLoan = await loanModel.createWithSchedule({
-      borrower_type: loan.borrower_type,
-      borrower_id: loan.borrower_id,
-      amount: loan.amount,
-      interest_rate: loan.interest_rate,
-      term_months: loan.term_months,
-      payment_frequency: loan.payment_frequency,
-      start_date: loan.start_date,
-      end_date: loan.end_date,
-      purpose: loan.purpose || null,
-      collateral: loan.collateral || null,
-      status: loan.status || 'active',
-      notes: loan.notes || null,
-      created_by: req.user.id
-    });
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
 
-    // Handle accounting entry if requested
-    if (createAccountingEntry && accountingData) {
-      // Create accounting entry logic here
+      // First, get the account IDs
+      const [accounts] = await connection.execute(
+        'SELECT id, code FROM accounts WHERE code IN (?, ?)',
+        ['1001', '1002'] // Cash and Accounts Receivable
+      );
+
+      const cashAccount = accounts.find(a => a.code === '1001');
+      const receivablesAccount = accounts.find(a => a.code === '1002');
+
+      if (!cashAccount || !receivablesAccount) {
+        throw new Error('Required accounts not found. Please check account configuration.');
+      }
+
+      // Create loan using existing logic
+      const loanModel = new Loan();
+      const createdLoan = await loanModel.createWithSchedule({
+        ...loan,
+        created_by: req.user.id
+      });
+
+      // Handle accounting transaction if requested
+      if (createAccountingEntry && accountingData) {
+        // Create transaction record
+        const [result] = await connection.execute(`
+          INSERT INTO transactions (
+            date, reference, description, type, category,
+            amount, status, payment_method, created_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          new Date(),
+          accountingData.reference,
+          accountingData.description,
+          'credit_payment',
+          'loan_disbursement',
+          loan.amount,
+          'posted',
+          accountingData.paymentMethod || 'cash',
+          req.user.id
+        ]);
+
+        const transactionId = result.insertId;
+
+        // Create transaction entries (double-entry)
+        // Debit Loans Receivable account
+        await connection.execute(`
+          INSERT INTO transactions_entries (
+            transaction_id, account_id, description, debit, credit
+          ) VALUES (?, ?, ?, ?, ?)
+        `, [
+          transactionId,
+          receivablesAccount.id, // Use the actual account ID
+          `Loan disbursement to ${loan.borrower_type} ${loan.borrower_id}`,
+          loan.amount,
+          0
+        ]);
+
+        // Credit Cash account
+        await connection.execute(`
+          INSERT INTO transactions_entries (
+            transaction_id, account_id, description, debit, credit
+          ) VALUES (?, ?, ?, ?, ?)
+        `, [
+          transactionId,
+          cashAccount.id, // Use the actual account ID
+          `Loan disbursement to ${loan.borrower_type} ${loan.borrower_id}`,
+          0,
+          loan.amount
+        ]);
+
+        // Update account balances
+        await connection.execute(
+          'UPDATE accounts SET balance = balance + ? WHERE id = ?',
+          [loan.amount, receivablesAccount.id] // Increase Accounts Receivable
+        );
+
+        await connection.execute(
+          'UPDATE accounts SET balance = balance - ? WHERE id = ?',
+          [loan.amount, cashAccount.id] // Decrease Cash
+        );
+      }
+
+      await connection.commit();
+      res.status(201).json(createdLoan);
+
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
     }
-
-    res.status(201).json(createdLoan);
   } catch (error) {
     console.error('Error creating loan:', error);
     res.status(400).json({
@@ -73,51 +143,123 @@ router.post('/', protect, authorize('admin', 'accountant'), async (req, res) => 
 });
 
 // Record loan payment
-router.post('/:id/payments', protect, authorize('admin', 'accountant'), async (req, res) => {
+router.post('/payments', protect, authorize('admin', 'accountant'), async (req, res) => {
+  const connection = await pool.getConnection();
   try {
-    const [loan] = await pool.execute(
-      'SELECT * FROM loans WHERE id = ?',
-      [req.params.id]
+    const { loan_id, amount, payment_date, reference, status, notes, createAccountingEntry, accountingData } = req.body;
+
+    await connection.beginTransaction();
+
+    // First, get the account IDs
+    const [accounts] = await connection.execute(
+      'SELECT id, code FROM accounts WHERE code IN (?, ?)',
+      ['1001', '1002'] // Cash and Accounts Receivable
     );
 
-    if (!loan[0]) {
-      return res.status(404).json({ message: 'Loan not found' });
+    const cashAccount = accounts.find(a => a.code === '1001');
+    const receivablesAccount = accounts.find(a => a.code === '1002');
+
+    if (!cashAccount || !receivablesAccount) {
+      throw new Error('Required accounts not found. Please check account configuration.');
     }
 
-    const { amount } = req.body;
-    const paymentData = {
-      loan_id: loan[0].id,
-      amount,
-      payment_date: new Date(),
-      created_by: req.user.id,
-      ...req.body
+    // Map payment method to standardized value
+    const paymentMethodMap = {
+      'cash': 'cash',
+      'bank_transfer': 'bank',
+      'check': 'check',
+      'card': 'card'
     };
 
-    // Begin transaction
-    await pool.beginTransaction();
-    try {
-      // Create payment record
-      const [result] = await pool.execute(
-        'INSERT INTO loan_payments SET ?',
-        [paymentData]
+    const paymentMethod = paymentMethodMap[accountingData?.paymentMethod] || 'cash';
+
+    // Create payment record
+    const [paymentResult] = await connection.execute(`
+      INSERT INTO loan_payments (
+        loan_id, amount, payment_date, reference,
+        payment_method, status, notes, created_by
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      loan_id,
+      amount,
+      payment_date,
+      reference,
+      paymentMethod, // Use mapped payment method
+      status || 'completed',
+      notes || null,
+      req.user.id
+    ]);
+
+    // Handle accounting entry if requested
+    if (createAccountingEntry && accountingData) {
+      // Create transaction record
+      const [result] = await connection.execute(`
+        INSERT INTO transactions (
+          date, reference, description, type, category,
+          amount, status, payment_method, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        payment_date,
+        reference,
+        accountingData.description,
+        'revenue',
+        'loan_repayment',
+        amount,
+        'posted',
+        paymentMethod, // Use mapped payment method
+        req.user.id
+      ]);
+
+      const transactionId = result.insertId;
+
+      // Create transaction entries
+      // Debit Cash account
+      await connection.execute(`
+        INSERT INTO transactions_entries (
+          transaction_id, account_id, description, debit, credit
+        ) VALUES (?, ?, ?, ?, ?)
+      `, [
+        transactionId,
+        cashAccount.id,
+        `Loan repayment received`,
+        amount,
+        0
+      ]);
+
+      // Credit Loans Receivable account
+      await connection.execute(`
+        INSERT INTO transactions_entries (
+          transaction_id, account_id, description, debit, credit
+        ) VALUES (?, ?, ?, ?, ?)
+      `, [
+        transactionId,
+        receivablesAccount.id,
+        `Loan repayment received`,
+        0,
+        amount
+      ]);
+
+      // Update account balances
+      await connection.execute(
+        'UPDATE accounts SET balance = balance + ? WHERE id = ?',
+        [amount, cashAccount.id]
       );
 
-      // Update loan remaining balance
-      await pool.execute(
-        'UPDATE loans SET remaining_balance = remaining_balance - ?, status = IF(remaining_balance - ? <= 0, "completed", status) WHERE id = ?',
-        [amount, amount, loan[0].id]
+      await connection.execute(
+        'UPDATE accounts SET balance = balance - ? WHERE id = ?',
+        [amount, receivablesAccount.id]
       );
-
-      await pool.commit();
-
-      const payment = await LoanPayment.getWithDetails(result.insertId);
-      res.status(201).json(payment);
-    } catch (error) {
-      await pool.rollback();
-      throw error;
     }
+
+    await connection.commit();
+    res.status(201).json(paymentResult);
+
   } catch (error) {
+    await connection.rollback();
+    console.error('Error recording payment:', error);
     res.status(400).json({ message: error.message });
+  } finally {
+    connection.release();
   }
 });
 

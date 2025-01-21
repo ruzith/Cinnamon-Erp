@@ -681,4 +681,123 @@ router.delete('/:id', protect, async (req, res) => {
   }
 });
 
+// Add this new route handler with your other routes
+router.put('/:id/mark-paid', protect, async (req, res) => {
+  const connection = await db.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    // Get sale details first
+    const [sale] = await connection.execute(
+      `SELECT si.*, u.name as created_by_name
+       FROM sales_invoices si
+       LEFT JOIN users u ON si.created_by = u.id
+       WHERE si.id = ?`,
+      [req.params.id]
+    );
+
+    if (!sale[0]) {
+      throw new Error('Sale not found');
+    }
+
+    // Get the relevant account IDs first
+    const [accounts] = await connection.execute(
+      'SELECT id, code FROM accounts WHERE code IN (?, ?, ?)',
+      ['1001', '1002', '4001']
+    );
+
+    const accountMap = accounts.reduce((acc, account) => {
+      acc[account.code] = account.id;
+      return acc;
+    }, {});
+
+    if (!accountMap['1001'] || !accountMap['1002'] || !accountMap['4001']) {
+      throw new Error('Required accounts not found. Please check account configuration.');
+    }
+
+    // Update the sale payment status
+    await connection.execute(
+      'UPDATE sales_invoices SET payment_status = ?, payment_date = CURRENT_DATE() WHERE id = ?',
+      ['paid', req.params.id]
+    );
+
+    // Create transaction record
+    const [transactionResult] = await connection.execute(
+      `INSERT INTO transactions
+       (date, reference, description, type, category, amount, status, payment_method, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        new Date().toISOString().split('T')[0],
+        sale[0].invoice_number,
+        `Payment received for sale invoice ${sale[0].invoice_number}`,
+        'revenue',
+        'sales_income',
+        sale[0].total,
+        'posted',
+        sale[0].payment_method,
+        req.user.id
+      ]
+    );
+
+    const transactionId = transactionResult.insertId;
+
+    // Create transaction entries
+    // Debit Cash/Bank Account
+    await connection.execute(
+      `INSERT INTO transactions_entries
+       (transaction_id, account_id, description, debit, credit)
+       VALUES (?, ?, ?, ?, ?)`,
+      [
+        transactionId,
+        sale[0].payment_method === 'cash' ? accountMap['1001'] : accountMap['1002'],
+        `Payment received for sale invoice ${sale[0].invoice_number}`,
+        sale[0].total,
+        0
+      ]
+    );
+
+    // Credit Sales Revenue Account
+    await connection.execute(
+      `INSERT INTO transactions_entries
+       (transaction_id, account_id, description, debit, credit)
+       VALUES (?, ?, ?, ?, ?)`,
+      [
+        transactionId,
+        accountMap['4001'],
+        `Revenue from sale invoice ${sale[0].invoice_number}`,
+        0,
+        sale[0].total
+      ]
+    );
+
+    // Update account balances
+    await connection.execute(
+      'UPDATE accounts SET balance = balance + ? WHERE id = ?',
+      [sale[0].total, sale[0].payment_method === 'cash' ? accountMap['1001'] : accountMap['1002']]
+    );
+
+    await connection.execute(
+      'UPDATE accounts SET balance = balance + ? WHERE id = ?',
+      [sale[0].total, accountMap['4001']]
+    );
+
+    await connection.commit();
+    res.json({
+      message: 'Sale marked as paid and transaction recorded successfully',
+      transactionId
+    });
+
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error marking sale as paid:', error);
+    res.status(500).json({
+      message: 'Error marking sale as paid',
+      error: error.message
+    });
+  } finally {
+    connection.release();
+  }
+});
+
 module.exports = router;

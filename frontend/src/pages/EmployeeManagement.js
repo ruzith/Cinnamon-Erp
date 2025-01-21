@@ -91,7 +91,6 @@ const EmployeeManagement = () => {
     account_number: '',
     account_name: ''
   });
-  const [salaryStructures, setSalaryStructures] = useState([]);
   const [designations, setDesignations] = useState([]);
   const [designationDialog, setDesignationDialog] = useState(false);
   const [selectedDesignation, setSelectedDesignation] = useState(null);
@@ -126,19 +125,6 @@ const EmployeeManagement = () => {
     dispatch(getDesignations());
     fetchEmployeeGroups();
   }, [dispatch]);
-
-  useEffect(() => {
-    const fetchSalaryStructures = async () => {
-      try {
-        const response = await axios.get('/api/payroll/structures');
-        setSalaryStructures(response.data);
-      } catch (error) {
-        console.error('Error fetching salary structures:', error);
-      }
-    };
-
-    fetchSalaryStructures();
-  }, []);
 
   useEffect(() => {
     const fetchDesignations = async () => {

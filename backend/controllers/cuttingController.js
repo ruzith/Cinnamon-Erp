@@ -1344,32 +1344,141 @@ exports.getContractorAdvancePayments = async (req, res) => {
 // @route   PUT /api/cutting/advance-payments/:id/mark-paid
 // @access  Private/Admin/Accountant
 exports.markAdvancePaymentAsPaid = async (req, res) => {
+  const connection = await CuttingContractor.pool.getConnection();
   try {
+    await connection.beginTransaction();
     const { id } = req.params;
 
-    const [result] = await CuttingContractor.pool.execute(
+    // Get advance payment details with user info
+    const [advancePayment] = await connection.execute(`
+      SELECT cap.*, cc.name as contractor_name, cc.contractor_id as contractor_number
+      FROM cutting_advance_payments cap
+      JOIN cutting_contractors cc ON cap.contractor_id = cc.id
+      WHERE cap.id = ?
+    `, [id]);
+
+    if (!advancePayment[0]) {
+      await connection.rollback();
+      return res.status(404).json({ message: 'Advance payment not found' });
+    }
+
+    const payment = advancePayment[0];
+
+    // Get the user ID from the request
+    const userId = req.user?.id;
+    if (!userId) {
+      await connection.rollback();
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    // Get required account IDs
+    const [accounts] = await connection.execute(`
+      SELECT id, code, name
+      FROM accounts
+      WHERE code IN ('1001', '2001') AND status = 'active'
+    `);
+
+    const cashAccountId = accounts.find(acc => acc.code === '1001')?.id;
+    const payablesAccountId = accounts.find(acc => acc.code === '2001')?.id;
+
+    if (!cashAccountId || !payablesAccountId) {
+      await connection.rollback();
+      return res.status(400).json({
+        message: 'Required accounts not found. Please check chart of accounts.'
+      });
+    }
+
+    // Update advance payment status
+    await connection.execute(
       'UPDATE cutting_advance_payments SET status = ?, updated_at = NOW() WHERE id = ?',
       ['paid', id]
     );
 
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Advance payment not found' });
-    }
+    // Create transaction record
+    const [transactionResult] = await connection.execute(`
+      INSERT INTO transactions (
+        date,
+        reference,
+        description,
+        type,
+        category,
+        amount,
+        status,
+        payment_method,
+        created_by
+      ) VALUES (
+        CURRENT_DATE(),
+        ?,
+        ?,
+        'expense',
+        'cutting_advance',
+        ?,
+        'posted',
+        'cash',
+        ?
+      )
+    `, [
+      `ADV-${payment.id}`,
+      `Cutting Advance Payment to ${payment.contractor_name} (${payment.contractor_number})`,
+      payment.amount,
+      userId
+    ]);
+
+    const transactionId = transactionResult.insertId;
+
+    // Create transaction entries (double-entry)
+    await connection.execute(`
+      INSERT INTO transactions_entries
+        (transaction_id, account_id, description, debit, credit)
+      VALUES
+        (?, ?, ?, ?, 0),  -- Debit Accounts Payable
+        (?, ?, ?, 0, ?)   -- Credit Cash account
+    `, [
+      transactionId,
+      payablesAccountId,
+      `Advance payment to ${payment.contractor_name} (${payment.contractor_number})`,
+      payment.amount,
+      transactionId,
+      cashAccountId,
+      `Advance payment to ${payment.contractor_name} (${payment.contractor_number})`,
+      payment.amount
+    ]);
+
+    // Update account balances
+    await connection.execute(
+      'UPDATE accounts SET balance = balance + ? WHERE id = ?',
+      [payment.amount, payablesAccountId] // Increase Accounts Payable
+    );
+
+    await connection.execute(
+      'UPDATE accounts SET balance = balance - ? WHERE id = ?',
+      [payment.amount, cashAccountId] // Decrease Cash account
+    );
+
+    await connection.commit();
 
     // Fetch updated payment details
-    const [updatedPayment] = await CuttingContractor.pool.execute(`
-      SELECT cap.*,
-             cc.name as contractor_name,
-             cc.contractor_id as contractor_number
+    const [updatedPayment] = await connection.execute(`
+      SELECT
+        cap.*,
+        cc.name as contractor_name,
+        cc.contractor_id as contractor_number
       FROM cutting_advance_payments cap
       JOIN cutting_contractors cc ON cap.contractor_id = cc.id
       WHERE cap.id = ?
     `, [id]);
 
     res.json(updatedPayment[0]);
+
   } catch (error) {
+    await connection.rollback();
     console.error('Error marking advance payment as paid:', error);
-    res.status(500).json({ message: 'Error marking advance payment as paid' });
+    res.status(500).json({
+      message: 'Error marking advance payment as paid',
+      error: error.message
+    });
+  } finally {
+    connection.release();
   }
 };
 
@@ -1377,36 +1486,187 @@ exports.markAdvancePaymentAsPaid = async (req, res) => {
 // @route   PUT /api/cutting/payments/:id/mark-paid
 // @access  Private/Admin/Accountant
 exports.markPaymentAsPaid = async (req, res) => {
+  const connection = await CuttingContractor.pool.getConnection();
   try {
+    await connection.beginTransaction();
     const { id } = req.params;
 
-    const [result] = await CuttingContractor.pool.execute(
+    // Get payment details
+    const [paymentDetails] = await connection.execute(`
+      SELECT cp.*, cc.name as contractor_name, cc.contractor_id as contractor_number
+      FROM cutting_payments cp
+      JOIN cutting_contractors cc ON cp.contractor_id = cc.id
+      WHERE cp.id = ?
+    `, [id]);
+
+    if (!paymentDetails[0]) {
+      await connection.rollback();
+      return res.status(404).json({ message: 'Payment not found' });
+    }
+
+    const payment = paymentDetails[0];
+
+    // Get the user ID from the request
+    const userId = req.user?.id;
+    if (!userId) {
+      await connection.rollback();
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    // Get required account IDs
+    const [accounts] = await connection.execute(`
+      SELECT id, code, name
+      FROM accounts
+      WHERE code IN ('1001', '5002') AND status = 'active'
+    `);
+
+    const cashAccountId = accounts.find(acc => acc.code === '1001')?.id;
+    const manufacturingExpenseId = accounts.find(acc => acc.code === '5002')?.id;
+
+    if (!cashAccountId || !manufacturingExpenseId) {
+      await connection.rollback();
+      return res.status(400).json({
+        message: 'Required accounts not found. Please check chart of accounts.'
+      });
+    }
+
+    // Update payment status
+    await connection.execute(
       'UPDATE cutting_payments SET status = ?, updated_at = NOW() WHERE id = ?',
       ['paid', id]
     );
 
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Payment not found' });
-    }
+    // Create transaction record for company contribution
+    const [companyTransactionResult] = await connection.execute(`
+      INSERT INTO transactions (
+        date,
+        reference,
+        description,
+        type,
+        category,
+        amount,
+        status,
+        payment_method,
+        created_by
+      ) VALUES (
+        CURRENT_DATE(),
+        ?,
+        ?,
+        'expense',
+        'cutting_payment',
+        ?,
+        'posted',
+        'cash',
+        ?
+      )
+    `, [
+      `CUT-${payment.id}-COM`,
+      `Cutting Payment (Company) to ${payment.contractor_name} (${payment.contractor_number})`,
+      payment.company_contribution,
+      userId
+    ]);
+
+    // Create transaction entries for company contribution
+    await connection.execute(`
+      INSERT INTO transactions_entries (transaction_id, account_id, description, debit, credit)
+      VALUES (?, ?, ?, ?, ?), (?, ?, ?, ?, ?)
+    `, [
+      companyTransactionResult.insertId,
+      manufacturingExpenseId,
+      `Cutting payment to ${payment.contractor_name} (${payment.contractor_number})`,
+      payment.company_contribution,
+      0,
+      companyTransactionResult.insertId,
+      cashAccountId,
+      `Cutting payment to ${payment.contractor_name} (${payment.contractor_number})`,
+      0,
+      payment.company_contribution
+    ]);
+
+    // Create transaction record for manufacturing contribution
+    const [mfgTransactionResult] = await connection.execute(`
+      INSERT INTO transactions (
+        date,
+        reference,
+        description,
+        type,
+        category,
+        amount,
+        status,
+        payment_method,
+        created_by
+      ) VALUES (
+        CURRENT_DATE(),
+        ?,
+        ?,
+        'manufacturing_payment',
+        'cutting_payment',
+        ?,
+        'posted',
+        'cash',
+        ?
+      )
+    `, [
+      `CUT-${payment.id}-MFG`,
+      `Cutting Payment (Manufacturing) to ${payment.contractor_name} (${payment.contractor_number})`,
+      payment.manufacturing_contribution,
+      userId
+    ]);
+
+    // Create transaction entries for manufacturing contribution
+    await connection.execute(`
+      INSERT INTO transactions_entries (transaction_id, account_id, description, debit, credit)
+      VALUES (?, ?, ?, ?, ?), (?, ?, ?, ?, ?)
+    `, [
+      mfgTransactionResult.insertId,
+      manufacturingExpenseId,
+      `Manufacturing contribution for ${payment.contractor_name} (${payment.contractor_number})`,
+      payment.manufacturing_contribution,
+      0,
+      mfgTransactionResult.insertId,
+      cashAccountId,
+      `Manufacturing contribution for ${payment.contractor_name} (${payment.contractor_number})`,
+      0,
+      payment.manufacturing_contribution
+    ]);
+
+    // Update account balances
+    await connection.execute(
+      'UPDATE accounts SET balance = balance + ? WHERE id = ?',
+      [payment.total_amount, manufacturingExpenseId] // Increase Manufacturing Expense account
+    );
+
+    await connection.execute(
+      'UPDATE accounts SET balance = balance - ? WHERE id = ?',
+      [payment.total_amount, cashAccountId] // Decrease Cash account
+    );
+
+    await connection.commit();
 
     // Fetch updated payment details
-    const [updatedPayment] = await CuttingContractor.pool.execute(`
+    const [updatedPayment] = await connection.execute(`
       SELECT cp.*,
              cc.name as contractor_name,
+             cc.contractor_id as contractor_number,
              l.land_number,
-             l.location,
-             u.name as created_by_name
+             l.location
       FROM cutting_payments cp
       LEFT JOIN cutting_contractors cc ON cp.contractor_id = cc.id
       LEFT JOIN land_assignments la ON cp.assignment_id = la.id
       LEFT JOIN lands l ON la.land_id = l.id
-      LEFT JOIN users u ON cp.created_by = u.id
       WHERE cp.id = ?
     `, [id]);
 
     res.json(updatedPayment[0]);
+
   } catch (error) {
+    await connection.rollback();
     console.error('Error marking payment as paid:', error);
-    res.status(500).json({ message: 'Error marking payment as paid' });
+    res.status(500).json({
+      message: 'Error marking payment as paid',
+      error: error.message
+    });
+  } finally {
+    connection.release();
   }
 };

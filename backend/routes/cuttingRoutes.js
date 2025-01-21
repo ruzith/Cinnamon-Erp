@@ -118,7 +118,7 @@ router.route('/advance-payments/contractor/:id')
 router.get('/contractors/:id/advance-payments', protect, getContractorAdvancePayments);
 
 // Add these new routes
-router.put('/advance-payments/:id/mark-paid', markAdvancePaymentAsPaid);
-router.put('/payments/:id/mark-paid', markPaymentAsPaid);
+router.put('/advance-payments/:id/mark-paid', protect, authorize(['admin', 'accountant']), markAdvancePaymentAsPaid);
+router.put('/payments/:id/mark-paid', protect, authorize(['admin', 'accountant']), markPaymentAsPaid);
 
 module.exports = router;

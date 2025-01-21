@@ -40,6 +40,8 @@ import {
   Payments as PaymentsIcon,
   TrendingUp,
   AccountBalanceWallet,
+  CheckCircleOutline as CheckCircleOutlineIcon,
+  Close as CloseIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
@@ -54,6 +56,9 @@ import { formatCurrency } from '../utils/currencyUtils';
 import { formatDate } from '../utils/dateUtils';
 import { useCurrencyFormatter } from '../utils/currencyUtils';
 import SummaryCard from '../components/common/SummaryCard';
+import { useDispatch } from 'react-redux';
+import { postTransaction } from '../features/accounting/accountingSlice';
+import { useSnackbar } from 'notistack';
 
 dayjs.extend(isBetween);
 dayjs.extend(customParseFormat);
@@ -123,6 +128,158 @@ const accountCategories = {
     { value: 'administrative_expenses', label: 'Administrative Expenses' },
     { value: 'other_expenses', label: 'Other Expenses' }
   ]
+};
+
+const getTransactionTypeColor = (type) => {
+  switch (type) {
+    case 'revenue':
+      return 'success';
+    case 'expense':
+    case 'salary':
+      return 'error';
+    case 'asset':
+      return 'primary';
+    case 'liability':
+      return 'warning';
+    case 'manufacturing_payment':
+      return 'info';
+    default:
+      return 'default';
+  }
+};
+
+const getStatusColor = (status) => {
+  switch (status) {
+    case 'posted':
+      return 'success';
+    case 'draft':
+      return 'warning';
+    case 'cancelled':
+      return 'error';
+    default:
+      return 'default';
+  }
+};
+
+const getAccountTypeColor = (type) => {
+  switch (type) {
+    case 'asset':
+      return 'primary';
+    case 'liability':
+      return 'error';
+    case 'equity':
+      return 'success';
+    case 'revenue':
+      return 'info';
+    case 'expense':
+      return 'warning';
+    default:
+      return 'default';
+  }
+};
+
+const TransactionDetailsDialog = ({ open, onClose, transaction }) => {
+  const { formatCurrency } = useCurrencyFormatter();
+
+  if (!transaction) return null;
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+      <DialogTitle>
+        Transaction Details
+        <IconButton
+          aria-label="close"
+          onClick={onClose}
+          sx={{ position: 'absolute', right: 8, top: 8 }}
+        >
+          <CloseIcon />
+        </IconButton>
+      </DialogTitle>
+      <DialogContent dividers>
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={6}>
+            <Typography variant="subtitle2" color="textSecondary">Reference</Typography>
+            <Typography variant="body1" gutterBottom>{transaction.reference}</Typography>
+
+            <Typography variant="subtitle2" color="textSecondary">Date</Typography>
+            <Typography variant="body1" gutterBottom>
+              {dayjs(transaction.date).format('DD/MM/YYYY')}
+            </Typography>
+
+            <Typography variant="subtitle2" color="textSecondary">Type</Typography>
+            <Chip
+              label={transaction.type.replace('_', ' ')}
+              size="small"
+              color={getTransactionTypeColor(transaction.type)}
+              sx={{ my: 1 }}
+            />
+
+            <Typography variant="subtitle2" color="textSecondary">Status</Typography>
+            <Chip
+              label={transaction.status}
+              size="small"
+              color={getStatusColor(transaction.status)}
+              sx={{ my: 1 }}
+            />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <Typography variant="subtitle2" color="textSecondary">Amount</Typography>
+            <Typography variant="body1" gutterBottom>
+              {formatCurrency(transaction.amount)}
+            </Typography>
+
+            <Typography variant="subtitle2" color="textSecondary">Created By</Typography>
+            <Typography variant="body1" gutterBottom>{transaction.created_by_name}</Typography>
+
+            <Typography variant="subtitle2" color="textSecondary">Created At</Typography>
+            <Typography variant="body1" gutterBottom>
+              {dayjs(transaction.created_at).format('DD/MM/YYYY HH:mm')}
+            </Typography>
+          </Grid>
+
+          <Grid item xs={12}>
+            <Typography variant="subtitle2" color="textSecondary">Description</Typography>
+            <Typography variant="body1" gutterBottom>{transaction.description}</Typography>
+          </Grid>
+
+          <Grid item xs={12}>
+            <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
+              Entries
+            </Typography>
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Account</TableCell>
+                    <TableCell align="right">Debit</TableCell>
+                    <TableCell align="right">Credit</TableCell>
+                    <TableCell>Description</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {transaction.entries?.map((entry, index) => (
+                    <TableRow key={index}>
+                      <TableCell>{entry.account_name}</TableCell>
+                      <TableCell align="right" sx={{ color: 'error.main' }}>
+                        {entry.debit > 0 ? formatCurrency(entry.debit) : '-'}
+                      </TableCell>
+                      <TableCell align="right" sx={{ color: 'success.main' }}>
+                        {entry.credit > 0 ? formatCurrency(entry.credit) : '-'}
+                      </TableCell>
+                      <TableCell>{entry.description}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Grid>
+        </Grid>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Close</Button>
+      </DialogActions>
+    </Dialog>
+  );
 };
 
 const Accounting = () => {
@@ -220,6 +377,12 @@ const Accounting = () => {
 
   const [manufacturingOrders, setManufacturingOrders] = useState([]);
   const [employees, setEmployees] = useState([]);
+
+  const dispatch = useDispatch();
+  const { enqueueSnackbar } = useSnackbar();
+
+  const [openDetailsDialog, setOpenDetailsDialog] = useState(false);
+  const [selectedTransactionDetails, setSelectedTransactionDetails] = useState(null);
 
   const fetchManufacturingOrders = async () => {
     try {
@@ -335,7 +498,6 @@ const Accounting = () => {
     setOpenTransactionDialog(true);
   };
 
-  // Optional: Add a function to fetch account details if needed
   const fetchTransactionAccount = async (accountId) => {
     try {
       const response = await axios.get(`/api/accounting/accounts/${accountId}`);
@@ -389,7 +551,6 @@ const Accounting = () => {
     const { name, value } = e.target;
 
     if (name === 'type') {
-      // Reset category when type changes
       setTransactionFormData(prev => ({
         ...prev,
         [name]: value,
@@ -407,7 +568,6 @@ const Accounting = () => {
     const { name, value } = e.target;
 
     if (name === 'type') {
-      // Reset category when type changes
       setAccountFormData(prev => ({
         ...prev,
         [name]: value,
@@ -424,7 +584,6 @@ const Accounting = () => {
   const handleTransactionSubmit = async (e) => {
     e.preventDefault();
 
-    // Validate required fields
     const { date, type, category, amount, account, paymentMethod } = transactionFormData;
     if (!date || !type || !category || !amount || !account || !paymentMethod) {
         alert('Please fill in all required fields: Date, Type, Category, Amount, Account, and Payment Method.');
@@ -433,13 +592,11 @@ const Accounting = () => {
 
     try {
         if (selectedTransaction) {
-            // If editing existing transaction
             const response = await axios.put(`/api/accounting/transactions/${selectedTransaction.id}`, {
                 ...transactionFormData,
                 status: transactionFormData.status || 'draft'
             });
         } else {
-            // If creating new transaction
             const response = await axios.post('/api/accounting/transactions', {
                 ...transactionFormData,
                 status: transactionFormData.status || 'draft'
@@ -458,7 +615,6 @@ const Accounting = () => {
   const handleAccountSubmit = async (e) => {
     e.preventDefault();
 
-    // Validate required fields
     const { code, name, type, category } = accountFormData;
     if (!code || !name || !type || !category) {
         alert('Please fill in all required fields: Code, Name, Type, Category.');
@@ -501,52 +657,6 @@ const Accounting = () => {
     }
   };
 
-  const getTransactionTypeColor = (type) => {
-    switch (type) {
-      case 'revenue':
-        return 'success';
-      case 'expense':
-      case 'salary':
-        return 'error';
-      case 'credit_payment':
-        return 'warning';
-      case 'manufacturing_payment':
-        return 'info';
-      default:
-        return 'default';
-    }
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'completed':
-        return 'success';
-      case 'pending':
-        return 'warning';
-      case 'cancelled':
-        return 'error';
-      default:
-        return 'default';
-    }
-  };
-
-  const getAccountTypeColor = (type) => {
-    switch (type) {
-      case 'asset':
-        return 'primary';
-      case 'liability':
-        return 'error';
-      case 'equity':
-        return 'success';
-      case 'revenue':
-        return 'info';
-      case 'expense':
-        return 'warning';
-      default:
-        return 'default';
-    }
-  };
-
   const handleGenerateReport = async (reportType) => {
     try {
       const response = await axios.get(`/api/accounting/reports/${reportType}`, {
@@ -572,16 +682,15 @@ const Accounting = () => {
     try {
       const response = await axios.post(`/api/accounting/reports/${type}/export`, {
         data,
-        format: 'excel', // You can make this configurable if you want to support multiple formats
+        format: 'excel',
         dateRange: {
           startDate: dateRange[0].format('YYYY-MM-DD'),
           endDate: dateRange[1].format('YYYY-MM-DD')
         }
       }, {
-        responseType: 'blob' // Important for handling file downloads
+        responseType: 'blob'
       });
 
-      // Create a download link
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -642,7 +751,6 @@ const Accounting = () => {
         case 'balance-sheet':
           return (
             <Box>
-              {/* Assets Section */}
               <Typography variant="h6" gutterBottom>Assets</Typography>
               <Typography variant="subtitle1" gutterBottom>Current Assets</Typography>
               <TableContainer>
@@ -686,7 +794,6 @@ const Accounting = () => {
                 </Typography>
               </Box>
 
-              {/* Liabilities Section */}
               <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>Liabilities</Typography>
               <Typography variant="subtitle1" gutterBottom>Current Liabilities</Typography>
               <TableContainer>
@@ -730,7 +837,6 @@ const Accounting = () => {
                 </Typography>
               </Box>
 
-              {/* Equity Section */}
               <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>Equity</Typography>
               <TableContainer>
                 <Table size="small">
@@ -947,9 +1053,24 @@ const Accounting = () => {
     totalBalance: accounts.reduce((sum, acc) => sum + Number(acc.balance), 0)
   };
 
+  const handlePostTransaction = async (transactionId) => {
+    try {
+      await dispatch(postTransaction(transactionId)).unwrap();
+      fetchTransactions();
+      enqueueSnackbar('Transaction posted successfully', { variant: 'success' });
+    } catch (error) {
+      console.error('Error posting transaction:', error);
+      enqueueSnackbar(error.message || 'Error posting transaction', { variant: 'error' });
+    }
+  };
+
+  const handleViewTransaction = (transaction) => {
+    setSelectedTransactionDetails(transaction);
+    setOpenDetailsDialog(true);
+  };
+
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
-      {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
         <Typography variant="h4" sx={{ fontWeight: 600 }}>
           Accounting Management
@@ -972,7 +1093,6 @@ const Accounting = () => {
         </Box>
       </Box>
 
-      {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
           <SummaryCard
@@ -1015,7 +1135,6 @@ const Accounting = () => {
         </Grid>
       </Grid>
 
-      {/* Main Content */}
       <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
         <Tabs
           value={tabValue}
@@ -1029,59 +1148,82 @@ const Accounting = () => {
           <Tab label="Reports" />
         </Tabs>
 
-        {/* Transactions Tab */}
         <TabPanel value={tabValue} index={0}>
-          <TableContainer>
+          <TableContainer component={Paper}>
             <Table>
               <TableHead>
                 <TableRow>
                   <TableCell>Date</TableCell>
-                  <TableCell>Type</TableCell>
+                  <TableCell>Reference</TableCell>
                   <TableCell>Description</TableCell>
-                  <TableCell>Account</TableCell>
+                  <TableCell>Type</TableCell>
                   <TableCell>Amount</TableCell>
+                  <TableCell>Accounts</TableCell>
                   <TableCell>Status</TableCell>
-                  <TableCell align="right">Actions</TableCell>
+                  <TableCell>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {transactions.map((transaction) => (
-                  <TableRow key={transaction.id} hover>
+                  <TableRow key={transaction.id}>
                     <TableCell>
-                      {formatDate(transaction.date, 'DD/MM/YYYY')}
+                      {dayjs(transaction.date).format('DD/MM/YYYY')}
                     </TableCell>
-                    <TableCell>{transaction.type}</TableCell>
+                    <TableCell>{transaction.reference}</TableCell>
                     <TableCell>{transaction.description}</TableCell>
-                    <TableCell>{transaction.account_name || 'N/A'}</TableCell>
-                    <TableCell
-                      sx={{
-                        color: transaction.type === 'revenue' ? 'success.main' : 'error.main'
-                      }}
-                    >
-                      {formatCurrency(transaction.amount)}
+                    <TableCell>
+                      <Chip
+                        label={transaction.type.replace('_', ' ')}
+                        size="small"
+                        color={getTransactionTypeColor(transaction.type)}
+                      />
+                    </TableCell>
+                    <TableCell>{formatCurrency(transaction.amount)}</TableCell>
+                    <TableCell>
+                      <Box>
+                        {transaction.entries?.map((entry, index) => (
+                          <Typography key={index} variant="body2" color={entry.debit > 0 ? "error" : "success"}>
+                            {entry.account_name}
+                            {entry.debit > 0 ?
+                              ` (Dr ${formatCurrency(entry.debit)})` :
+                              ` (Cr ${formatCurrency(entry.credit)})`}
+                          </Typography>
+                        ))}
+                      </Box>
                     </TableCell>
                     <TableCell>
                       <Chip
                         label={transaction.status}
-                        color={getStatusColor(transaction.status)}
                         size="small"
+                        color={getStatusColor(transaction.status)}
                       />
                     </TableCell>
-                    <TableCell align="right">
+                    <TableCell>
                       <IconButton
                         size="small"
-                        onClick={() => handleOpenTransactionDialog(transaction)}
-                        sx={{ color: 'primary.main' }}
+                        onClick={() => handleViewTransaction(transaction)}
+                        title="View Details"
                       >
-                        <EditIcon />
+                        <VisibilityIcon fontSize="small" />
                       </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDeleteTransaction(transaction.id)}
-                        sx={{ color: 'error.main', ml: 1 }}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
+                      {transaction.status === 'draft' && (
+                        <>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleOpenTransactionDialog(transaction)}
+                            title="Edit"
+                          >
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton
+                            size="small"
+                            onClick={() => handlePostTransaction(transaction.id)}
+                            title="Post Transaction"
+                          >
+                            <CheckCircleOutlineIcon fontSize="small" />
+                          </IconButton>
+                        </>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -1090,7 +1232,6 @@ const Accounting = () => {
           </TableContainer>
         </TabPanel>
 
-        {/* Accounts Tab */}
         <TabPanel value={tabValue} index={1}>
           <TableContainer>
             <Table>
@@ -1155,7 +1296,6 @@ const Accounting = () => {
           </TableContainer>
         </TabPanel>
 
-        {/* Ledger Tab */}
         <TabPanel value={tabValue} index={2}>
           <Box sx={{ p: 3 }}>
             <Grid container spacing={2}>
@@ -1231,7 +1371,6 @@ const Accounting = () => {
           </Box>
         </TabPanel>
 
-        {/* Cash Book Tab */}
         <TabPanel value={tabValue} index={3}>
           <Box sx={{ p: 3 }}>
             <Grid container spacing={2} sx={{ mb: 3 }}>
@@ -1300,7 +1439,6 @@ const Accounting = () => {
           </Box>
         </TabPanel>
 
-        {/* Reports Tab */}
         <TabPanel value={tabValue} index={4}>
           <Box sx={{ p: 3 }}>
             <Grid container spacing={3}>
@@ -1411,7 +1549,6 @@ const Accounting = () => {
           </Box>
         </TabPanel>
 
-        {/* Transaction Dialog */}
         <Dialog
           open={openTransactionDialog}
           onClose={handleCloseTransactionDialog}
@@ -1595,7 +1732,6 @@ const Accounting = () => {
           </DialogActions>
         </Dialog>
 
-        {/* Account Dialog */}
         <Dialog
           open={openAccountDialog}
           onClose={handleCloseAccountDialog}
@@ -1711,6 +1847,12 @@ const Accounting = () => {
           onClose={() => setOpenReportDialog(false)}
           type={currentReport}
           data={reportData[currentReport]}
+        />
+
+        <TransactionDetailsDialog
+          open={openDetailsDialog}
+          onClose={() => setOpenDetailsDialog(false)}
+          transaction={selectedTransactionDetails}
         />
       </Paper>
     </Box>

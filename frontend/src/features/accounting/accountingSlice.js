@@ -54,6 +54,19 @@ export const getReport = createAsyncThunk(
   }
 );
 
+// Add this new thunk
+export const postTransaction = createAsyncThunk(
+  'accounting/postTransaction',
+  async (transactionId, thunkAPI) => {
+    try {
+      const response = await accountingService.postTransaction(transactionId);
+      return response;
+    } catch (error) {
+      return thunkAPI.rejectWithValue(error.response.data.message);
+    }
+  }
+);
+
 export const accountingSlice = createSlice({
   name: 'accounting',
   initialState,
@@ -70,9 +83,15 @@ export const accountingSlice = createSlice({
       })
       .addCase(getReport.fulfilled, (state, action) => {
         state.reports[action.meta.arg.type] = action.payload;
+      })
+      .addCase(postTransaction.fulfilled, (state, action) => {
+        const index = state.transactions.findIndex(t => t.id === action.meta.arg);
+        if (index !== -1) {
+          state.transactions[index].status = 'posted';
+        }
       });
   }
 });
 
 export const { reset } = accountingSlice.actions;
-export default accountingSlice.reducer; 
+export default accountingSlice.reducer;

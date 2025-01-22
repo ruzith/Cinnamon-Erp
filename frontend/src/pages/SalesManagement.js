@@ -103,7 +103,7 @@ const Sales = () => {
 
   const [stats, setStats] = useState({
     totalRevenue: 0,
-    pendingOrders: 0
+    pendingSales: 0
   });
 
   // Add new state for product rows
@@ -471,8 +471,8 @@ const Sales = () => {
   // Calculate summary statistics
   const summaryStats = {
     totalSales: sales.length,
-    totalRevenue: sales.reduce((sum, sale) => sum + parseFloat(sale.total || 0), 0).toFixed(2),
-    pendingOrders: sales.filter(sale => sale.payment_status === 'pending').length,
+    totalRevenue: sales.filter(sale => sale.status === 'confirmed').reduce((sum, sale) => sum + parseFloat(sale.total), 0),
+    pendingSales: sales.filter(sale => sale.payment_status === 'pending').length,
     activeCustomers: new Set(sales.map(sale => sale.customerId?.id)).size
   };
 
@@ -500,12 +500,14 @@ const Sales = () => {
   };
 
   const calculateStats = (sales) => {
-    const totalRevenue = sales.reduce((sum, sale) => sum + parseFloat(sale.total), 0);
-    const pendingOrders = sales.filter(sale => sale.payment_status === 'pending').length;
+    const totalRevenue = sales
+      .filter(sale => sale.status === 'confirmed')
+      .reduce((sum, sale) => sum + parseFloat(sale.total), 0);
+    const pendingSales = sales.filter(sale => sale.payment_status === 'pending').length;
 
     return {
       totalRevenue: totalRevenue.toFixed(2),
-      pendingOrders
+      pendingSales
     };
   };
 
@@ -659,8 +661,8 @@ const Sales = () => {
         <Grid item xs={12} sm={6} md={3}>
           <SummaryCard
             icon={PendingIcon}
-            title="Pending Orders"
-            value={stats.pendingOrders}
+            title="Pending Sales"
+            value={stats.pendingSales}
             iconColor="#0288D1"
             gradientColor="info"
           />

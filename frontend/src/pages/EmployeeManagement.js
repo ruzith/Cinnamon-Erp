@@ -234,8 +234,9 @@ const EmployeeManagement = () => {
   // Calculate summary statistics
   const summaryStats = {
     totalEmployees: employees.length,
-    activeEmployees: employees.length,
+    activeEmployees: employees.filter(emp => emp.status === 'active').length,
     totalMonthlyCost: employees
+      .filter(emp => emp.status === 'active')
       .reduce((total, emp) => {
         const salary = Number(emp.basic_salary) || 0;
         switch(emp.salary_type) {
@@ -845,7 +846,6 @@ const EmployeeManagement = () => {
                         label={employee.status}
                         color={getStatusColor(employee.status)}
                         size="small"
-                        sx={{ textTransform: 'capitalize' }}
                       />
                     </TableCell>
                     <TableCell align="right">

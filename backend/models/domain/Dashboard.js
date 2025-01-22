@@ -9,7 +9,6 @@ class Dashboard extends BaseModel {
     const [rows] = await this.pool.execute(`
       SELECT COUNT(*) as count
       FROM lands
-      WHERE status = 'active'
     `);
     return rows[0].count;
   }
@@ -18,7 +17,7 @@ class Dashboard extends BaseModel {
     const [rows] = await this.pool.execute(`
       SELECT COUNT(*) as count
       FROM lands
-      WHERE status = 'active' AND ownership_status = 'owned'
+      WHERE ownership_status = 'owned'
     `);
     return rows[0].count;
   }
@@ -27,7 +26,7 @@ class Dashboard extends BaseModel {
     const [rows] = await this.pool.execute(`
       SELECT COUNT(*) as count
       FROM lands
-      WHERE status = 'active' AND ownership_status = 'rent'
+      WHERE ownership_status = 'rent'
     `);
     return rows[0].count;
   }
@@ -36,7 +35,6 @@ class Dashboard extends BaseModel {
     const [rows] = await this.pool.execute(`
       SELECT COALESCE(SUM(size), 0) as total_area
       FROM lands
-      WHERE status = 'active'
     `);
     return rows[0].total_area;
   }
@@ -260,6 +258,14 @@ class Dashboard extends BaseModel {
     return rows[0].count;
   }
 
+  async getTotalTasks() {
+    const [rows] = await this.pool.execute(`
+      SELECT COUNT(*) as count
+      FROM tasks
+    `);
+    return rows[0].count;
+  }
+
   async getTotalAdvances() {
     const [rows] = await this.pool.execute(`
       SELECT COUNT(*) as count
@@ -289,7 +295,7 @@ class Dashboard extends BaseModel {
   async getTotalPayrolls() {
     const [rows] = await this.pool.execute(`
       SELECT COUNT(*) as count
-      FROM payrolls
+      FROM employee_payrolls
     `);
     return rows[0].count;
   }
@@ -297,7 +303,7 @@ class Dashboard extends BaseModel {
   async getActiveContractors() {
     const [rows] = await this.pool.execute(`
       SELECT COUNT(*) as count
-      FROM cutting_contractors
+      FROM manufacturing_contractors
       WHERE status = 'active'
     `);
     return rows[0].count;
@@ -305,10 +311,9 @@ class Dashboard extends BaseModel {
 
   async getActiveOperations() {
     const [rows] = await this.pool.execute(`
-      SELECT COUNT(DISTINCT ct.id) as count
-      FROM cutting_tasks ct
-      INNER JOIN land_assignments la ON ct.assignment_id = la.id
-      WHERE la.status = 'active'
+      SELECT COUNT(*) as count
+      FROM land_assignments
+      WHERE status = 'active'
     `);
     return rows[0].count;
   }
@@ -316,7 +321,7 @@ class Dashboard extends BaseModel {
   async getTotalOperations() {
     const [rows] = await this.pool.execute(`
       SELECT COUNT(*) as count
-      FROM cutting_tasks
+      FROM land_assignments
     `);
     return rows[0].count;
   }
@@ -333,7 +338,6 @@ class Dashboard extends BaseModel {
     const [rows] = await this.pool.execute(`
       SELECT COUNT(*) as count
       FROM sales_invoices
-      WHERE status != 'draft'
     `);
     return rows[0].count;
   }
@@ -387,7 +391,7 @@ class Dashboard extends BaseModel {
     const [rows] = await this.pool.execute(`
       SELECT COUNT(*) as count
       FROM asset_maintenance
-      WHERE status = 'scheduled'
+      WHERE status = 'pending'
     `);
     return rows[0].count;
   }
@@ -396,40 +400,65 @@ class Dashboard extends BaseModel {
     const [rows] = await this.pool.execute(`
       SELECT COALESCE(AVG(cost), 0) as average
       FROM asset_maintenance
-      WHERE status = 'completed'
     `);
     return rows[0].average;
   }
 
   async getManufacturingStats() {
-    const [orders] = await this.pool.execute(`
+    const [stats] = await this.pool.execute(`
       SELECT
-        COUNT(*) as total_orders,
-        SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_orders,
-        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_orders,
-        AVG(CASE WHEN status = 'completed' THEN efficiency ELSE NULL END) as avg_efficiency,
-        AVG(CASE WHEN status = 'completed' THEN defect_rate ELSE NULL END) as avg_defect_rate,
-        SUM(CASE WHEN status = 'completed' THEN downtime_hours ELSE 0 END) as total_downtime
-      FROM manufacturing_orders
+        COUNT(*) as total_contractors,
+        COUNT(CASE WHEN status = 'active' THEN 1 END) as active_contractors,
+        COUNT(CASE WHEN status = 'inactive' THEN 1 END) as inactive_contractors
+      FROM manufacturing_contractors
     `);
 
     const [assignments] = await this.pool.execute(`
       SELECT
-        COUNT(*) as active_assignments,
-        COALESCE(SUM(quantity), 0) as total_quantity
+        COUNT(*) as total_assignments,
+        COUNT(CASE WHEN status = 'active' THEN 1 END) as active_assignments,
+        COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_assignments,
+        COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as cancelled_assignments
       FROM cinnamon_assignments
-      WHERE status = 'active'
     `);
 
     return {
-      totalOrders: orders[0].total_orders,
-      inProgressOrders: orders[0].in_progress_orders,
-      completedOrders: orders[0].completed_orders,
-      avgProductionEfficiency: orders[0].avg_efficiency || 0,
-      avgDefectRate: orders[0].avg_defect_rate || 0,
-      totalDowntime: orders[0].total_downtime || 0,
-      activeAssignments: assignments[0].active_assignments,
-      totalAssignedQuantity: assignments[0].total_quantity
+      manufacturingContractors: stats[0].total_contractors || 0,
+      activeManufacturingContractors: stats[0].active_contractors || 0,
+      inactiveManufacturingContractors: stats[0].inactive_contractors || 0,
+      totalManufacturingAssignments: assignments[0].total_assignments || 0,
+      activeManufacturingAssignments: assignments[0].active_assignments || 0,
+      completedManufacturingAssignments: assignments[0].completed_assignments || 0,
+      cancelledManufacturingAssignments: assignments[0].cancelled_assignments || 0
+    };
+  }
+
+  async getCuttingStats() {
+    const [stats] = await this.pool.execute(`
+      SELECT
+        COUNT(*) as total_contractors,
+        COUNT(CASE WHEN status = 'active' THEN 1 END) as active_contractors,
+        COUNT(CASE WHEN status = 'inactive' THEN 1 END) as inactive_contractors
+      FROM cutting_contractors
+    `);
+
+    const [operations] = await this.pool.execute(`
+      SELECT
+        COUNT(*) as total_operations,
+        COUNT(CASE WHEN status = 'active' THEN 1 END) as active_operations,
+        COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_operations,
+        COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as cancelled_operations
+      FROM land_assignments
+    `);
+
+    return {
+      cuttingContractors: stats[0].total_contractors || 0,
+      activeCuttingContractors: stats[0].active_contractors || 0,
+      inactiveCuttingContractors: stats[0].inactive_contractors || 0,
+      totalCuttingOperations: operations[0].total_operations || 0,
+      activeCuttingOperations: operations[0].active_operations || 0,
+      completedCuttingOperations: operations[0].completed_operations || 0,
+      cancelledCuttingOperations: operations[0].cancelled_operations || 0
     };
   }
 
@@ -437,10 +466,10 @@ class Dashboard extends BaseModel {
     const [items] = await this.pool.execute(`
       SELECT
         COUNT(CASE WHEN status = 'active' THEN 1 END) as active_items,
-        COUNT(CASE WHEN quantity <= min_stock_level THEN 1 END) as low_stock_items,
-        COUNT(*) as inventory_orders,
+        COUNT(CASE WHEN status = 'active' AND quantity <= min_stock_level THEN 1 END) as low_stock_items,
+        (SELECT COUNT(*) FROM inventory_transactions) as total_transactions,
         COALESCE(SUM(CASE
-          WHEN category = 'finished_good'
+          WHEN status = 'active'
           THEN quantity * purchase_price
           ELSE 0
         END), 0) as total_value
@@ -450,7 +479,7 @@ class Dashboard extends BaseModel {
     return {
       activeItems: items[0].active_items || 0,
       lowStockItems: items[0].low_stock_items || 0,
-      inventoryOrders: items[0].inventory_orders || 0,
+      totalTransactions: items[0].total_transactions || 0,
       totalInventoryValue: items[0].total_value || 0
     };
   }
@@ -482,23 +511,38 @@ class Dashboard extends BaseModel {
   }
 
   async getLoanSummary() {
-    const [rows] = await this.pool.execute(`
-      SELECT
-        COUNT(CASE WHEN status = 'active' THEN 1 END) as active_loans,
-        COUNT(CASE WHEN status = 'overdue' THEN 1 END) as overdue_loans,
-        COALESCE(SUM(amount), 0) as total_loaned,
-        COALESCE(SUM(amount - remaining_balance), 0) as total_repaid,
-        COALESCE(SUM(remaining_balance), 0) as outstanding_amount
-      FROM loans
-    `);
+    try {
+      // First query to get loan statistics including total amount from all valid loans
+      const [loans] = await this.pool.execute(`
+        SELECT
+          (SELECT COALESCE(SUM(amount), 0)
+           FROM loans
+           WHERE status != 'voided') as total_loaned,
+          COALESCE(SUM(remaining_balance), 0) as total_outstanding,
+          COUNT(CASE WHEN status = 'active' THEN 1 END) as active_loans,
+          COUNT(CASE WHEN status = 'overdue' THEN 1 END) as overdue_loans
+        FROM loans
+        WHERE status IN ('active', 'overdue')
+      `);
 
-    return {
-      activeLoans: rows[0].active_loans || 0,
-      overdueLoans: rows[0].overdue_loans || 0,
-      totalLoaned: rows[0].total_loaned || 0,
-      totalRepaid: rows[0].total_repaid || 0,
-      outstandingAmount: rows[0].outstanding_amount || 0
-    };
+      // Second query to get total repaid amount
+      const [payments] = await this.pool.execute(`
+        SELECT COALESCE(SUM(amount), 0) as total_repaid
+        FROM loan_payments
+        WHERE status = 'completed'
+      `);
+
+      return {
+        totalLoaned: Number(loans[0].total_loaned) || 0,
+        totalRepaid: Number(payments[0].total_repaid) || 0,
+        outstandingAmount: Number(loans[0].total_outstanding) || 0,
+        activeLoans: Number(loans[0].active_loans) || 0,
+        overdueLoans: Number(loans[0].overdue_loans) || 0
+      };
+    } catch (error) {
+      console.error('Error in getLoanSummary:', error);
+      throw error;
+    }
   }
 }
 

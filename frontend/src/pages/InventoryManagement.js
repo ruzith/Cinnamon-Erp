@@ -382,15 +382,23 @@ const Inventory = () => {
 
   const getStockLevelLabel = (item) => {
     if (!item) return 'Unknown';
-    if (item.quantity <= item.min_stock_level) return 'Low Stock';
-    if (item.quantity >= item.max_stock_level) return 'Overstocked';
+    const quantity = Number(item.quantity);
+    const minStock = Number(item.min_stock_level);
+    if (isNaN(quantity) || isNaN(minStock)) return 'Unknown';
+    if (quantity <= minStock) return 'Low Stock';
+    if (quantity >= Number(item.max_stock_level)) return 'Overstocked';
     return 'Normal';
   };
 
   const getStockLevelColor = (item) => {
     if (!item) return 'default';
-    if (item.quantity <= item.min_stock_level) return 'error';
-    if (item.quantity >= item.max_stock_level) return 'warning';
+    const quantity = Number(item.quantity);
+    const minStock = Number(item.min_stock_level);
+    const maxStock = Number(item.max_stock_level);
+
+    if (isNaN(quantity) || isNaN(minStock) || isNaN(maxStock)) return 'default';
+    if (quantity <= minStock) return 'error';
+    if (quantity >= maxStock) return 'warning';
     return 'success';
   };
 
@@ -407,11 +415,43 @@ const Inventory = () => {
 
   // Calculate summary statistics
   const summaryStats = {
-    totalItems: inventory.length,
-    lowStock: inventory.filter(item => item.quantity <= item.min_stock_level).length,
-    totalValue: inventory.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.purchase_price)), 0).toFixed(2),
-    activeTransactions: transactions.filter(t => t.type === 'IN' || t.type === 'OUT').length
+    totalItems: inventory.filter(item => item.status === 'active').length,
+    lowStock: inventory.filter(item => {
+      const quantity = Number(item.quantity);
+      const minStock = Number(item.min_stock_level);
+      return (
+        item.status === 'active' &&
+        !isNaN(quantity) &&
+        !isNaN(minStock) &&
+        quantity <= minStock
+      );
+    }).length,
+    totalValue: inventory.reduce((sum, item) => {
+      if (item.status !== 'active') return sum;
+      const quantity = Number(item.quantity);
+      const price = Number(item.purchase_price);
+      return sum + (isNaN(quantity) || isNaN(price) ? 0 : quantity * price);
+    }, 0),
+    activeTransactions: transactions.length
   };
+
+  // Add debugging code temporarily to check values
+  useEffect(() => {
+    console.log('Inventory items with low stock:', inventory.filter(item => {
+      const quantity = Number(item.quantity);
+      const minStock = Number(item.min_stock_level);
+      const isLowStock = quantity <= minStock;
+      if (item.status === 'active' && isLowStock) {
+        console.log('Low stock item:', {
+          name: item.product_name,
+          quantity,
+          minStock,
+          isLowStock
+        });
+      }
+      return item.status === 'active' && isLowStock;
+    }));
+  }, [inventory]);
 
   const filteredTransactions = React.useMemo(() => {
     return transactions.filter(transaction => {
@@ -454,8 +494,8 @@ const Inventory = () => {
         <Grid item xs={12} sm={6} md={3}>
           <SummaryCard
             icon={InventoryIcon}
-            title="Active Items"
-            value={inventory.filter(item => item.status === 'active').length}
+            title="Total Items"
+            value={summaryStats.totalItems}
             iconColor="#9C27B0"
             gradientColor="secondary"
           />
@@ -465,17 +505,18 @@ const Inventory = () => {
           <SummaryCard
             icon={AlertIcon}
             title="Low Stock Items"
-            value={inventory.filter(item => Number(item.quantity) <= Number(item.min_stock_level)).length}
+            value={summaryStats.lowStock}
             iconColor="#D32F2F"
             gradientColor="error"
+            tooltip={summaryStats.lowStock > 0 ? "Items below minimum stock level" : "No items below minimum stock level"}
           />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
           <SummaryCard
             icon={ManufacturingIcon}
-            title="Orders"
-            value={new Set(transactions.filter(t => t.reference.startsWith('MO-')).map(t => t.reference)).size}
+            title="Total Transactions"
+            value={summaryStats.activeTransactions}
             iconColor="#ED6C02"
             gradientColor="warning"
           />
@@ -484,8 +525,8 @@ const Inventory = () => {
         <Grid item xs={12} sm={6} md={3}>
           <SummaryCard
             icon={ValueIcon}
-            title="Total Inventory Value"
-            value={formatCurrency(inventory.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.purchase_price)), 0))}
+            title="Total Value"
+            value={formatCurrency(summaryStats.totalValue)}
             iconColor="#0288D1"
             gradientColor="info"
           />

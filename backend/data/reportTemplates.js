@@ -122,63 +122,6 @@ const reportTemplates = [
     ]
   },
 
-  // Cutting Report
-  {
-    code: 'CUTTING_PERFORMANCE',
-    name: {
-      en: 'Cutting Performance Report',
-      si: 'කැපීම් කාර්යසාධන වාර්තාව'
-    },
-    category: 'cutting',
-    description: {
-      en: 'Analysis of cutting operations and contractor performance',
-      si: 'කැපීම් මෙහෙයුම් සහ කොන්ත්‍රාත්කරු කාර්යසාධනය විශ්ලේෂණය'
-    },
-    filters: [
-      {
-        field: 'dateRange',
-        type: 'date',
-        label: { en: 'Date Range', si: 'කාල සීමාව' }
-      },
-      {
-        field: 'contractor',
-        type: 'select',
-        label: { en: 'Contractor', si: 'කොන්ත්‍රාත්කරු' },
-        optionsUrl: '/api/reports/cutting-contractors'
-      },
-      {
-        field: 'status',
-        type: 'select',
-        label: { en: 'Status', si: 'තත්ත්වය' },
-        options: [
-          { value: 'pending', label: { en: 'Pending', si: 'විසඳීමට ඇති' } },
-          { value: 'in_progress', label: { en: 'In Progress', si: 'ක්‍රියාත්මක වෙමින්' } },
-          { value: 'completed', label: { en: 'Completed', si: 'සම්පූර්ණයි' } }
-        ]
-      }
-    ],
-    columns: [
-      {
-        field: 'contractorName',
-        header: { en: 'Contractor', si: 'කොන්ත්‍රාත්කරු' }
-      },
-      {
-        field: 'areaCovered',
-        header: { en: 'Area Covered', si: 'ආවරණය කළ ප්‍රදේශය' },
-        format: 'number'
-      },
-      {
-        field: 'efficiency',
-        header: { en: 'Efficiency', si: 'කාර්යක්ෂමතාව' },
-        format: 'percentage'
-      },
-      {
-        field: 'status',
-        header: { en: 'Status', si: 'තත්ත්වය' }
-      }
-    ]
-  },
-
   // Tasks Report
   {
     code: 'TASK_SUMMARY',

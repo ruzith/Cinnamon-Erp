@@ -248,6 +248,19 @@ const TaskManagement = () => {
     }
   };
 
+  const handleCompleteTask = async (taskId) => {
+    if (window.confirm('Are you sure you want to mark this task as complete?')) {
+      try {
+        await axios.put(`/api/tasks/${taskId}/complete`);
+        fetchTasks();
+        enqueueSnackbar('Task marked as complete', { variant: 'success' });
+      } catch (error) {
+        console.error('Error completing task:', error);
+        enqueueSnackbar('Error marking task as complete', { variant: 'error' });
+      }
+    }
+  };
+
   // Calculate summary statistics
   const summaryStats = {
     totalTasks: tasks.length,
@@ -870,7 +883,16 @@ const TaskManagement = () => {
                           gap: 1,
                         }}
                       >
-                        {task.status !== "cancelled" && (
+                        {task.status !== "completed" && task.status !== "cancelled" && (
+                          <Button
+                            size="small"
+                            color="success"
+                            onClick={() => handleCompleteTask(task.id)}
+                          >
+                            Complete
+                          </Button>
+                        )}
+                        {task.status !== "cancelled" && task.status !== "completed" && (
                           <Button
                             size="small"
                             color="warning"
@@ -880,7 +902,7 @@ const TaskManagement = () => {
                           </Button>
                         )}
                         <Box sx={{ display: "flex", gap: 0.5 }}>
-                          {task.status !== "cancelled" && (
+                          {task.status !== "cancelled" && task.status !== "completed" && (
                             <IconButton
                               size="small"
                               onClick={() => handleOpenAssignDialog(task)}

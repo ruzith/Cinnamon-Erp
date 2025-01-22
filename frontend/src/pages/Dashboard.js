@@ -51,10 +51,12 @@ import {
   Factory as FactoryIcon,
   Speed as SpeedIcon,
   Grade as QualityIcon,
+  Inventory as ProductIcon,
   Inventory as InventoryIcon,
   Warning as AlertIcon,
   AttachMoney as ValueIcon,
   ManageAccounts as ManageIcon,
+  Factory as ManufacturingIcon,
   AttachMoney,
   People,
   ShoppingCart,
@@ -368,13 +370,8 @@ const Dashboard = () => {
       activeOperations: 0,
       totalOperations: 0,
       totalContractors: 0,
-      totalOrders: 0,
-      inProgressOrders: 0,
-      completedOrders: 0,
-      totalAssignedQuantity: 0,
-      avgProductionEfficiency: 0,
-      avgDefectRate: 0,
-      totalDowntime: 0,
+      activeAssignments: 0,
+      totalAssignments: 0,
       activeItems: 0,
       lowStockItems: 0,
       inventoryOrders: 0,
@@ -396,6 +393,20 @@ const Dashboard = () => {
       outstandingAmount: 0,
       activeLoans: 0,
       overdueLoans: 0,
+      manufacturingContractors: 0,
+      activeManufacturingContractors: 0,
+      inactiveManufacturingContractors: 0,
+      totalManufacturingAssignments: 0,
+      activeManufacturingAssignments: 0,
+      completedManufacturingAssignments: 0,
+      cancelledManufacturingAssignments: 0,
+      cuttingContractors: 0,
+      activeCuttingContractors: 0,
+      inactiveCuttingContractors: 0,
+      totalCuttingOperations: 0,
+      activeCuttingOperations: 0,
+      completedCuttingOperations: 0,
+      cancelledCuttingOperations: 0,
     },
     revenueData: [],
     monthlyTarget: {
@@ -658,56 +669,105 @@ const Dashboard = () => {
             </Grid>
           </DashboardSection>
 
-          <DashboardSection title="Manufacturing Management" delay={200}>
+          <DashboardSection title="Cutting Management" delay={200}>
             <Grid container spacing={3}>
-              <Grid item xs={12} sm={6} md={3}>
-                <EnhancedSummaryCard
-                  icon={FactoryIcon}
-                  title="Total Orders"
-                  value={dashboardData.summary.totalOrders || 0}
-                  subtitle={`${dashboardData.summary.inProgressOrders || 0} In Progress`}
-                  iconColor="#9C27B0"
-                  gradientColor="secondary"
-                  trend={`${dashboardData.summary.completedOrders || 0} Completed`}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <EnhancedSummaryCard
-                  icon={SpeedIcon}
-                  title="Production Efficiency"
-                  value={`${Number(dashboardData.summary.avgProductionEfficiency || 0).toFixed(2)}%`}
-                  subtitle="Based on Completed Orders"
-                  iconColor="#ED6C02"
-                  gradientColor="warning"
-                  trend={`${dashboardData.summary.completedOrders || 0} Orders Analyzed`}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <EnhancedSummaryCard
-                  icon={QualityIcon}
-                  title="Defect Rate"
-                  value={`${Number(dashboardData.summary.avgDefectRate || 0).toFixed(2)}%`}
-                  subtitle="Quality Control Metric"
-                  iconColor="#2E7D32"
-                  gradientColor="success"
-                  trend={`${formatCurrency(dashboardData.summary.totalDowntime || 0)} Hours Downtime`}
-                />
-              </Grid>
               <Grid item xs={12} sm={6} md={3}>
                 <EnhancedSummaryCard
                   icon={WorkerIcon}
                   title="Active Contractors"
-                  value={dashboardData.summary.activeContractors || 0}
-                  subtitle={`${dashboardData.summary.activeAssignments || 0} Active Assignments`}
+                  value={dashboardData.summary.cuttingStats?.activeCuttingContractors || 0}
+                  subtitle={`${dashboardData.summary.cuttingStats?.activeCuttingOperations || 0} Active Operations`}
+                  iconColor="#9C27B0"
+                  gradientColor="secondary"
+                  trend={`${dashboardData.summary.cuttingStats?.cuttingContractors || 0} Total Contractors`}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <EnhancedSummaryCard
+                  icon={AssignmentIcon}
+                  title="Active Operations"
+                  value={dashboardData.summary.cuttingStats?.activeCuttingOperations || 0}
+                  subtitle="In Progress"
                   iconColor="#D32F2F"
                   gradientColor="error"
-                  trend={`${formatCurrency(dashboardData.summary.totalAssignedQuantity || 0)} kg Total Assigned`}
+                  trend={`${dashboardData.summary.cuttingStats?.completedCuttingOperations || 0} Completed`}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <EnhancedSummaryCard
+                  icon={ForestIcon}
+                  title="Total Operations"
+                  value={dashboardData.summary.cuttingStats?.totalCuttingOperations || 0}
+                  subtitle="All Time"
+                  iconColor="#ED6C02"
+                  gradientColor="warning"
+                  trend={`${dashboardData.summary.cuttingStats?.cancelledCuttingOperations || 0} Cancelled`}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <EnhancedSummaryCard
+                  icon={ContractorsIcon}
+                  title="Total Contractors"
+                  value={dashboardData.summary.cuttingStats?.cuttingContractors || 0}
+                  subtitle={`${dashboardData.summary.cuttingStats?.inactiveCuttingContractors || 0} Inactive`}
+                  iconColor="#0288D1"
+                  gradientColor="info"
+                  trend={`${dashboardData.summary.cuttingStats?.activeCuttingContractors || 0} Active`}
                 />
               </Grid>
             </Grid>
           </DashboardSection>
 
-          <DashboardSection title="Task Management" delay={300}>
+          <DashboardSection title="Manufacturing Management" delay={300}>
+            <Grid container spacing={3}>
+              <Grid item xs={12} sm={6} md={3}>
+                <EnhancedSummaryCard
+                  icon={WorkerIcon}
+                  title="Active Contractors"
+                  value={dashboardData.summary.manufacturingStats?.activeManufacturingContractors || 0}
+                  subtitle={`${dashboardData.summary.manufacturingStats?.activeManufacturingAssignments || 0} Active Assignments`}
+                  iconColor="#9C27B0"
+                  gradientColor="secondary"
+                  trend={`${dashboardData.summary.manufacturingStats?.manufacturingContractors || 0} Total Contractors`}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <EnhancedSummaryCard
+                  icon={AssignmentIcon}
+                  title="Active Assignments"
+                  value={dashboardData.summary.manufacturingStats?.activeManufacturingAssignments || 0}
+                  subtitle="In Progress"
+                  iconColor="#D32F2F"
+                  gradientColor="error"
+                  trend={`${dashboardData.summary.manufacturingStats?.completedManufacturingAssignments || 0} Completed`}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <EnhancedSummaryCard
+                  icon={ProductIcon}
+                  title="Total Assignments"
+                  value={dashboardData.summary.manufacturingStats?.totalManufacturingAssignments || 0}
+                  subtitle="All Time"
+                  iconColor="#ED6C02"
+                  gradientColor="warning"
+                  trend={`${dashboardData.summary.manufacturingStats?.cancelledManufacturingAssignments || 0} Cancelled`}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <EnhancedSummaryCard
+                  icon={ContractorsIcon}
+                  title="Total Contractors"
+                  value={dashboardData.summary.manufacturingStats?.manufacturingContractors || 0}
+                  subtitle={`${dashboardData.summary.manufacturingStats?.inactiveManufacturingContractors || 0} Inactive`}
+                  iconColor="#0288D1"
+                  gradientColor="info"
+                  trend={`${dashboardData.summary.manufacturingStats?.activeManufacturingContractors || 0} Active`}
+                />
+              </Grid>
+            </Grid>
+          </DashboardSection>
+
+          <DashboardSection title="Task Management" delay={400}>
             <Grid container spacing={3}>
               <Grid item xs={12} sm={6} md={3}>
                 <EnhancedSummaryCard
@@ -759,7 +819,7 @@ const Dashboard = () => {
                 <EnhancedSummaryCard
                   icon={AccountBalanceIcon}
                   title="Total Revenue"
-                  value={formatCurrency(dashboardData.summary.totalIncome || 0)}
+                  value={formatCurrency(dashboardData.summary.accountingSummary?.totalIncome || 0)}
                   iconColor="#9C27B0"
                   gradientColor="secondary"
                 />
@@ -768,7 +828,7 @@ const Dashboard = () => {
                 <EnhancedSummaryCard
                   icon={PaymentsIcon}
                   title="Total Expenses"
-                  value={formatCurrency(dashboardData.summary.totalExpenses || 0)}
+                  value={formatCurrency(dashboardData.summary.accountingSummary?.totalExpenses || 0)}
                   iconColor="#D32F2F"
                   gradientColor="error"
                 />
@@ -777,7 +837,7 @@ const Dashboard = () => {
                 <EnhancedSummaryCard
                   icon={TrendingUp}
                   title="Net Income"
-                  value={formatCurrency(dashboardData.summary.netIncome || 0)}
+                  value={formatCurrency(dashboardData.summary.accountingSummary?.netIncome || 0)}
                   iconColor="#ED6C02"
                   gradientColor="warning"
                 />
@@ -786,7 +846,7 @@ const Dashboard = () => {
                 <EnhancedSummaryCard
                   icon={AccountBalanceWalletIcon}
                   title="Cash Balance"
-                  value={formatCurrency(dashboardData.summary.cashBalance || 0)}
+                  value={formatCurrency(dashboardData.summary.accountingSummary?.cashBalance || 0)}
                   iconColor="#0288D1"
                   gradientColor="info"
                 />
@@ -800,7 +860,7 @@ const Dashboard = () => {
                 <EnhancedSummaryCard
                   icon={AccountBalanceIcon}
                   title="Active Loans"
-                  value={dashboardData.summary.activeLoans || 0}
+                  value={dashboardData.summary.loanSummary?.activeLoans || 0}
                   iconColor="#D32F2F"
                   gradientColor="error"
                 />
@@ -809,7 +869,7 @@ const Dashboard = () => {
                 <EnhancedSummaryCard
                   icon={AccountBalanceIcon}
                   title="Total Loan Amount"
-                  value={formatCurrency(dashboardData.summary.totalLoaned || 0)}
+                  value={formatCurrency(dashboardData.summary.loanSummary?.totalLoaned || 0)}
                   iconColor="#9C27B0"
                   gradientColor="secondary"
                 />
@@ -818,7 +878,7 @@ const Dashboard = () => {
                 <EnhancedSummaryCard
                   icon={PaymentsIcon}
                   title="Total Repaid"
-                  value={formatCurrency(dashboardData.summary.totalRepaid || 0)}
+                  value={formatCurrency(dashboardData.summary.loanSummary?.totalRepaid || 0)}
                   iconColor="#ED6C02"
                   gradientColor="warning"
                 />
@@ -827,7 +887,7 @@ const Dashboard = () => {
                 <EnhancedSummaryCard
                   icon={WarningIcon}
                   title="Outstanding Balance"
-                  value={formatCurrency(dashboardData.summary.outstandingAmount || 0)}
+                  value={formatCurrency(dashboardData.summary.loanSummary?.outstandingAmount || 0)}
                   iconColor="#0288D1"
                   gradientColor="info"
                 />
@@ -932,8 +992,8 @@ const Dashboard = () => {
               <Grid item xs={12} sm={6} md={3}>
                 <EnhancedSummaryCard
                   icon={InventoryIcon}
-                  title="Active Items"
-                  value={dashboardData.summary.activeItems || 0}
+                  title="Total Items"
+                  value={dashboardData.summary.inventoryStats?.activeItems || 0}
                   iconColor="#9C27B0"
                   gradientColor="secondary"
                 />
@@ -942,16 +1002,18 @@ const Dashboard = () => {
                 <EnhancedSummaryCard
                   icon={AlertIcon}
                   title="Low Stock Items"
-                  value={dashboardData.summary.lowStockItems || 0}
+                  value={dashboardData.summary.inventoryStats?.lowStockItems || 0}
                   iconColor="#D32F2F"
                   gradientColor="error"
+                  tooltip={dashboardData.summary.inventoryStats?.lowStockItems > 0 ?
+                    "Items below minimum stock level" : "No items below minimum stock level"}
                 />
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
                 <EnhancedSummaryCard
-                  icon={ManageIcon}
-                  title="Inventory Orders"
-                  value={dashboardData.summary.inventoryOrders || 0}
+                  icon={ManufacturingIcon}
+                  title="Total Transactions"
+                  value={dashboardData.summary.inventoryStats?.totalTransactions || 0}
                   iconColor="#ED6C02"
                   gradientColor="warning"
                 />
@@ -960,7 +1022,7 @@ const Dashboard = () => {
                 <EnhancedSummaryCard
                   icon={ValueIcon}
                   title="Total Value"
-                  value={formatCurrency(dashboardData.summary.totalInventoryValue || 0)}
+                  value={formatCurrency(dashboardData.summary.inventoryStats?.totalInventoryValue || 0)}
                   iconColor="#0288D1"
                   gradientColor="info"
                 />

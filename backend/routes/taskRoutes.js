@@ -138,4 +138,18 @@ router.put('/:id/assign', protect, authorize('admin', 'manager'), async (req, re
   }
 });
 
+// Mark task as complete
+router.put('/:id/complete', protect, async (req, res) => {
+  try {
+    const task = await Task.markAsComplete(req.params.id, req.user.id);
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+    res.json(task);
+  } catch (error) {
+    console.error('Error completing task:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 module.exports = router;

@@ -172,6 +172,33 @@ class Task extends BaseModel {
 
     return taskReport;
   }
+
+  async markAsComplete(id, userId) {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      // Update task status without updated_by field
+      await connection.execute(
+        'UPDATE tasks SET status = ? WHERE id = ?',
+        ['completed', id]
+      );
+
+      // Record in task history
+      await connection.execute(
+        'INSERT INTO task_history (task_id, user_id, status, comments) VALUES (?, ?, ?, ?)',
+        [id, userId, 'completed', 'Task marked as completed']
+      );
+
+      await connection.commit();
+      return this.getWithDetails(id);
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
 }
 
 module.exports = new Task();

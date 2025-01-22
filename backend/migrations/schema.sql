@@ -38,7 +38,6 @@ DROP TABLE IF EXISTS manufacturing_contractors;
 DROP TABLE IF EXISTS cutting_contractors;
 DROP TABLE IF EXISTS inventory;
 DROP TABLE IF EXISTS products;
-DROP TABLE IF EXISTS grades;
 DROP TABLE IF EXISTS product_categories;
 DROP TABLE IF EXISTS employee_group_members;
 DROP TABLE IF EXISTS employee_groups;
@@ -50,7 +49,6 @@ DROP TABLE IF EXISTS employees;
 DROP TABLE IF EXISTS designations;
 DROP TABLE IF EXISTS customers;
 DROP TABLE IF EXISTS accounts;
-DROP TABLE IF EXISTS wells;
 DROP TABLE IF EXISTS leases;
 DROP TABLE IF EXISTS lands;
 DROP TABLE IF EXISTS land_categories;
@@ -247,21 +245,6 @@ CREATE TABLE leases (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (created_by) REFERENCES users(id)
 );
--- Wells table (add after leases table)
-CREATE TABLE wells (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  name VARCHAR(255) NOT NULL UNIQUE,
-  lease_id INT NOT NULL,
-  status ENUM('producing', 'shut-in', 'abandoned') NOT NULL DEFAULT 'producing',
-  location_latitude DECIMAL(10, 8),
-  location_longitude DECIMAL(11, 8),
-  depth DECIMAL(10, 2),
-  created_by INT NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (lease_id) REFERENCES leases(id),
-  FOREIGN KEY (created_by) REFERENCES users(id)
-);
 -- Cutting Contractors table
 CREATE TABLE cutting_contractors (
   id INT PRIMARY KEY AUTO_INCREMENT,
@@ -383,11 +366,13 @@ CREATE TABLE tasks (
   due_date DATE,
   assigned_to INT,
   created_by INT NOT NULL,
+  updated_by INT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (category_id) REFERENCES task_categories(id),
   FOREIGN KEY (assigned_to) REFERENCES employees(id),
-  FOREIGN KEY (created_by) REFERENCES users(id)
+  FOREIGN KEY (created_by) REFERENCES users(id),
+  FOREIGN KEY (updated_by) REFERENCES users(id)
 );
 -- Asset Categories table
 CREATE TABLE asset_categories (
@@ -415,20 +400,10 @@ CREATE TABLE assets (
   created_by INT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (assigned_to) REFERENCES wells(id),
   FOREIGN KEY (created_by) REFERENCES users(id)
 );
 -- Product Categories table
 CREATE TABLE product_categories (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  name VARCHAR(255) NOT NULL UNIQUE,
-  description TEXT,
-  status ENUM('active', 'inactive') DEFAULT 'active',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
--- Grades table
-CREATE TABLE grades (
   id INT PRIMARY KEY AUTO_INCREMENT,
   name VARCHAR(255) NOT NULL UNIQUE,
   description TEXT,

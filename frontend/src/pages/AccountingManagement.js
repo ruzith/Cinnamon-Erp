@@ -46,6 +46,7 @@ import {
   Clear as ClearIcon,
   TrendingDown,
   RestartAlt as RestartAltIcon,
+  AccountBalance,
 } from "@mui/icons-material";
 import axios from "axios";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
@@ -1431,9 +1432,10 @@ const Accounting = () => {
           <SummaryCard
             icon={AccountBalanceIcon}
             title="Total Revenue"
-            value={formatCurrency(summaryStats.totalRevenue)}
-            iconColor="#9C27B0"
-            gradientColor="secondary"
+            value={formatCurrency(summary.currentMonthRevenue || 0)}
+            subtitle="Current Month"
+            iconColor="#2E7D32"
+            gradientColor="success"
           />
         </Grid>
 
@@ -1441,7 +1443,8 @@ const Accounting = () => {
           <SummaryCard
             icon={PaymentsIcon}
             title="Total Expenses"
-            value={formatCurrency(summaryStats.totalExpenses)}
+            value={formatCurrency(summary.currentMonthExpenses || 0)}
+            subtitle="Current Month"
             iconColor="#D32F2F"
             gradientColor="error"
           />
@@ -1451,9 +1454,10 @@ const Accounting = () => {
           <SummaryCard
             icon={TrendingUp}
             title="Net Income"
-            value={formatCurrency(summaryStats.netIncome)}
-            iconColor="#ED6C02"
-            gradientColor="warning"
+            value={formatCurrency(summary.currentMonthNetIncome || 0)}
+            subtitle="Current Month"
+            iconColor={summary.currentMonthNetIncome >= 0 ? "#2E7D32" : "#D32F2F"}
+            gradientColor={summary.currentMonthNetIncome >= 0 ? "success" : "error"}
           />
         </Grid>
 
@@ -1461,7 +1465,8 @@ const Accounting = () => {
           <SummaryCard
             icon={AccountBalanceWallet}
             title="Cash Balance"
-            value={formatCurrency(summaryStats.cashBalance)}
+            value={formatCurrency(summary.cashBalance || 0)}
+            subtitle="Current Balance"
             iconColor="#0288D1"
             gradientColor="info"
           />

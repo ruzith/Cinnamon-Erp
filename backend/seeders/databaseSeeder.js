@@ -206,21 +206,6 @@ const generateLeases = async (connection, count = 8) => {
   }));
 };
 
-const generateWells = async (connection, count = 12) => {
-  const [leases] = await connection.query('SELECT id FROM leases');
-  const [users] = await connection.query('SELECT id FROM users WHERE role = "admin"');
-
-  return Array.from({ length: count }, () => ({
-    name: `WELL-${faker.string.alphanumeric(5).toUpperCase()}`,
-    lease_id: faker.helpers.arrayElement(leases).id,
-    status: faker.helpers.arrayElement(['producing', 'shut-in', 'abandoned']),
-    location_latitude: faker.location.latitude(),
-    location_longitude: faker.location.longitude(),
-    depth: faker.number.float({ min: 100, max: 1000, multipleOf: 0.01 }),
-    created_by: users[0].id
-  }));
-};
-
 // Helper function to generate additional users
 const generateUsers = async (connection, count = 10) => {
   const roles = ['staff', 'accountant', 'manager'];
@@ -384,8 +369,6 @@ const generateManufacturingMaterials = async (connection, orderId) => {
     };
   });
 };
-
-// Add these helper functions after generateManufacturingOrders
 
 // Helper function to generate inventory items
 const generateInventoryItems = async (connection) => {
@@ -589,7 +572,6 @@ const generateSalesInvoices = async (connection, count = 20) => {
       date: faker.date.past({ years: 1 }).toISOString().split('T')[0],
       customer_name: faker.company.name(),
       customer_address: faker.location.streetAddress(),
-      // Replace deprecated phone.number with string.numeric
       customer_phone: `+94 7${faker.string.numeric(8)}`,
       customer_email: faker.internet.email().toLowerCase(),
       sub_total: subTotal,
@@ -674,8 +656,6 @@ const generateAssetAttachments = async (connection, maintenanceId, count = 2) =>
     created_at: new Date()
   }));
 };
-
-// Add these helper functions after generateAssetAttachments
 
 // Helper function to generate accounts
 const generateAccounts = () => [
@@ -845,8 +825,6 @@ const generateTransactions = async (connection) => {
     return transaction;
   });
 };
-
-// Add these helper functions after generateTransactionEntries
 
 // Helper function to generate loans
 const generateLoans = async (connection) => {
@@ -1320,30 +1298,6 @@ const generateAdvancePayments = async (connection) => {
   }
   return payments;
 };
-
-// Add this helper function with the other generator functions
-const generateGrades = () => [
-  {
-    name: 'Alba Super Special',
-    description: 'Highest grade cinnamon quills, light brown color, very low quill thickness'
-  },
-  {
-    name: 'Continental',
-    description: 'Medium grade cinnamon quills, standard thickness'
-  },
-  {
-    name: 'Hamburg',
-    description: 'Regular grade cinnamon quills, medium brown color'
-  },
-  {
-    name: 'Mexican',
-    description: 'Specialty grade for Mexican market'
-  },
-  {
-    name: 'C5 Special',
-    description: 'Premium grade with specific cutting requirements'
-  }
-];
 
 // Helper function to generate payroll items
 const generatePayrollItems = async (connection, payrollId) => {
@@ -2074,13 +2028,6 @@ const seedData = async () => {
       await connection.query('INSERT INTO product_categories SET ?', category);
     }
 
-    // Seed grades
-    console.log('Seeding grades...');
-    const grades = generateGrades();
-    for (const grade of grades) {
-      await connection.query('INSERT INTO grades SET ?', grade);
-    }
-
     // Seed products
     console.log('Seeding products...');
     const products = await generateProducts(connection);
@@ -2125,13 +2072,6 @@ const seedData = async () => {
     const leases = await generateLeases(connection);
     for (const lease of leases) {
       await connection.query('INSERT INTO leases SET ?', lease);
-    }
-
-    // Seed wells
-    console.log('Seeding wells...');
-    const wells = await generateWells(connection);
-    for (const well of wells) {
-      await connection.query('INSERT INTO wells SET ?', well);
     }
 
     // Seed assets
@@ -2386,41 +2326,41 @@ const seedData = async () => {
       });
     }
 
-    // Add manufacturing orders after products are seeded
-    console.log('Seeding manufacturing orders...');
-    const manufacturingOrders = await generateManufacturingOrders(connection);
-    const insertedOrders = [];
-    for (const order of manufacturingOrders) {
-      const [result] = await connection.query('INSERT INTO manufacturing_orders SET ?', order);
-      insertedOrders.push({ ...order, id: result.insertId });
-    }
+    // // Add manufacturing orders after products are seeded
+    // console.log('Seeding manufacturing orders...');
+    // const manufacturingOrders = await generateManufacturingOrders(connection);
+    // const insertedOrders = [];
+    // for (const order of manufacturingOrders) {
+    //   const [result] = await connection.query('INSERT INTO manufacturing_orders SET ?', order);
+    //   insertedOrders.push({ ...order, id: result.insertId });
+    // }
 
-    // After seeding manufacturing orders, seed their materials
-    console.log('Seeding manufacturing materials...');
-    for (const order of insertedOrders) {
-      const materials = await generateManufacturingMaterials(connection, order.id);
-      for (const material of materials) {
-        await connection.query('INSERT INTO manufacturing_materials SET ?', material);
+    // // After seeding manufacturing orders, seed their materials
+    // console.log('Seeding manufacturing materials...');
+    // for (const order of insertedOrders) {
+    //   const materials = await generateManufacturingMaterials(connection, order.id);
+    //   for (const material of materials) {
+    //     await connection.query('INSERT INTO manufacturing_materials SET ?', material);
 
-        // Update inventory quantities for used materials
-        await connection.query(
-          'UPDATE inventory SET quantity = quantity - ? WHERE id = ?',
-          [material.quantity_used, material.material_id]
-        );
+    //     // Update inventory quantities for used materials
+    //     await connection.query(
+    //       'UPDATE inventory SET quantity = quantity - ? WHERE id = ?',
+    //       [material.quantity_used, material.material_id]
+    //     );
 
-        // Create inventory transaction record
-        await connection.query(
-          'INSERT INTO inventory_transactions SET ?',
-          {
-            item_id: material.material_id,
-            type: 'OUT',
-            quantity: material.quantity_used,
-            reference: `MO-${order.order_number}`,
-            notes: 'Used in manufacturing'
-          }
-        );
-      }
-    }
+    //     // Create inventory transaction record
+    //     await connection.query(
+    //       'INSERT INTO inventory_transactions SET ?',
+    //       {
+    //         item_id: material.material_id,
+    //         type: 'OUT',
+    //         quantity: material.quantity_used,
+    //         reference: `MO-${order.order_number}`,
+    //         notes: 'Used in manufacturing'
+    //       }
+    //     );
+    //   }
+    // }
 
     // Seed revenue transactions
     console.log('Seeding revenue transactions...');

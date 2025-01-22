@@ -342,12 +342,14 @@ router.get('/summary', protect, async (req, res) => {
   try {
     const [loans] = await pool.execute(`
       SELECT
-        COALESCE(SUM(amount), 0) as total_loaned,
+        (SELECT COALESCE(SUM(amount), 0)
+         FROM loans
+         WHERE status != 'voided') as total_loaned,
         COALESCE(SUM(remaining_balance), 0) as total_outstanding,
         COUNT(CASE WHEN status = 'active' THEN 1 END) as active_loans,
         COUNT(CASE WHEN status = 'overdue' THEN 1 END) as overdue_loans
       FROM loans
-      WHERE status != 'completed'
+      WHERE status IN ('active', 'overdue')
     `);
 
     const [payments] = await pool.execute(`

@@ -54,6 +54,8 @@ import {
   Cancel as CancelIcon,
   Money as MoneyIcon,
   Paid as PaidIcon,
+  Assignment as AssignmentIcon,
+  Groups as ContractorsIcon,
 } from "@mui/icons-material";
 import axios from "axios";
 import PurchaseInvoiceForm from "../components/manufacturing/PurchaseInvoiceForm";
@@ -1659,79 +1661,49 @@ const Manufacturing = () => {
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
           <SummaryCard
-            icon={FactoryIcon}
-            title="Total Orders"
-            value={manufacturingOrders.length}
-            subtitle={`${
-              manufacturingOrders.filter((o) => o.status === "in_progress")
-                .length
-            } In Progress`}
-            iconColor="#9C27B0"
-            gradientColor="secondary"
-            trend={`${
-              manufacturingOrders.filter((o) => o.status === "completed").length
-            } Completed`}
-          />
-        </Grid>
-
-        <Grid item xs={12} sm={6} md={3}>
-          <SummaryCard
             icon={WorkerIcon}
             title="Active Contractors"
-            value={
-              manufacturingContractors.filter((c) => c.status === "active")
-                .length
-            }
-            subtitle={`${
-              assignments.filter((a) => a.status === "active").length
-            } Active Assignments`}
+            value={manufacturingContractors.filter(c => c.status === 'active').length}
+            subtitle={`${assignments.filter(a => a.status === 'active').length} Active Assignments`}
+            iconColor="#9C27B0"
+            gradientColor="secondary"
+            trend={`${manufacturingContractors.length} Total Contractors`}
+          />
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <SummaryCard
+            icon={AssignmentIcon}
+            title="Active Assignments"
+            value={assignments.filter(a => a.status === 'active').length}
+            subtitle="In Progress"
             iconColor="#D32F2F"
             gradientColor="error"
-            trend={`${formatCurrency(
-              assignments.reduce((sum, a) => sum + parseFloat(a.quantity), 0)
-            )} kg Total Assigned`}
+            trend={`${assignments.filter(a => a.status === 'completed').length} Completed`}
           />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
           <SummaryCard
-            icon={SpeedIcon}
-            title="Avg. Production Efficiency"
-            value={`${(
-              (manufacturingOrders
-                .filter((o) => o.status === "completed")
-                .reduce((sum, o) => sum + parseFloat(o.efficiency), 0) /
-                manufacturingOrders.filter((o) => o.status === "completed")
-                  .length) *
-              100
-            ).toFixed(1)}%`}
-            subtitle="Based on Completed Orders"
+            icon={ProductIcon}
+            title="Total Assignments"
+            value={assignments.length}
+            subtitle="All Time"
             iconColor="#ED6C02"
             gradientColor="warning"
-            trend={`${
-              manufacturingOrders.filter((o) => o.status === "completed").length
-            } Orders Analyzed`}
+            trend={`${assignments.filter(a => a.status === 'cancelled').length} Cancelled`}
           />
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
           <SummaryCard
-            icon={QualityIcon}
-            title="Avg. Defect Rate"
-            value={`${(
-              manufacturingOrders
-                .filter((o) => o.status === "completed")
-                .reduce((sum, o) => sum + parseFloat(o.defect_rate), 0) /
-              manufacturingOrders.filter((o) => o.status === "completed").length
-            ).toFixed(1)}%`}
-            subtitle="Quality Control Metric"
-            iconColor="#2E7D32"
-            gradientColor="success"
-            trend={`${formatCurrency(
-              manufacturingOrders
-                .filter((o) => o.status === "completed")
-                .reduce((sum, o) => sum + parseFloat(o.downtime_hours), 0)
-            )} Hours Downtime`}
+            icon={ContractorsIcon}
+            title="Total Contractors"
+            value={manufacturingContractors.length}
+            subtitle={`${manufacturingContractors.filter(c => c.status === 'inactive').length} Inactive`}
+            iconColor="#0288D1"
+            gradientColor="info"
+            trend={`${manufacturingContractors.filter(c => c.status === 'active').length} Active`}
           />
         </Grid>
       </Grid>

@@ -41,7 +41,6 @@ import {
   AccountBalance as AccountBalanceIcon,
   Payments as PaymentsIcon,
   Warning as WarningIcon,
-  Print as PrintIcon,
   Clear as ClearIcon,
   MonetizationOn as MonetizationOnIcon,
   Assessment as AssessmentIcon,

@@ -78,7 +78,6 @@ export const landSlice = createSlice({
       .addCase(getLands.fulfilled, (state, action) => {
         state.isLoading = false;
         state.isSuccess = true;
-        console.log('Lands received:', action.payload);
         state.lands = action.payload;
       })
       .addCase(getLands.rejected, (state, action) => {

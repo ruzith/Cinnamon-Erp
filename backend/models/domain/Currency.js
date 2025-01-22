@@ -42,6 +42,12 @@ class Currency {
   }
 
   static async delete(id) {
+    // First check if currency is in use
+    const inUse = await this.isInUse(id);
+    if (inUse) {
+      throw new Error('Cannot delete currency that is set as default currency');
+    }
+
     const [result] = await pool.query(
       'DELETE FROM currencies WHERE id = ?',
       [id]
@@ -56,6 +62,16 @@ class Currency {
     );
     return result.affectedRows > 0;
   }
+
+  static async isInUse(id) {
+    // Check settings table for default currency
+    const [settings] = await pool.query(
+      'SELECT id FROM settings WHERE default_currency = ?',
+      [id]
+    );
+
+    return settings.length > 0;
+  }
 }
 
-module.exports = Currency; 
+module.exports = Currency;

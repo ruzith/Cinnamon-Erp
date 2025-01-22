@@ -40,6 +40,7 @@ import {
 import axios from 'axios';
 import { useCurrencyFormatter } from '../utils/currencyUtils';
 import SummaryCard from '../components/common/SummaryCard';
+import { useSnackbar } from 'notistack';
 
 const TabPanel = (props) => {
   const { children, value, index, ...other } = props;
@@ -193,6 +194,7 @@ const AssetManagement = () => {
   });
 
   const { formatCurrency } = useCurrencyFormatter();
+  const { enqueueSnackbar } = useSnackbar();
 
   useEffect(() => {
     fetchAssets();
@@ -328,7 +330,8 @@ const AssetManagement = () => {
     }));
   };
 
-  const handleAssetSubmit = async () => {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     try {
       const assetData = {
         assetNumber: assetFormData.assetNumber,
@@ -343,47 +346,42 @@ const AssetManagement = () => {
 
       if (selectedAsset) {
         await axios.put(`/api/assets/${selectedAsset.id}`, assetData);
+        enqueueSnackbar('Asset updated successfully', { variant: 'success' });
       } else {
         await axios.post('/api/assets', assetData);
+        enqueueSnackbar('Asset created successfully', { variant: 'success' });
       }
       handleCloseDialog();
       fetchAssets();
     } catch (error) {
       console.error('Error saving asset:', error);
-      if (error.response?.data?.message === "Validation failed") {
-        alert(Object.values(error.response.data.errors)[0]);
-      } else {
-        alert(error.response?.data?.message || 'An error occurred while saving the asset');
-      }
+      enqueueSnackbar('Error saving asset', { variant: 'error' });
     }
   };
 
-  const handleMaintenanceSubmit = async (e) => {
-    e.preventDefault();
-
-    const maintenanceData = {
-      assetId: selectedAsset.id,
-      type: maintenanceFormData.type,
-      description: maintenanceFormData.description,
-      date: maintenanceFormData.date,
-      cost: maintenanceFormData.cost ? parseFloat(maintenanceFormData.cost) : null,
-      performedBy: maintenanceFormData.performedBy,
-      nextMaintenanceDate: maintenanceFormData.nextMaintenanceDate,
-      status: maintenanceFormData.status,
-      notes: maintenanceFormData.notes
-    };
-
+  const handleMaintenanceSubmit = async () => {
     try {
-      await axios.post(`/api/assets/${selectedAsset.id}/maintenance`, maintenanceData);
-      fetchMaintenanceRecords();
+      // Prepare maintenance data with proper default values
+      const maintenanceData = {
+        asset_id: maintenanceFormData.assetId,
+        type: maintenanceFormData.type || 'routine',
+        description: maintenanceFormData.description || '',
+        maintenance_date: maintenanceFormData.date || new Date().toISOString().split('T')[0],
+        cost: parseFloat(maintenanceFormData.cost) || 0,
+        performed_by: maintenanceFormData.performedBy || '',
+        next_maintenance_date: maintenanceFormData.nextMaintenanceDate || null,
+        status: maintenanceFormData.status || 'completed',
+        notes: maintenanceFormData.notes || ''
+      };
+
+      await axios.post(`/api/assets/${maintenanceFormData.assetId}/maintenance`, maintenanceData);
+
       handleCloseMaintenanceDialog();
+      fetchMaintenanceRecords();
+      enqueueSnackbar('Maintenance record added successfully', { variant: 'success' });
     } catch (error) {
-      console.error('Error saving maintenance record:', error);
-      if (error.response?.data?.message === "Validation failed") {
-        alert(Object.values(error.response.data.errors)[0]);
-      } else {
-        alert(error.response?.data?.message || 'An error occurred while saving the maintenance record');
-      }
+      console.error('Error adding maintenance:', error);
+      enqueueSnackbar(error.response?.data?.message || 'Error adding maintenance record', { variant: 'error' });
     }
   };
 
@@ -610,41 +608,36 @@ const AssetManagement = () => {
                         label={asset.status}
                         color={getStatusColor(asset.status)}
                         size="small"
-                        style={{ textTransform: 'capitalize' }}
                       />
                     </TableCell>
                     <TableCell>
                       <IconButton
-                        size="small"
                         onClick={() => handleMaintenance(asset)}
                         title="Maintenance"
                         sx={{ color: 'info.main', ml: 1 }}
                       >
-                        <BuildIcon fontSize="small" />
+                        <BuildIcon/>
                       </IconButton>
                       <IconButton
-                        size="small"
                         onClick={() => handleViewHistory(asset)}
                         title="View History"
                         sx={{ color: 'success.main', ml: 1 }}
                       >
-                        <TimelineIcon fontSize="small" />
+                        <TimelineIcon/>
                       </IconButton>
                       <IconButton
-                        size="small"
                         onClick={() => handleEdit(asset)}
                         title="Edit Asset"
                         sx={{ color: 'primary.main', ml: 1 }}
                       >
-                        <EditIcon fontSize="small" />
+                        <EditIcon/>
                       </IconButton>
                       <IconButton
-                        size="small"
                         onClick={() => handleDelete(asset.id)}
                         title="Delete Asset"
                         sx={{ color: 'error.main', ml: 1 }}
                       >
-                        <DeleteIcon fontSize="small" />
+                        <DeleteIcon/>
                       </IconButton>
                     </TableCell>
                   </TableRow>
@@ -697,7 +690,6 @@ const AssetManagement = () => {
                         label={record.status}
                         color={getMaintenanceStatusColor(record.status)}
                         size="small"
-                        sx={{ textTransform: 'capitalize' }}
                       />
                     </TableCell>
                   </TableRow>
@@ -809,7 +801,7 @@ const AssetManagement = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog}>Cancel</Button>
-          <Button variant="contained" onClick={handleAssetSubmit}>
+          <Button variant="contained" onClick={handleSubmit}>
             {selectedAsset ? 'Update' : 'Create'}
           </Button>
         </DialogActions>

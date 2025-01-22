@@ -596,7 +596,7 @@ const generateSalesInvoices = async (connection, count = 20) => {
       discount: discount,
       tax: tax,
       total: total,
-      payment_method: faker.helpers.arrayElement(['cash', 'card', 'bank-transfer', 'other']),
+      payment_method: faker.helpers.arrayElement(['cash', 'card', 'bank', 'check']),
       payment_status: faker.helpers.arrayElement(['pending', 'partial', 'paid']),
       notes: faker.lorem.sentence(),
       created_by: users[0].id,
@@ -679,23 +679,86 @@ const generateAssetAttachments = async (connection, maintenanceId, count = 2) =>
 
 // Helper function to generate accounts
 const generateAccounts = () => [
-  // Asset accounts
-  { code: '1000', name: 'Cash', type: 'asset', category: 'current', balance: 0, is_system_account: true },
-  { code: '1100', name: 'Bank', type: 'asset', category: 'current', balance: 0, is_system_account: true },
-  { code: '1200', name: 'Accounts Receivable', type: 'asset', category: 'current', balance: 0, is_system_account: true },
-  { code: '1300', name: 'Inventory', type: 'asset', category: 'current', balance: 0, is_system_account: true },
-  { code: '1400', name: 'Fixed Assets', type: 'asset', category: 'fixed', balance: 0, is_system_account: true },
-
-  // Liability accounts
-  { code: '2000', name: 'Accounts Payable', type: 'liability', category: 'current-liability', balance: 0, is_system_account: true },
-  { code: '2100', name: 'Wages Payable', type: 'liability', category: 'current-liability', balance: 0, is_system_account: true },
-  { code: '2300', name: 'Long Term Loans', type: 'liability', category: 'long-term-liability', balance: 0, is_system_account: true },
-
-  // Revenue accounts
-  { code: '4000', name: 'Sales Revenue', type: 'revenue', category: 'operational', balance: 0, is_system_account: true },
-
-  // Expense accounts
-  { code: '5000', name: 'Cost of Goods Sold', type: 'expense', category: 'operational', balance: 0, is_system_account: true }
+  {
+    code: '1001',
+    name: 'Cash Account',
+    type: 'asset',
+    category: 'current',
+    description: 'Main cash account for daily transactions',
+    balance: 0,
+    is_system_account: true,
+    status: 'active'
+  },
+  {
+    code: '1002',
+    name: 'Accounts Receivable',
+    type: 'asset',
+    category: 'current',
+    description: 'Money owed by customers',
+    balance: 0,
+    is_system_account: true,
+    status: 'active'
+  },
+  {
+    code: '2001',
+    name: 'Accounts Payable',
+    type: 'liability',
+    category: 'current-liability',
+    description: 'Money owed to suppliers and contractors',
+    balance: 0,
+    is_system_account: true,
+    status: 'active'
+  },
+  {
+    code: '3001',
+    name: 'Capital',
+    type: 'equity',
+    category: 'capital',
+    description: 'Owner\'s equity in the business',
+    balance: 0,
+    is_system_account: true,
+    status: 'active'
+  },
+  {
+    code: '4001',
+    name: 'Sales Revenue',
+    type: 'revenue',
+    category: 'operational',
+    description: 'Income from sales',
+    balance: 0,
+    is_system_account: true,
+    status: 'active'
+  },
+  {
+    code: '5001',
+    name: 'Salary Expense',
+    type: 'expense',
+    category: 'operational',
+    description: 'Employee salary payments',
+    balance: 0,
+    is_system_account: true,
+    status: 'active'
+  },
+  {
+    code: '5002',
+    name: 'Manufacturing Expense',
+    type: 'expense',
+    category: 'operational',
+    description: 'Costs related to manufacturing',
+    balance: 0,
+    is_system_account: true,
+    status: 'active'
+  },
+  {
+    code: '5003',
+    name: 'General Expenses',
+    type: 'expense',
+    category: 'operational',
+    description: 'Miscellaneous operational expenses',
+    balance: 0,
+    is_system_account: true,
+    status: 'active'
+  }
 ];
 
 // Add this new helper function after generateAccounts
@@ -724,7 +787,7 @@ const generateTransactions = async (connection) => {
 
   // Define arrays for random selection
   const transactionTypes = ['revenue', 'expense', 'asset', 'liability', 'equity', 'salary', 'manufacturing_payment', 'credit_payment'];
-  const paymentMethods = ['cash', 'bank', 'check', 'card'];
+  const paymentMethods = ['cash', 'card', 'bank', 'check', ];
   const statusOptions = ['draft', 'posted', 'cancelled'];
 
   const getRandomCategory = (type) => {
@@ -936,7 +999,7 @@ const generateLoanPayments = async (connection, loan) => {
     loan_id: loan.id,
     amount: item.payment_amount,
     payment_date: item.due_date,
-    payment_method: faker.helpers.arrayElement(['cash', 'bank', 'check', 'card']),
+    payment_method: faker.helpers.arrayElement(['cash', 'card', 'bank', 'check']),
     reference: `PAY-${faker.string.alphanumeric(8).toUpperCase()}`,
     notes: 'Regular payment',
     status: 'completed',
@@ -1521,7 +1584,12 @@ const generatePurchaseItems = async (connection, invoiceId) => {
 const generateRevenueTransactions = async (connection) => {
   const [users] = await connection.query('SELECT id FROM users');
   const [accounts] = await connection.query('SELECT id FROM accounts WHERE type = "revenue"');
-  const [cashAccount] = await connection.query('SELECT id FROM accounts WHERE code = "1000" LIMIT 1');
+  const [cashAccount] = await connection.query('SELECT id FROM accounts WHERE code = "1001" LIMIT 1'); // Changed from 1000 to 1001
+
+  if (!cashAccount[0]) {
+    console.warn('Cash account not found. Skipping revenue transactions...');
+    return [];
+  }
 
   return Array.from({ length: 20 }, () => {
     const amount = faker.number.float({ min: 5000, max: 50000, multipleOf: 0.01 });
@@ -1537,7 +1605,7 @@ const generateRevenueTransactions = async (connection) => {
       amount: amount,
       description: faker.commerce.productDescription(),
       reference: `REV${faker.string.numeric(8)}`,
-      payment_method: faker.helpers.arrayElement(['cash', 'bank', 'check', 'card']),
+      payment_method: faker.helpers.arrayElement(['cash', 'card','bank', 'check']),
       status: 'posted',
       created_by: faker.helpers.arrayElement(users).id,
       created_at: date,
@@ -1900,27 +1968,32 @@ const seedData = async () => {
   try {
     await connection.beginTransaction();
 
-    console.log('Clearing existing data...');
+    // First, disable foreign key checks to allow truncating tables with dependencies
+    console.log('Disabling foreign key checks...');
     await connection.query('SET FOREIGN_KEY_CHECKS = 0');
-    const tables = [
-      'report_columns', 'report_filters', 'reports',
-      'transactions_entries', 'transactions',
-      'loan_schedule', 'loan_payments', 'loans',
-      'asset_attachments', 'asset_maintenance', 'assets',
-      'asset_categories', 'purchase_items', 'purchase_invoices',
-      'sales_items', 'sales_invoices', 'inventory_transactions',
-      'inventory', 'manufacturing_orders', 'cinnamon_assignments',
-      'manufacturing_advance_payments', // Add this line
-      'land_assignments', 'cutting_contractors', 'manufacturing_contractors',
-      'wells', 'leases', 'lands', 'land_categories', 'employee_group_members', 'employee_groups',
-      'employees', 'designations', 'products', 'product_categories', 'tasks',
-      'customers', 'accounts', 'monthly_targets', 'settings', 'users'
-    ];
 
+    // Get all tables in the database
+    console.log('Getting list of all tables...');
+    const [tables] = await connection.query(`
+      SELECT table_name
+      FROM information_schema.tables
+      WHERE table_schema = DATABASE()
+    `);
+
+    // Truncate all tables
+    console.log('Truncating all tables...');
     for (const table of tables) {
-      await connection.query(`DELETE FROM ${table}`);
+      const tableName = table.TABLE_NAME;
+      console.log(`Truncating table: ${tableName}`);
+      await connection.query(`TRUNCATE TABLE ${tableName}`);
     }
+
+    // Re-enable foreign key checks
+    console.log('Re-enabling foreign key checks...');
     await connection.query('SET FOREIGN_KEY_CHECKS = 1');
+
+    // Continue with the rest of your seeding logic...
+    console.log('Starting to seed data...');
 
     // Create admin user
     console.log('Creating admin user...');

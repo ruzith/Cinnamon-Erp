@@ -12,9 +12,11 @@ import {
 } from '@mui/material';
 import { createLand, updateLand } from '../../features/lands/landSlice';
 import axios from 'axios';
+import { useSnackbar } from 'notistack';
 
 const LandForm = ({ land, onClose }) => {
   const dispatch = useDispatch();
+  const { enqueueSnackbar } = useSnackbar();
   const [categories, setCategories] = useState([]);
   const [formData, setFormData] = useState({
     name: land?.name || '',
@@ -77,12 +79,15 @@ const LandForm = ({ land, onClose }) => {
     try {
       if (land) {
         await dispatch(updateLand({ id: land.id, landData })).unwrap();
+        enqueueSnackbar('Land updated successfully', { variant: 'success' });
       } else {
         await dispatch(createLand(landData)).unwrap();
+        enqueueSnackbar('Land created successfully', { variant: 'success' });
       }
       onClose();
     } catch (error) {
       console.error('Error saving land:', error);
+      enqueueSnackbar('Error saving land', { variant: 'error' });
     }
   };
 

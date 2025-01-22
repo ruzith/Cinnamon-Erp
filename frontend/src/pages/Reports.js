@@ -25,11 +25,13 @@ import {
 import { getReportTemplates, generateReport, getReportPreview } from '../features/reports/reportSlice';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import ClearIcon from '@mui/icons-material/Clear';
+import { useSnackbar } from 'notistack';
 
 const Reports = () => {
   const dispatch = useDispatch();
   const { user } = useSelector(state => state.auth);
   const { templates = [], currentReport = null, previewData = null, isLoading = false, isError = false, message = '' } = useSelector(state => state.reports || {});
+  const { enqueueSnackbar } = useSnackbar();
 
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [filters, setFilters] = useState({});
@@ -84,6 +86,15 @@ const Reports = () => {
     const value = event.target.value;
     setSelectedTemplate(value);
     setFilters({});
+    if (value) {
+      dispatch(getReportPreview({
+        code: value,
+        params: { language }
+      })).unwrap()
+        .catch((error) => {
+          enqueueSnackbar('Error loading report preview', { variant: 'error' });
+        });
+    }
   };
 
   const handleFilterChange = (field, value) => {
@@ -94,14 +105,22 @@ const Reports = () => {
   };
 
   const handleGenerateReport = () => {
-    dispatch(generateReport({
-      code: selectedTemplate,
-      params: {
-        filters,
-        format: exportFormat,
-        language
-      }
-    }));
+    try {
+      dispatch(generateReport({
+        code: selectedTemplate,
+        params: {
+          filters,
+          format: exportFormat,
+          language
+        }
+      })).unwrap()
+        .then(() => {
+          enqueueSnackbar('Report generated successfully', { variant: 'success' });
+        });
+    } catch (error) {
+      console.error('Error generating report:', error);
+      enqueueSnackbar('Error generating report', { variant: 'error' });
+    }
   };
 
   const renderFilterInput = (filter) => {

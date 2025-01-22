@@ -17,7 +17,7 @@ const salesInvoiceSchema = Joi.object({
   discount: Joi.number().min(0).max(Joi.ref('sub_total')).default(0),
   tax: Joi.number().min(0).max(100).default(0),
   total: Joi.number().positive().required(),
-  payment_method: Joi.string().valid('cash', 'card', 'bank-transfer', 'other').required(),
+  payment_method: Joi.string().valid('cash', 'card', 'bank', 'check').required(),
   payment_status: Joi.string().valid('pending', 'partial', 'paid').default('pending'),
   notes: Joi.string().allow(null, ''),
   status: Joi.string().valid('draft', 'confirmed', 'cancelled').default('draft'),

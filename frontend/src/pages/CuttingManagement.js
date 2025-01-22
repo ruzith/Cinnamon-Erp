@@ -265,26 +265,18 @@ const CuttingManagement = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const submissionData = {
-        name: formData.name,
-        contractor_id: formData.contractor_id,
-        phone: formData.phone,
-        address: formData.address,
-      };
-
       if (selectedContractor) {
-        await axios.put(
-          `/api/cutting/contractors/${selectedContractor.id}`,
-          submissionData
-        );
+        await axios.put(`/api/cutting/contractors/${selectedContractor.id}`, formData);
+        enqueueSnackbar('Contractor updated successfully', { variant: 'success' });
       } else {
-        await axios.post("/api/cutting/contractors", submissionData);
+        await axios.post('/api/cutting/contractors', formData);
+        enqueueSnackbar('Contractor created successfully', { variant: 'success' });
       }
-      fetchContractors();
       handleCloseDialog();
+      fetchContractors();
     } catch (error) {
-      console.error("Error saving cutting contractor:", error);
-      alert(error.response?.data?.message || "Error saving contractor");
+      console.error('Error saving contractor:', error);
+      enqueueSnackbar('Error saving contractor', { variant: 'error' });
     }
   };
 
@@ -356,9 +348,10 @@ const CuttingManagement = () => {
         status: "active",
         isFromContractor: false,
       });
+      enqueueSnackbar('Assignment created successfully', { variant: 'success' });
     } catch (error) {
       console.error("Error saving assignment:", error);
-      alert(error.response?.data?.message || "Error saving assignment");
+      enqueueSnackbar('Error creating assignment', { variant: 'error' });
     }
   };
 
@@ -404,7 +397,7 @@ const CuttingManagement = () => {
       ]);
     } catch (error) {
       console.error("Error completing assignment:", error);
-      alert(error.response?.data?.message || "Error completing assignment");
+      enqueueSnackbar('Error completing assignment', { variant: 'error' });
     }
   };
 
@@ -509,17 +502,15 @@ const CuttingManagement = () => {
         fetchPayments(),
         fetchAdvancePayments(),
       ]);
+      enqueueSnackbar('Advance payment processed successfully', { variant: 'success' });
     } catch (error) {
       console.error("Error processing advance payment:", error);
-      alert(
-        error.response?.data?.message || "Error processing advance payment"
-      );
+      enqueueSnackbar('Error processing advance payment', { variant: 'error' });
     }
   };
 
   const handleOpenCuttingPaymentDialog = async (assignment) => {
     try {
-      console.log("Opening payment dialog with assignment:", assignment);
 
       // Set the form data with the assignment details
       setCuttingPaymentFormData({
@@ -597,11 +588,10 @@ const CuttingManagement = () => {
         fetchPayments(),
         fetchAdvancePayments(),
       ]);
+      enqueueSnackbar('Payment processed successfully', { variant: 'success' });
     } catch (error) {
       console.error("Error processing cutting payment:", error);
-      alert(
-        error.response?.data?.message || "Error processing cutting payment"
-      );
+      enqueueSnackbar('Error processing payment', { variant: 'error' });
     }
   };
 
@@ -625,7 +615,6 @@ const CuttingManagement = () => {
   };
 
   const handleEditPayment = (payment) => {
-    console.log("Editing payment:", payment);
     const price_per_kg = (
       parseFloat(payment.total_amount) / parseFloat(payment.quantity_kg)
     ).toFixed(2); // Calculate price_per_kg
@@ -657,7 +646,7 @@ const CuttingManagement = () => {
       ]);
     } catch (error) {
       console.error("Error deleting payment:", error);
-      alert(error.response?.data?.message || "Error deleting payment");
+      enqueueSnackbar('Error deleting payment', { variant: 'error' });
     }
   };
 
@@ -676,7 +665,7 @@ const CuttingManagement = () => {
       ]);
     } catch (error) {
       console.error("Error deleting advance payment:", error);
-      alert(error.response?.data?.message || "Error deleting advance payment");
+      enqueueSnackbar('Error deleting advance payment', { variant: 'error' });
     }
   };
 
@@ -751,14 +740,12 @@ const CuttingManagement = () => {
       await Promise.all([fetchAssignments(), fetchContractors(), fetchLands()]);
     } catch (error) {
       console.error("Error deleting assignment:", error);
-      alert(error.response?.data?.message || "Error deleting assignment");
+      enqueueSnackbar('Error deleting assignment', { variant: 'error' });
     }
   };
 
   const handlePrintPayment = async (payment) => {
     try {
-      const settingsResponse = await axios.get("/api/settings");
-      const settings = settingsResponse.data;
       const paymentResponse = await axios.get(
         `/api/cutting/payments/${payment.id}`
       );
@@ -768,7 +755,6 @@ const CuttingManagement = () => {
         "/api/cutting/payments/receipt",
         {
           payment: paymentDetails,
-          settings: settings,
         }
       );
 
@@ -863,7 +849,7 @@ const CuttingManagement = () => {
       handleReassignmentClose();
     } catch (error) {
       console.error("Error in reassignment:", error);
-      alert("Failed to reassign data and delete contractor");
+      enqueueSnackbar('Failed to reassign data and delete contractor', { variant: 'error' });
     }
   };
 
@@ -996,13 +982,9 @@ const CuttingManagement = () => {
 
   const handlePrintAdvancePayment = async (payment) => {
     try {
-      const [settingsResponse, receiptResponse] = await Promise.all([
-        axios.get("/api/settings"),
-        axios.post("/api/cutting/advance-payments/receipt", {
-          payment,
-          settings: null, // Will be populated with settings response
-        }),
-      ]);
+      const receiptResponse = await axios.post("/api/cutting/advance-payments/receipt", {
+        payment,
+      });
 
       const receiptHtml = receiptResponse.data.receiptHtml;
       const printWindow = window.open("", "_blank");
@@ -1478,7 +1460,7 @@ const CuttingManagement = () => {
                         <IconButton
                           size="small"
                           onClick={() => handlePrintAdvancePayment(payment)}
-                          sx={{ color: "info.main" }}
+                          sx={{ color: "warning.main" }}
                         >
                           <PrintIcon />
                         </IconButton>
@@ -1585,7 +1567,7 @@ const CuttingManagement = () => {
                         <IconButton
                           size="small"
                           onClick={() => handlePrintPayment(payment)}
-                          sx={{ color: "info.main" }}
+                          sx={{ color: "warning.main" }}
                         >
                           <PrintIcon />
                         </IconButton>

@@ -60,6 +60,15 @@ exports.updateCurrency = async (req, res) => {
 exports.deleteCurrency = async (req, res) => {
   try {
     const { id } = req.params;
+
+    // Check if currency is the default currency
+    const settings = await Settings.getSettings();
+    if (settings && settings.default_currency === parseInt(id)) {
+      return res.status(400).json({
+        message: 'Cannot delete currency that is set as default currency. Please change default currency first.'
+      });
+    }
+
     const success = await Currency.delete(id);
     if (success) {
       res.json({ message: 'Currency deleted successfully' });
@@ -67,6 +76,15 @@ exports.deleteCurrency = async (req, res) => {
       res.status(404).json({ message: 'Currency not found' });
     }
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting currency', error: error.message });
+    if (error.message.includes('foreign key constraint')) {
+      res.status(400).json({
+        message: 'Cannot delete currency that is in use. Please remove all references to this currency first.'
+      });
+    } else {
+      res.status(500).json({
+        message: 'Error deleting currency',
+        error: error.message
+      });
+    }
   }
 };

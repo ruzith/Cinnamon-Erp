@@ -1,6 +1,8 @@
 const CuttingContractor = require('../models/domain/CuttingContractor');
 const { validateContractor, validateAssignment } = require('../validators/cuttingValidator');
 const CuttingPayment = require('../models/domain/CuttingPayment');
+const pool = require('../config/database');
+const { generateCuttingPaymentReceipt } = require('../utils/pdfTemplates');
 
 // @desc    Get all contractors
 // @route   GET /api/cutting/contractors
@@ -1085,215 +1087,52 @@ exports.getPayment = async (req, res) => {
   }
 };
 
-// @desc    Generate payment receipt
+// @desc    Generate receipt for cutting payment
 // @route   POST /api/cutting/payments/receipt
 // @access  Private
 exports.generateReceipt = async (req, res) => {
+  const connection = await pool.getConnection();
   try {
-    const { payment, settings } = req.body;
+    const { payment } = req.body;
 
-    const formattedDate = new Date(payment.payment_date).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
+    // Get company settings and currency
+    const [settingsResult] = await connection.execute(`
+      SELECT s.*, c.symbol as currency_symbol
+      FROM settings s
+      JOIN currencies c ON s.default_currency = c.id
+      WHERE c.status = 'active'
+      LIMIT 1
+    `);
+    const settings = settingsResult[0] || {};
 
-    const receiptHtml = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <title>Cutting Payment Receipt - ${payment.receipt_number}</title>
-        <style>
-          @media print {
-            @page {
-              size: A4;
-              margin: 20mm;
-            }
-          }
-          body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-            max-width: 800px;
-            margin: 0 auto;
-            color: #333;
-            line-height: 1.6;
-          }
-          .watermark {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) rotate(-45deg);
-            font-size: 100px;
-            opacity: 0.05;
-            z-index: -1;
-            color: #000;
-            white-space: nowrap;
-          }
-          .company-header {
-            text-align: center;
-            margin-bottom: 20px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #333;
-          }
-          .company-name {
-            font-size: 24px;
-            font-weight: bold;
-            margin: 0;
-            color: #1976d2;
-          }
-          .company-details {
-            font-size: 14px;
-            color: #666;
-            margin: 5px 0;
-          }
-          .document-title {
-            font-size: 20px;
-            font-weight: bold;
-            text-align: center;
-            margin: 20px 0;
-            color: #333;
-            text-transform: uppercase;
-          }
-          .slip-header {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 30px;
-            padding: 15px;
-            background-color: #f5f5f5;
-            border-radius: 5px;
-          }
-          .contractor-info, .payment-info {
-            flex: 1;
-          }
-          .info-label {
-            font-weight: bold;
-            color: #666;
-            font-size: 12px;
-            text-transform: uppercase;
-          }
-          .info-value {
-            font-size: 14px;
-            margin-bottom: 10px;
-          }
-          .payment-details {
-            margin: 20px 0;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-          }
-          .detail-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 12px 20px;
-            border-bottom: 1px solid #eee;
-          }
-          .detail-row:last-child {
-            border-bottom: none;
-          }
-          .detail-label {
-            font-weight: bold;
-            color: #333;
-          }
-          .amount {
-            font-family: monospace;
-            font-size: 14px;
-          }
-          .total-section {
-            margin-top: 20px;
-            padding: 15px 20px;
-            background-color: #1976d2;
-            color: white;
-            border-radius: 5px;
-          }
-          .footer {
-            margin-top: 50px;
-            padding-top: 20px;
-            border-top: 1px solid #ddd;
-            font-size: 12px;
-            color: #666;
-            text-align: center;
-          }
-          .company-registration {
-            font-size: 12px;
-            color: #666;
-            margin: 5px 0;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="watermark">PAYMENT SLIP</div>
-        <div class="company-header">
-          <h1 class="company-name">${settings?.company_name || 'COMPANY NAME'}</h1>
-          <p class="company-details">${settings?.company_address || ''}</p>
-          <p class="company-details">Phone: ${settings?.company_phone || ''}</p>
-          <p class="company-registration">VAT No: ${settings?.vat_number || ''} | Tax No: ${settings?.tax_number || ''}</p>
-        </div>
+    // Get payment details if not provided in full
+    if (!payment.contractor_name || !payment.land_number) {
+      const [paymentDetails] = await connection.execute(`
+        SELECT
+          cp.*,
+          cc.name as contractor_name,
+          cc.contractor_id as contractor_number,
+          l.land_number,
+          l.location
+        FROM cutting_payments cp
+        LEFT JOIN cutting_contractors cc ON cp.contractor_id = cc.id
+        LEFT JOIN land_assignments la ON cp.assignment_id = la.id
+        LEFT JOIN lands l ON la.land_id = l.id
+        WHERE cp.id = ?
+      `, [payment.id]);
 
-        <div class="document-title">Cutting Payment Receipt</div>
+      if (paymentDetails[0]) {
+        Object.assign(payment, paymentDetails[0]);
+      }
+    }
 
-        <div class="slip-header">
-          <div class="contractor-info">
-            <div class="info-label">Contractor Name</div>
-            <div class="info-value">${payment.contractor_name}</div>
-            <div class="info-label">Receipt Number</div>
-            <div class="info-value">${payment.receipt_number}</div>
-          </div>
-          <div class="payment-info">
-            <div class="info-label">Land Number</div>
-            <div class="info-value">${payment.land_number || 'N/A'}</div>
-            <div class="info-label">Payment Date</div>
-            <div class="info-value">${formattedDate}</div>
-          </div>
-        </div>
-
-        <div class="payment-details">
-          <div class="detail-row">
-            <span class="detail-label">Location</span>
-            <span class="amount">${payment.location || 'N/A'}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Payment Status</span>
-            <span class="amount">${payment.status.toUpperCase()}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Company Contribution</span>
-            <span class="amount">Rs. ${Number(payment.company_contribution).toLocaleString()}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Manufacturing Contribution</span>
-            <span class="amount">Rs. ${Number(payment.manufacturing_contribution).toLocaleString()}</span>
-          </div>
-        </div>
-
-        <div class="total-section detail-row">
-          <span class="detail-label">Total Amount</span>
-          <span class="amount">Rs. ${Number(payment.total_amount).toLocaleString()}</span>
-        </div>
-
-        ${payment.notes ? `
-        <div style="margin: 20px 0; padding: 15px; background-color: #f5f5f5; border-radius: 5px;">
-          <div class="info-label">Notes</div>
-          <div style="font-size: 14px; margin-top: 5px;">${payment.notes}</div>
-        </div>
-        ` : ''}
-
-        <div class="footer">
-          <p>Generated on ${new Date().toLocaleString('en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          })} IST</p>
-          <p>For any queries, please contact ${settings?.company_name || ''} at ${settings?.company_phone || ''}</p>
-        </div>
-      </body>
-      </html>
-    `;
-
-    res.status(200).json({ receiptHtml });
+    const receiptHtml = await generateCuttingPaymentReceipt(payment, settings);
+    res.json({ receiptHtml });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Error generating receipt:', error);
+    res.status(500).json({ message: 'Error generating receipt' });
+  } finally {
+    if (connection) connection.release();
   }
 };
 

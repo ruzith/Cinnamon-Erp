@@ -38,12 +38,14 @@ import {
 } from '@mui/icons-material';
 import { getUsers, deleteUser, updateUser, createUser } from '../features/users/userSlice';
 import SummaryCard from '../components/common/SummaryCard';
+import { useSnackbar } from 'notistack';
 
 const UserManagement = () => {
     const dispatch = useDispatch();
     const { users, isLoading } = useSelector((state) => state.users);
     const [openDialog, setOpenDialog] = useState(false);
     const [selectedUser, setSelectedUser] = useState(null);
+    const { enqueueSnackbar } = useSnackbar();
 
     useEffect(() => {
         dispatch(getUsers());
@@ -63,12 +65,14 @@ const UserManagement = () => {
     };
 
     const handleDelete = async (userId) => {
-        if (window.confirm('Do you want to permanently delete this user? This action cannot be undone.')) {
+        if (window.confirm('Do you want to permanently delete this user?')) {
             try {
                 await dispatch(deleteUser({ id: userId, permanent: true }));
                 dispatch(getUsers());
+                enqueueSnackbar('User deleted successfully', { variant: 'success' });
             } catch (error) {
                 console.error('Error deleting user:', error);
+                enqueueSnackbar('Error deleting user', { variant: 'error' });
             }
         }
     };
@@ -105,28 +109,27 @@ const UserManagement = () => {
         try {
             const form = document.querySelector('form');
             const formData = new FormData(form);
-
             const userData = {
                 name: formData.get('name'),
                 email: formData.get('email'),
                 role: formData.get('role'),
                 status: formData.get('status'),
-                ...(selectedUser ? {} : {
-                    password: formData.get('password')
-                })
+                ...(selectedUser ? {} : { password: formData.get('password') })
             };
 
             if (selectedUser) {
                 await dispatch(updateUser({ id: selectedUser.id, userData }));
+                enqueueSnackbar('User updated successfully', { variant: 'success' });
             } else {
                 await dispatch(createUser(userData));
+                enqueueSnackbar('User created successfully', { variant: 'success' });
             }
-
             setOpenDialog(false);
             setSelectedUser(null);
             dispatch(getUsers());
         } catch (error) {
             console.error('Error saving user:', error);
+            enqueueSnackbar('Error saving user', { variant: 'error' });
         }
     };
 

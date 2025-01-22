@@ -29,6 +29,7 @@ import {
   CircularProgress,
   Alert,
   Snackbar,
+  Chip,
 } from '@mui/material';
 import {
   Language as LanguageIcon,
@@ -41,6 +42,7 @@ import {
 } from '@mui/icons-material';
 import { updateSettings, getSettings } from '../features/settings/settingsSlice';
 import axios from 'axios';
+import { useSnackbar } from 'notistack';
 
 const timeZones = Intl.supportedValuesOf('timeZone').map(zone => {
   try {
@@ -67,6 +69,7 @@ const Settings = () => {
   const { settings, isLoading } = useSelector(state => state.settings);
   const [companyLogo, setCompanyLogo] = useState(null);
   const [editMode, setEditMode] = useState(false);
+  const { enqueueSnackbar } = useSnackbar();
 
   const [formData, setFormData] = useState({
     companyName: '',
@@ -121,15 +124,14 @@ const Settings = () => {
     }
   };
 
-  const handleSave = () => {
-    const data = new FormData();
-    Object.keys(formData).forEach(key => {
-      data.append(key, formData[key]);
-    });
-    if (companyLogo) {
-      data.append('logo', companyLogo);
+  const handleSave = async () => {
+    try {
+      await dispatch(updateSettings(formData)).unwrap();
+      enqueueSnackbar('Settings updated successfully', { variant: 'success' });
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      enqueueSnackbar('Error saving settings', { variant: 'error' });
     }
-    dispatch(updateSettings(data));
   };
 
   const handleEdit = () => {
@@ -229,15 +231,26 @@ const Settings = () => {
   const handleDelete = async (id) => {
     try {
       const token = JSON.parse(localStorage.getItem('user'))?.token;
+
+      // Check if currency is set as default
+      if (formData.defaultCurrency === id) {
+        enqueueSnackbar(
+          'Cannot delete currency that is set as default currency. Please change default currency first.',
+          { variant: 'error' }
+        );
+        return;
+      }
+
       await axios.delete(`/api/currencies/${id}`, {
         headers: {
           Authorization: `Bearer ${token}`
         }
       });
-      showMessage('Currency deleted successfully');
+      enqueueSnackbar('Currency deleted successfully', { variant: 'success' });
       fetchCurrencies();
     } catch (error) {
-      showMessage(error.response?.data?.message || 'Delete failed', 'error');
+      const errorMessage = error.response?.data?.message || 'Delete failed';
+      enqueueSnackbar(errorMessage, { variant: 'error' });
     }
   };
 
@@ -271,45 +284,29 @@ const Settings = () => {
   };
 
   const handleCurrencySubmit = async () => {
-    const token = JSON.parse(localStorage.getItem('user'))?.token;
     try {
-        if (editingId) {
-            // If editing, send a PUT request
-            await axios.put(`/api/currencies/${editingId}`, currencyFormData, {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
-            });
-            showMessage('Currency updated successfully');
-        } else {
-            // If adding, send a POST request
-            const response = await axios.post('/api/currencies', currencyFormData, {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
-            });
-            showMessage('Currency added successfully');
-
-            // Check if default currency is empty and set it to the newly created currency
-            if (!formData.defaultCurrency) {
-                setFormData(prev => ({
-                    ...prev,
-                    defaultCurrency: response.data.id // Assuming the response contains the new currency's ID
-                }));
-            }
-        }
-        setModalVisible(false); // Close the modal
-        setEditingId(null); // Reset editingId
-        setCurrencyFormData({ // Reset form data
-            code: '',
-            name: '',
-            symbol: '',
-            rate: '',
-            status: 'active', // Reset to default status
-        });
-        fetchCurrencies(); // Refresh the currency list
+      if (editingId) {
+        // If editing, make PUT request
+        await axios.put(`/api/currencies/${editingId}`, currencyFormData);
+        enqueueSnackbar('Currency updated successfully', { variant: 'success' });
+      } else {
+        // If creating new, make POST request
+        await axios.post('/api/currencies', currencyFormData);
+        enqueueSnackbar('Currency added successfully', { variant: 'success' });
+      }
+      fetchCurrencies();
+      setModalVisible(false);
+      setEditingId(null); // Reset editingId
+      setCurrencyFormData({ // Reset form data
+        code: '',
+        name: '',
+        symbol: '',
+        rate: '',
+        status: 'active',
+      });
     } catch (error) {
-        showMessage(error.response?.data?.message || 'Operation failed', 'error');
+      console.error('Error saving currency:', error);
+      enqueueSnackbar(error.response?.data?.message || 'Error saving currency', { variant: 'error' });
     }
   };
 
@@ -323,6 +320,40 @@ const Settings = () => {
     });
     setEditingId(currency.id); // Set the editingId
     setModalVisible(true);
+  };
+
+  const getStatusChipProps = (status) => {
+    const statusProps = {
+      active: {
+        color: 'success',
+        label: 'active',
+      },
+      inactive: {
+        color: 'error',
+        label: 'inactive',
+      },
+      pending: {
+        color: 'warning',
+        label: 'pending',
+      },
+    };
+
+    return statusProps[status.toLowerCase()] || {
+      color: 'default',
+      label: status,
+    };
+  };
+
+  const handleLogoUpload = async (file) => {
+    try {
+      const formData = new FormData();
+      formData.append('logo', file);
+      await axios.post('/api/settings/logo', formData);
+      enqueueSnackbar('Logo uploaded successfully', { variant: 'success' });
+    } catch (error) {
+      console.error('Error uploading logo:', error);
+      enqueueSnackbar('Error uploading logo', { variant: 'error' });
+    }
   };
 
   return (
@@ -371,7 +402,13 @@ const Settings = () => {
                       <TableCell>{currency.name}</TableCell>
                       <TableCell>{currency.symbol}</TableCell>
                       <TableCell>{currency.rate}</TableCell>
-                      <TableCell>{currency.status}</TableCell>
+                      <TableCell>
+                        <Chip
+                          size="small"
+                          {...getStatusChipProps(currency.status)}
+                          sx={{ minWidth: '80px' }}
+                        />
+                      </TableCell>
                       <TableCell>
                         <IconButton
                           size="small"
@@ -485,7 +522,7 @@ const Settings = () => {
                     sx={{ mb: 3 }}
                   />
                 </Grid>
-                <Grid item xs={12}>
+                {/* <Grid item xs={12}>
                   <Button
                     variant="outlined"
                     component="label"
@@ -505,7 +542,7 @@ const Settings = () => {
                       Selected: {companyLogo.name}
                     </Typography>
                   )}
-                </Grid>
+                </Grid> */}
               </Grid>
             ) : (
               <Grid container spacing={3}>
@@ -643,8 +680,18 @@ const Settings = () => {
         </Button>
       </Box>
 
-      <Dialog open={modalVisible} onClose={() => setModalVisible(false)}>
-        <DialogTitle>New Currency</DialogTitle>
+      <Dialog open={modalVisible} onClose={() => {
+        setModalVisible(false);
+        setEditingId(null);
+        setCurrencyFormData({
+          code: '',
+          name: '',
+          symbol: '',
+          rate: '',
+          status: 'active',
+        });
+      }}>
+        <DialogTitle>{editingId ? 'Edit Currency' : 'New Currency'}</DialogTitle>
         <DialogContent>
           <Grid container spacing={3}>
             <Grid item xs={12} md={6}>
@@ -696,11 +743,39 @@ const Settings = () => {
                 onChange={handleCurrencyChange}
               />
             </Grid>
+            {editingId && (
+              <Grid item xs={12}>
+                <FormControl fullWidth>
+                  <InputLabel>Status</InputLabel>
+                  <Select
+                    name="status"
+                    value={currencyFormData.status}
+                    onChange={handleCurrencyChange}
+                    label="Status"
+                  >
+                    <MenuItem value="active">Active</MenuItem>
+                    <MenuItem value="inactive">Inactive</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+            )}
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setModalVisible(false)}>Cancel</Button>
-          <Button onClick={handleCurrencySubmit}>Add</Button>
+          <Button onClick={() => {
+            setModalVisible(false);
+            setEditingId(null);
+            setCurrencyFormData({
+              code: '',
+              name: '',
+              symbol: '',
+              rate: '',
+              status: 'active',
+            });
+          }}>Cancel</Button>
+          <Button onClick={handleCurrencySubmit}>
+            {editingId ? 'Save Changes' : 'Add'}
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

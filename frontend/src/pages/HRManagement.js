@@ -48,6 +48,7 @@ import axios from '../app/axios';
 import { format } from 'date-fns';
 import SummaryCard from '../components/common/SummaryCard';
 import { useCurrencyFormatter, formatCurrencyStatic } from '../utils/currencyUtils';
+import { useSnackbar } from 'notistack';
 
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
@@ -294,6 +295,7 @@ export default function HRManagement() {
   const [selectedReport, setSelectedReport] = useState(null);
   const { user } = useSelector((state) => state.auth);
   const { formatCurrency } = useCurrencyFormatter();
+  const { enqueueSnackbar } = useSnackbar();
 
   useEffect(() => {
     fetchEmployees();
@@ -350,8 +352,10 @@ export default function HRManagement() {
       });
       setOpenAdvanceDialog(false);
       fetchAdvances();
+      enqueueSnackbar('Salary advance created successfully', { variant: 'success' });
     } catch (error) {
-      console.error('Error submitting advance:', error);
+      console.error('Error creating salary advance:', error);
+      enqueueSnackbar(error.response?.data?.message || 'Error creating salary advance', { variant: 'error' });
     }
   };
 
@@ -366,211 +370,18 @@ export default function HRManagement() {
 
   const handlePrintPayroll = async (payroll) => {
     try {
-      const settingsResponse = await axios.get('/api/settings');
-      const settings = settingsResponse.data;
+      // Get payroll details with items if needed
+      const payrollResponse = await axios.get(`/api/hr/payroll/${payroll.id}`);
+      const payrollDetails = payrollResponse.data;
 
-      // Parse numeric values
-      const basicSalary = parseFloat(payroll.basic_salary) || 0;
-      const deductions = parseFloat(payroll.deductions) || 0;
-      const netSalary = parseFloat(payroll.net_salary) || 0;
-      const monthName = format(new Date(2000, payroll.month - 1), 'MMMM');
-
-      // Create a printable view
-      const printContent = `
-        <html>
-          <head>
-            <title>Payroll Slip - ${payroll.employee_name}</title>
-            <style>
-              @media print {
-                @page {
-                  size: A4;
-                  margin: 20mm;
-                }
-              }
-              body {
-                font-family: Arial, sans-serif;
-                padding: 20px;
-                max-width: 800px;
-                margin: 0 auto;
-                color: #333;
-                line-height: 1.6;
-              }
-              .watermark {
-                position: fixed;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%) rotate(-45deg);
-                font-size: 100px;
-                opacity: 0.05;
-                z-index: -1;
-                color: #000;
-                white-space: nowrap;
-              }
-              .company-header {
-                text-align: center;
-                margin-bottom: 20px;
-                padding-bottom: 20px;
-                border-bottom: 2px solid #333;
-              }
-              .company-name {
-                font-size: 24px;
-                font-weight: bold;
-                margin: 0;
-                color: #1976d2;
-              }
-              .company-details {
-                font-size: 14px;
-                color: #666;
-                margin: 5px 0;
-              }
-              .document-title {
-                font-size: 20px;
-                font-weight: bold;
-                text-align: center;
-                margin: 20px 0;
-                color: #333;
-                text-transform: uppercase;
-              }
-              .slip-header {
-                display: flex;
-                justify-content: space-between;
-                margin-bottom: 30px;
-                padding: 15px;
-                background-color: #f5f5f5;
-                border-radius: 5px;
-              }
-              .employee-info, .payroll-period {
-                flex: 1;
-              }
-              .info-label {
-                font-weight: bold;
-                color: #666;
-                font-size: 12px;
-                text-transform: uppercase;
-              }
-              .info-value {
-                font-size: 14px;
-                margin-bottom: 10px;
-              }
-              .payroll-details {
-                margin: 20px 0;
-                border: 1px solid #ddd;
-                border-radius: 5px;
-              }
-              .detail-row {
-                display: flex;
-                justify-content: space-between;
-                padding: 12px 20px;
-                border-bottom: 1px solid #eee;
-              }
-              .detail-row:last-child {
-                border-bottom: none;
-              }
-              .detail-label {
-                font-weight: bold;
-                color: #333;
-              }
-              .amount {
-                font-family: monospace;
-                font-size: 14px;
-              }
-              .total-section {
-                margin-top: 20px;
-                padding: 15px 20px;
-                background-color: #1976d2;
-                color: white;
-                border-radius: 5px;
-              }
-              .footer {
-                margin-top: 50px;
-                padding-top: 20px;
-                border-top: 1px solid #ddd;
-                font-size: 12px;
-                color: #666;
-                text-align: center;
-              }
-              .signature-section {
-                margin-top: 50px;
-                display: flex;
-                justify-content: space-between;
-              }
-              .signature-box {
-                flex: 1;
-                max-width: 200px;
-                text-align: center;
-              }
-              .signature-line {
-                border-top: 1px solid #333;
-                margin-top: 50px;
-                margin-bottom: 10px;
-              }
-              .company-registration {
-                font-size: 12px;
-                color: #666;
-                margin: 5px 0;
-              }
-            </style>
-          </head>
-          <body>
-            <div class="watermark">PAYROLL SLIP</div>
-            <div class="company-header">
-              <h1 class="company-name">${settings.company_name}</h1>
-              <p class="company-details">${settings.company_address}</p>
-              <p class="company-details">Phone: ${settings.company_phone}</p>
-              <p class="company-registration">VAT No: ${settings.vat_number} | Tax No: ${settings.tax_number}</p>
-            </div>
-
-            <div class="document-title">Payroll Slip</div>
-
-            <div class="slip-header">
-              <div class="employee-info">
-                <div class="info-label">Employee Name</div>
-                <div class="info-value">${payroll.employee_name}</div>
-                <div class="info-label">Employee ID</div>
-                <div class="info-value">${payroll.employee_id}</div>
-              </div>
-              <div class="payroll-period">
-                <div class="info-label">Pay Period</div>
-                <div class="info-value">${monthName} ${payroll.year}</div>
-                <div class="info-label">Payment Date</div>
-                <div class="info-value">${format(new Date(), 'dd MMM yyyy')}</div>
-              </div>
-            </div>
-
-            <div class="payroll-details">
-              <div class="detail-row">
-                <span class="detail-label">Basic Salary</span>
-                <span class="amount">${formatCurrencyStatic(basicSalary, false)}</span>
-              </div>
-              ${payroll.additional_amount > 0 ? `
-              <div class="detail-row">
-                <span class="detail-label">Additional Amount</span>
-                <span class="amount">+${formatCurrencyStatic(parseFloat(payroll.additional_amount), false)}</span>
-              </div>
-              ` : ''}
-              <div class="detail-row">
-                <span class="detail-label">Deductions</span>
-                <span class="amount">-${formatCurrencyStatic(deductions, false)}</span>
-              </div>
-            </div>
-
-            <div class="total-section detail-row">
-              <span class="detail-label">Net Salary</span>
-              <span class="amount">${formatCurrencyStatic(netSalary, false)}</span>
-            </div>
-
-            <div class="footer">
-              <p>Generated on ${format(new Date(), 'dd MMM yyyy, HH:mm')} IST</p>
-              <p>For any queries, please contact HR Department</p>
-              <p>${settings.company_name} | ${settings.company_phone}</p>
-            </div>
-          </body>
-        </html>
-      `;
+      // Generate receipt HTML - no need to fetch settings anymore
+      const response = await axios.post('/api/hr/payroll/print', {
+        payroll: payrollDetails
+      });
 
       // Create a new window and print
       const printWindow = window.open('', '_blank');
-      printWindow.document.write(printContent);
+      printWindow.document.write(response.data.receiptHtml);
       printWindow.document.close();
       printWindow.focus();
       printWindow.print();
@@ -981,6 +792,80 @@ export default function HRManagement() {
     }
   };
 
+  const handlePayrollSubmit = async (formData) => {
+    try {
+      // Calculate totals
+      const totalAdditional = formData.additional_amounts.reduce((sum, item) => sum + parseFloat(item.amount), 0);
+      const totalDeductions = formData.deduction_items.reduce((sum, item) => sum + parseFloat(item.amount), 0);
+
+      // Get employee's basic salary and pending advances
+      const employee = employees.find(emp => emp.id === formData.employee_id);
+      const basicSalary = employee ? parseFloat(employee.basic_salary) : 0;
+
+      // Fetch approved salary advances for this employee
+      const advancesResponse = await axios.get(`/api/hr/salary-advances/employee/${formData.employee_id}`);
+
+      // Filter advances for the specific month and year
+      const monthAdvances = advancesResponse.data
+        .filter(adv => {
+          const advanceDate = new Date(adv.request_date);
+          return advanceDate.getMonth() + 1 === formData.month &&
+                 advanceDate.getFullYear() === formData.year &&
+                 adv.approval_status === 'approved';
+        })
+        .reduce((sum, adv) => sum + parseFloat(adv.amount), 0);
+
+      // Total deductions include both deduction items and monthly advances
+      const totalAllDeductions = totalDeductions + monthAdvances;
+
+      // Ensure all numbers are properly parsed and calculated
+      const finalBasicSalary = parseFloat(basicSalary.toFixed(2));
+      const finalAdditional = parseFloat(totalAdditional.toFixed(2));
+      const finalDeductions = parseFloat(totalAllDeductions.toFixed(2));
+      const finalNetSalary = parseFloat((finalBasicSalary + finalAdditional - finalDeductions).toFixed(2));
+
+      // Create main payroll record with correct calculations
+      const payrollResponse = await axios.post('/api/hr/payroll', {
+        employee_id: formData.employee_id,
+        month: parseInt(formData.month),
+        year: parseInt(formData.year),
+        basic_salary: finalBasicSalary,
+        additional_amount: finalAdditional,
+        deductions: finalDeductions,
+        net_salary: finalNetSalary,
+        created_by: user.id
+      });
+
+      // If payroll created successfully, add the items
+      if (payrollResponse.data?.id) {
+        // Add additional amounts
+        for (const item of formData.additional_amounts) {
+          await axios.post('/api/hr/payroll-items', {
+            payroll_id: payrollResponse.data.id,
+            type: 'addition',
+            description: item.description,
+            amount: parseFloat(item.amount)
+          });
+        }
+
+        // Add deductions
+        for (const item of formData.deduction_items) {
+          await axios.post('/api/hr/payroll-items', {
+            payroll_id: payrollResponse.data.id,
+            type: 'deduction',
+            description: item.description,
+            amount: parseFloat(item.amount)
+          });
+        }
+      }
+      enqueueSnackbar('Payroll generated successfully', { variant: 'success' });
+    } catch (error) {
+      console.error('Error generating payroll:', error);
+      enqueueSnackbar('Error generating payroll', { variant: 'error' });
+    }
+    fetchPayrolls();
+  };
+
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
       {/* Header */}
@@ -1103,7 +988,7 @@ export default function HRManagement() {
                       <IconButton
                         size="small"
                         onClick={() => handlePrintPayroll(payroll)}
-                        sx={{ color: 'primary.main' }}
+                        sx={{ color: 'warning.main' }}
                         title="Print Payroll"
                       >
                         <PrintIcon />
@@ -1399,78 +1284,7 @@ export default function HRManagement() {
         <DialogTitle>Generate Payroll</DialogTitle>
         <DialogContent>
           <PayrollForm
-            onSubmit={async (formData) => {
-              try {
-                // Calculate totals
-                const totalAdditional = formData.additional_amounts.reduce((sum, item) => sum + parseFloat(item.amount), 0);
-                const totalDeductions = formData.deduction_items.reduce((sum, item) => sum + parseFloat(item.amount), 0);
-
-                // Get employee's basic salary and pending advances
-                const employee = employees.find(emp => emp.id === formData.employee_id);
-                const basicSalary = employee ? parseFloat(employee.basic_salary) : 0;
-
-                // Fetch approved salary advances for this employee
-                const advancesResponse = await axios.get(`/api/hr/salary-advances/employee/${formData.employee_id}`);
-
-                // Filter advances for the specific month and year
-                const monthAdvances = advancesResponse.data
-                  .filter(adv => {
-                    const advanceDate = new Date(adv.request_date);
-                    return advanceDate.getMonth() + 1 === formData.month &&
-                           advanceDate.getFullYear() === formData.year &&
-                           adv.approval_status === 'approved';
-                  })
-                  .reduce((sum, adv) => sum + parseFloat(adv.amount), 0);
-
-                // Total deductions include both deduction items and monthly advances
-                const totalAllDeductions = totalDeductions + monthAdvances;
-
-                // Ensure all numbers are properly parsed and calculated
-                const finalBasicSalary = parseFloat(basicSalary.toFixed(2));
-                const finalAdditional = parseFloat(totalAdditional.toFixed(2));
-                const finalDeductions = parseFloat(totalAllDeductions.toFixed(2));
-                const finalNetSalary = parseFloat((finalBasicSalary + finalAdditional - finalDeductions).toFixed(2));
-
-                // Create main payroll record with correct calculations
-                const payrollResponse = await axios.post('/api/hr/payroll', {
-                  employee_id: formData.employee_id,
-                  month: parseInt(formData.month),
-                  year: parseInt(formData.year),
-                  basic_salary: finalBasicSalary,
-                  additional_amount: finalAdditional,
-                  deductions: finalDeductions,
-                  net_salary: finalNetSalary,
-                  created_by: user.id
-                });
-
-                // If payroll created successfully, add the items
-                if (payrollResponse.data?.id) {
-                  // Add additional amounts
-                  for (const item of formData.additional_amounts) {
-                    await axios.post('/api/hr/payroll-items', {
-                      payroll_id: payrollResponse.data.id,
-                      type: 'addition',
-                      description: item.description,
-                      amount: parseFloat(item.amount)
-                    });
-                  }
-
-                  // Add deductions
-                  for (const item of formData.deduction_items) {
-                    await axios.post('/api/hr/payroll-items', {
-                      payroll_id: payrollResponse.data.id,
-                      type: 'deduction',
-                      description: item.description,
-                      amount: parseFloat(item.amount)
-                    });
-                  }
-                }
-              } catch (error) {
-                console.error('Error generating payroll:', error);
-                throw error;
-              }
-            }}
-            onSuccess={fetchPayrolls}
+            onSubmit={handlePayrollSubmit}
             onClose={() => setOpenPayrollDialog(false)}
           />
         </DialogContent>

@@ -36,9 +36,19 @@ class Task extends BaseModel {
   }
 
   async create(taskData) {
-    const columns = Object.keys(taskData).join(', ');
-    const placeholders = Object.keys(taskData).map(() => '?').join(', ');
-    const values = Object.values(taskData);
+    // Clean up empty values to be null
+    const cleanedData = Object.fromEntries(
+      Object.entries(taskData).map(([key, value]) => {
+        if (value === '') {
+          return [key, null];
+        }
+        return [key, value];
+      })
+    );
+
+    const columns = Object.keys(cleanedData).join(', ');
+    const placeholders = Object.keys(cleanedData).map(() => '?').join(', ');
+    const values = Object.values(cleanedData);
 
     const [result] = await this.pool.execute(
       `INSERT INTO tasks (${columns}) VALUES (${placeholders})`,
@@ -62,9 +72,19 @@ class Task extends BaseModel {
         throw new Error('Task not found');
       }
 
+      // Clean up empty values to be null
+      const cleanedData = Object.fromEntries(
+        Object.entries(taskData).map(([key, value]) => {
+          if (value === '') {
+            return [key, null];
+          }
+          return [key, value];
+        })
+      );
+
       // Update task
-      const setClause = Object.keys(taskData).map(key => `${key} = ?`).join(', ');
-      const values = [...Object.values(taskData), id];
+      const setClause = Object.keys(cleanedData).map(key => `${key} = ?`).join(', ');
+      const values = [...Object.values(cleanedData), id];
 
       await connection.execute(
         `UPDATE tasks SET ${setClause} WHERE id = ?`,
@@ -72,10 +92,10 @@ class Task extends BaseModel {
       );
 
       // Record history if status has changed
-      if (taskData.status && taskData.status !== currentTask[0].status) {
+      if (cleanedData.status && cleanedData.status !== currentTask[0].status) {
         await connection.execute(
           'INSERT INTO task_history (task_id, user_id, status, comments) VALUES (?, ?, ?, ?)',
-          [id, taskData.updated_by || currentTask[0].created_by, taskData.status, taskData.comments || `Status changed to ${taskData.status}`]
+          [id, cleanedData.updated_by || currentTask[0].created_by, cleanedData.status, cleanedData.comments || `Status changed to ${cleanedData.status}`]
         );
       }
 

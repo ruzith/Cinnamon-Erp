@@ -58,6 +58,7 @@ DROP TABLE IF EXISTS monthly_targets;
 DROP TABLE IF EXISTS settings;
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS currencies;
+
 -- Currencies table
 CREATE TABLE currencies (
   id INT PRIMARY KEY AUTO_INCREMENT,
@@ -84,9 +85,9 @@ CREATE TABLE users (
 -- Settings table
 CREATE TABLE settings (
   id INT PRIMARY KEY AUTO_INCREMENT,
-  company_name VARCHAR(255) NOT NULL,
-  company_address TEXT NOT NULL,
-  company_phone VARCHAR(50) NOT NULL,
+  company_name VARCHAR(255) NULL,
+  company_address TEXT NULL,
+  company_phone VARCHAR(50) NULL,
   vat_number VARCHAR(50),
   tax_number VARCHAR(50),
   logo_url VARCHAR(255),
@@ -184,7 +185,7 @@ CREATE TABLE payroll_items (
   gross_salary DECIMAL(15, 2) NOT NULL,
   net_salary DECIMAL(15, 2) NOT NULL,
   status ENUM('pending', 'paid') DEFAULT 'pending',
-  payment_method ENUM('bank', 'cash', 'cheque') DEFAULT 'bank',
+  payment_method ENUM('cash', 'bank', 'card', 'check') DEFAULT 'bank',
   payment_date TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (payroll_id) REFERENCES payrolls(id),
@@ -490,7 +491,7 @@ CREATE TABLE sales_invoices (
   discount DECIMAL(10, 2) DEFAULT 0,
   tax DECIMAL(10, 2) DEFAULT 0,
   total DECIMAL(10, 2) NOT NULL,
-  payment_method ENUM('cash', 'card', 'bank-transfer', 'other') NOT NULL,
+  payment_method ENUM('cash', 'card', 'bank', 'check') NOT NULL,
   payment_status ENUM('pending', 'partial', 'paid') DEFAULT 'pending',
   payment_date DATE DEFAULT NULL,
   notes TEXT,
@@ -616,7 +617,7 @@ CREATE TABLE loan_payments (
   loan_id INT NOT NULL,
   amount DECIMAL(15, 2) NOT NULL,
   payment_date DATE NOT NULL,
-  payment_method ENUM('cash', 'bank', 'check', 'card') NOT NULL DEFAULT 'cash',
+  payment_method ENUM('cash', 'card', 'bank', 'check') NOT NULL DEFAULT 'cash',
   reference VARCHAR(50) UNIQUE,
   notes TEXT,
   status ENUM('pending', 'completed', 'cancelled') DEFAULT 'completed',
@@ -752,7 +753,7 @@ CREATE TABLE transactions (
   category VARCHAR(50) NOT NULL,
   amount DECIMAL(15, 2) NOT NULL,
   status ENUM('draft', 'posted', 'cancelled') DEFAULT 'draft',
-  payment_method ENUM('cash', 'bank', 'check', 'card') NOT NULL DEFAULT 'cash',
+  payment_method ENUM('cash', 'card', 'bank', 'check') NOT NULL DEFAULT 'cash',
   employee_id INT,
   created_by INT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -966,6 +967,7 @@ CREATE TABLE manufacturing_payment_usages (
   FOREIGN KEY (advance_payment_id) REFERENCES manufacturing_advance_payments(id)
 );
 
+-- Insert default accounts
 INSERT INTO accounts (code, name, type, category, status) VALUES
 ('1001', 'Cash Account', 'asset', 'current', 'active'),
 ('1002', 'Accounts Receivable', 'asset', 'current', 'active'),
@@ -976,3 +978,11 @@ INSERT INTO accounts (code, name, type, category, status) VALUES
 ('5002', 'Manufacturing Expense', 'expense', 'operational', 'active'),
 ('5003', 'General Expenses', 'expense', 'operational', 'active')
 ON DUPLICATE KEY UPDATE status = 'active';
+
+-- Insert default currency
+INSERT INTO currencies (code, name, symbol, rate, status) VALUES
+('LKR', 'Sri Lankan Rupee', 'Rs.', 1.000000, 'active');
+
+-- Insert default settings
+INSERT INTO settings (default_currency) VALUES
+(1);

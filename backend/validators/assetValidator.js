@@ -43,10 +43,6 @@ const validateAssetData = (assetData) => {
     if (isNaN(purchaseDate.getTime())) {
       errors.purchaseDate = 'Invalid purchase date format';
     }
-    // Optional: Validate that purchase date is not in the future
-    if (purchaseDate > new Date()) {
-      errors.purchaseDate = 'Purchase date cannot be in the future';
-    }
   }
 
   // Validate numeric fields

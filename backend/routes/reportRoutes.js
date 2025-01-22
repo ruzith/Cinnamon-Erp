@@ -177,7 +177,7 @@ router.post('/generate/:code', protect, async (req, res) => {
     }
     const currency = {
       code: settings.default_currency,
-      symbol: settings.currency_symbol || '$'  // Fallback to $ if not set
+      symbol: settings.currency_symbol || 'Rs.'
     };
 
     // Find the report template
@@ -217,9 +217,7 @@ router.post('/generate/:code', protect, async (req, res) => {
           ...(endDate ? [endDate.toISOString().split('T')[0]] : [])
         ];
 
-        console.log('Executing SALES_SUMMARY query:', query, 'with params:', params);
         const rows = await executeQuery(query, params);
-        console.log('SALES_SUMMARY results:', rows);
 
         results = rows.map(row => ({
           date: row.date,
@@ -260,9 +258,7 @@ router.post('/generate/:code', protect, async (req, res) => {
           ...(filters.status ? [filters.status] : [])
         ];
 
-        console.log('Executing EMPLOYEE_SUMMARY query:', query, 'with params:', params);
         const rows = await executeQuery(query, params);
-        console.log('EMPLOYEE_SUMMARY results:', rows);
 
         results = rows.map(row => ({
           name: row.name,
@@ -306,9 +302,7 @@ router.post('/generate/:code', protect, async (req, res) => {
           ...(filters.priority ? [filters.priority] : [])
         ];
 
-        console.log('Executing TASK_SUMMARY query:', query, 'with params:', params);
         const rows = await executeQuery(query, params);
-        console.log('TASK_SUMMARY results:', rows);
 
         results = rows.map(row => ({
           taskId: row.taskId,
@@ -354,9 +348,7 @@ router.post('/generate/:code', protect, async (req, res) => {
           ...(filters.status ? [filters.status] : [])
         ];
 
-        console.log('Executing CUTTING_PERFORMANCE query:', query, 'with params:', params);
         const rows = await executeQuery(query, params);
-        console.log('CUTTING_PERFORMANCE results:', rows);
 
         results = rows.map(row => ({
           contractorName: row.contractorName,
@@ -394,9 +386,7 @@ router.post('/generate/:code', protect, async (req, res) => {
             ...(endDate ? [endDate.toISOString().split('T')[0]] : [])
         ];
 
-        console.log('Executing MANUFACTURING_PURCHASING query:', query, 'with params:', params);
         const rows = await executeQuery(query, params);
-        console.log('MANUFACTURING_PURCHASING results:', rows);
 
         results = rows.map(row => ({
             date: row.date,
@@ -1053,8 +1043,6 @@ router.post('/preview/:code', protect, async (req, res) => {
     const { code } = req.params;
     const { filters = {}, language = 'en' } = req.body;
 
-    console.log('Preview request:', { code, filters, language });
-
     // Get currency settings using direct query
     const [settingsRows] = await pool.execute('SELECT * FROM settings LIMIT 1');
     const settings = settingsRows[0];
@@ -1064,7 +1052,7 @@ router.post('/preview/:code', protect, async (req, res) => {
     }
     const currency = {
       code: settings.default_currency,
-      symbol: settings.currency_symbol || '$'  // Fallback to $ if not set
+      symbol: settings.currency_symbol || 'Rs.'
     };
 
     // Find the report template
@@ -1104,9 +1092,7 @@ router.post('/preview/:code', protect, async (req, res) => {
           ...(endDate ? [endDate.toISOString().split('T')[0]] : [])
         ];
 
-        console.log('Executing SALES_SUMMARY query:', query, 'with params:', params);
         const rows = await executeQuery(query, params);
-        console.log('SALES_SUMMARY results:', rows);
 
         results = rows.map(row => ({
           date: row.date,
@@ -1147,9 +1133,7 @@ router.post('/preview/:code', protect, async (req, res) => {
           ...(filters.status ? [filters.status] : [])
         ];
 
-        console.log('Executing EMPLOYEE_SUMMARY query:', query, 'with params:', params);
         const rows = await executeQuery(query, params);
-        console.log('EMPLOYEE_SUMMARY results:', rows);
 
         results = rows.map(row => ({
           name: row.name,
@@ -1193,9 +1177,7 @@ router.post('/preview/:code', protect, async (req, res) => {
           ...(filters.priority ? [filters.priority] : [])
         ];
 
-        console.log('Executing TASK_SUMMARY query:', query, 'with params:', params);
         const rows = await executeQuery(query, params);
-        console.log('TASK_SUMMARY results:', rows);
 
         results = rows.map(row => ({
           taskId: row.taskId,
@@ -1241,9 +1223,7 @@ router.post('/preview/:code', protect, async (req, res) => {
           ...(filters.status ? [filters.status] : [])
         ];
 
-        console.log('Executing CUTTING_PERFORMANCE query:', query, 'with params:', params);
         const rows = await executeQuery(query, params);
-        console.log('CUTTING_PERFORMANCE results:', rows);
 
         results = rows.map(row => ({
           contractorName: row.contractorName,
@@ -1281,9 +1261,7 @@ router.post('/preview/:code', protect, async (req, res) => {
             ...(endDate ? [endDate.toISOString().split('T')[0]] : [])
         ];
 
-        console.log('Executing MANUFACTURING_PURCHASING query:', query, 'with params:', params);
         const rows = await executeQuery(query, params);
-        console.log('MANUFACTURING_PURCHASING results:', rows);
 
         results = rows.map(row => ({
             date: row.date,
@@ -1313,7 +1291,6 @@ router.post('/preview/:code', protect, async (req, res) => {
       }
     };
 
-    console.log('Sending response:', response);
     return res.json(response);
 
   } catch (error) {

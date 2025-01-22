@@ -62,6 +62,22 @@ const getAccountingSummary = async () => {
   return response.data
 }
 
+// Add this new method
+const getCashbook = async (startDate, endDate) => {
+  const response = await axios.get(
+    `${API_URL}cashbook?startDate=${startDate}&endDate=${endDate}`
+  );
+  return response.data;
+};
+
+// Update these methods to use the new report endpoints
+const getReport = async (type, startDate, endDate) => {
+  const response = await axios.get(
+    `${API_URL}reports/${type}?startDate=${startDate}&endDate=${endDate}`
+  );
+  return response.data;
+};
+
 const accountingService = {
   getTransactions,
   createTransaction,
@@ -71,7 +87,9 @@ const accountingService = {
   getBalanceSheet,
   getIncomeStatement,
   getCashFlow,
-  getAccountingSummary
+  getAccountingSummary,
+  getCashbook,
+  getReport
 }
 
 export default accountingService

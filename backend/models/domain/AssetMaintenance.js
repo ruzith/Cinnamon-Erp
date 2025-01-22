@@ -52,17 +52,17 @@ class AssetMaintenance extends BaseModel {
     try {
       await connection.beginTransaction();
 
-      // Transform the data to match database fields
+      // Transform and sanitize the data
       const dbMaintenanceData = {
-        asset_id: maintenanceData.assetId,
-        type: maintenanceData.type,
-        description: maintenanceData.description,
-        maintenance_date: maintenanceData.date,
-        cost: maintenanceData.cost,
-        performed_by: maintenanceData.performedBy,
-        next_maintenance_date: maintenanceData.nextMaintenanceDate,
+        asset_id: maintenanceData.asset_id,
+        type: maintenanceData.type || 'routine',
+        description: maintenanceData.description || '',
+        maintenance_date: maintenanceData.maintenance_date || new Date().toISOString().split('T')[0],
+        cost: parseFloat(maintenanceData.cost) || 0,
+        performed_by: maintenanceData.performed_by || '',
+        next_maintenance_date: maintenanceData.next_maintenance_date || null,
         status: maintenanceData.status || 'pending',
-        notes: maintenanceData.notes,
+        notes: maintenanceData.notes || '',
         created_by: maintenanceData.created_by
       };
 
@@ -96,19 +96,13 @@ class AssetMaintenance extends BaseModel {
       const maintenanceId = result.insertId;
 
       // Create attachments if any
-      for (const attachment of attachments) {
-        await connection.execute(
-          'INSERT INTO asset_attachments (maintenance_id, file_path, file_name, file_type) VALUES (?, ?, ?, ?)',
-          [maintenanceId, attachment.file_path, attachment.file_name, attachment.file_type]
-        );
-      }
-
-      // Update asset status if maintenance type is repair
-      if (maintenanceData.type === 'repair') {
-        await connection.execute(
-          'UPDATE assets SET status = "maintenance" WHERE id = ?',
-          [maintenanceData.assetId]
-        );
+      if (attachments.length > 0) {
+        for (const attachment of attachments) {
+          await connection.execute(
+            'INSERT INTO asset_attachments (maintenance_id, name, url) VALUES (?, ?, ?)',
+            [maintenanceId, attachment.name, attachment.url]
+          );
+        }
       }
 
       await connection.commit();

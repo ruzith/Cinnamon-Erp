@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Typography,
@@ -29,7 +29,7 @@ import {
   List,
   ListItem,
   ListItemText,
-} from '@mui/material';
+} from "@mui/material";
 import {
   Add as AddIcon,
   Edit as EditIcon,
@@ -44,9 +44,10 @@ import {
   Timeline as TimelineIcon,
   Schedule,
   Clear as ClearIcon,
-} from '@mui/icons-material';
-import axios from 'axios';
-import SummaryCard from '../components/common/SummaryCard';
+} from "@mui/icons-material";
+import axios from "axios";
+import SummaryCard from "../components/common/SummaryCard";
+import { useSnackbar } from "notistack";
 
 const TaskManagement = () => {
   const [tasks, setTasks] = useState([]);
@@ -58,38 +59,39 @@ const TaskManagement = () => {
   const [categoryDialog, setCategoryDialog] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [categoryFormData, setCategoryFormData] = useState({
-    name: '',
-    description: ''
+    name: "",
+    description: "",
   });
   const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    assigned_to: '',
-    priority: 'medium',
-    status: 'pending',
-    due_date: '',
-    category_id: '',
-    estimated_hours: '',
-    notes: ''
+    title: "",
+    description: "",
+    assigned_to: "",
+    priority: "medium",
+    status: "pending",
+    due_date: "",
+    category_id: "",
+    estimated_hours: "",
+    notes: "",
   });
   const [activeTab, setActiveTab] = useState(0);
-  const [selectedEmployee, setSelectedEmployee] = useState('');
+  const [selectedEmployee, setSelectedEmployee] = useState("");
   const [taskReportDialog, setTaskReportDialog] = useState(false);
   const [selectedTaskReport, setSelectedTaskReport] = useState(null);
   const [taskReport, setTaskReport] = useState(null);
   const [taskReports, setTaskReports] = useState([]);
   const [filters, setFilters] = useState({
-    employee: '',
+    employee: "",
     startDate: null,
     endDate: null,
-    category: ''
+    category: "",
   });
   const [reassignDialog, setReassignDialog] = useState(false);
   const [reassignmentData, setReassignmentData] = useState({
     oldCategoryId: null,
-    newCategoryId: '',
-    affectedTasks: []
+    newCategoryId: "",
+    affectedTasks: [],
   });
+  const { enqueueSnackbar } = useSnackbar();
 
   useEffect(() => {
     fetchTasks();
@@ -100,53 +102,53 @@ const TaskManagement = () => {
 
   const fetchCategories = async () => {
     try {
-      const response = await axios.get('/api/task-categories');
+      const response = await axios.get("/api/task-categories");
       setCategories(response.data);
     } catch (error) {
-      console.error('Error fetching categories:', error);
+      console.error("Error fetching categories:", error);
     }
   };
 
   const fetchTasks = async () => {
     try {
-      const response = await axios.get('/api/tasks');
+      const response = await axios.get("/api/tasks");
       setTasks(response.data);
     } catch (error) {
-      console.error('Error fetching tasks:', error);
+      console.error("Error fetching tasks:", error);
     }
   };
 
   const fetchEmployees = async () => {
     try {
-      const response = await axios.get('/api/employees');
+      const response = await axios.get("/api/employees");
       setEmployees(response.data);
     } catch (error) {
-      console.error('Error fetching employees:', error);
+      console.error("Error fetching employees:", error);
     }
   };
 
   const fetchTaskReports = async () => {
     try {
-      let url = '/api/tasks/reports?';
+      let url = "/api/tasks/reports?";
       const params = new URLSearchParams();
 
       if (filters.employee) {
-        params.append('employee', filters.employee);
+        params.append("employee", filters.employee);
       }
       if (filters.startDate) {
-        params.append('startDate', filters.startDate);
+        params.append("startDate", filters.startDate);
       }
       if (filters.endDate) {
-        params.append('endDate', filters.endDate);
+        params.append("endDate", filters.endDate);
       }
       if (filters.category) {
-        params.append('category', filters.category);
+        params.append("category", filters.category);
       }
 
       const response = await axios.get(`${url}${params.toString()}`);
       setTaskReports(response.data);
     } catch (error) {
-      console.error('Error fetching task reports:', error);
+      console.error("Error fetching task reports:", error);
     }
   };
 
@@ -157,9 +159,9 @@ const TaskManagement = () => {
   }, [filters, activeTab]);
 
   const handleFilterChange = (field, value) => {
-    setFilters(prev => ({
+    setFilters((prev) => ({
       ...prev,
-      [field]: value
+      [field]: value,
     }));
   };
 
@@ -169,26 +171,26 @@ const TaskManagement = () => {
       setFormData({
         title: task.title,
         description: task.description,
-        assigned_to: task.assigned_to || '',
+        assigned_to: task.assigned_to || "",
         priority: task.priority,
         status: task.status,
-        due_date: task.due_date?.split('T')[0] || '',
-        category_id: task.category_id || '',
+        due_date: task.due_date?.split("T")[0] || "",
+        category_id: task.category_id || "",
         estimated_hours: task.estimated_hours,
-        notes: task.notes
+        notes: task.notes,
       });
     } else {
       setSelectedTask(null);
       setFormData({
-        title: '',
-        description: '',
-        assigned_to: '',
-        priority: 'medium',
-        status: 'pending',
-        due_date: '',
-        category_id: '',
-        estimated_hours: '',
-        notes: ''
+        title: "",
+        description: "",
+        assigned_to: "",
+        priority: "medium",
+        status: "pending",
+        due_date: "",
+        category_id: "",
+        estimated_hours: "",
+        notes: "",
       });
     }
     setOpenDialog(true);
@@ -209,52 +211,39 @@ const TaskManagement = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      // Convert estimated_hours to number if it exists
-      const processedFormData = {
-        ...formData,
-        estimated_hours: formData.estimated_hours ? Number(formData.estimated_hours) : null,
-        // Ensure empty strings are sent as null
-        category_id: formData.category_id || null,
-        notes: formData.notes || null,
-        assigned_to: formData.assigned_to || null
-      };
-
       if (selectedTask) {
-        await axios.put(`/api/tasks/${selectedTask.id}`, processedFormData);
+        await axios.put(`/api/tasks/${selectedTask.id}`, formData);
+        enqueueSnackbar("Task updated successfully", { variant: "success" });
       } else {
-        await axios.post('/api/tasks', processedFormData);
+        await axios.post("/api/tasks", formData);
+        enqueueSnackbar("Task created successfully", { variant: "success" });
       }
-
-      // Fetch both tasks and categories to update the UI
-      await Promise.all([
-        fetchTasks(),
-        fetchCategories()
-      ]);
-
       handleCloseDialog();
+      fetchTasks();
     } catch (error) {
-      console.error('Error saving task:', error);
+      console.error("Error saving task:", error);
+      enqueueSnackbar("Error saving task", { variant: "error" });
     }
   };
 
   const handleDeleteTask = async (taskId) => {
-    if (window.confirm('Are you sure you want to delete this task?')) {
+    if (window.confirm("Are you sure you want to delete this task?")) {
       try {
         await axios.delete(`/api/tasks/${taskId}`);
         fetchTasks();
       } catch (error) {
-        console.error('Error deleting task:', error);
+        console.error("Error deleting task:", error);
       }
     }
   };
 
   const handleCancelTask = async (taskId) => {
-    if (window.confirm('Are you sure you want to cancel this task?')) {
+    if (window.confirm("Are you sure you want to cancel this task?")) {
       try {
-        await axios.put(`/api/tasks/${taskId}`, { status: 'cancelled' });
+        await axios.put(`/api/tasks/${taskId}`, { status: "cancelled" });
         fetchTasks();
       } catch (error) {
-        console.error('Error cancelling task:', error);
+        console.error("Error cancelling task:", error);
       }
     }
   };
@@ -262,50 +251,58 @@ const TaskManagement = () => {
   // Calculate summary statistics
   const summaryStats = {
     totalTasks: tasks.length,
-    completedTasks: tasks.filter(task => task.status === 'completed').length,
-    pendingTasks: tasks.filter(task => task.status === 'pending').length,
-    inProgressTasks: tasks.filter(task => task.status === 'in_progress').length
+    completedTasks: tasks.filter((task) => task.status === "completed").length,
+    pendingTasks: tasks.filter((task) => task.status === "pending").length,
+    inProgressTasks: tasks.filter((task) => task.status === "in_progress")
+      .length,
   };
 
   const getStatusColor = (status) => {
     switch (status.toLowerCase()) {
-      case 'completed':
-        return 'success';
-      case 'in_progress':
-        return 'info';
-      case 'pending':
-        return 'warning';
-      case 'cancelled':
-        return 'error';
+      case "completed":
+        return "success";
+      case "in_progress":
+        return "info";
+      case "pending":
+        return "warning";
+      case "cancelled":
+        return "error";
       default:
-        return 'default';
+        return "default";
     }
   };
 
   const getPriorityColor = (priority) => {
-    if (!priority) return 'default';
+    if (!priority) return "default";
 
     switch (priority.toLowerCase()) {
-      case 'high':
-        return 'error';
-      case 'medium':
-        return 'warning';
-      case 'low':
-        return 'success';
+      case "high":
+        return "error";
+      case "medium":
+        return "warning";
+      case "low":
+        return "success";
       default:
-        return 'default';
+        return "default";
     }
   };
 
   const getCategoryColor = (categoryName) => {
-    if (!categoryName) return 'default';
+    if (!categoryName) return "default";
 
     // Find the category object by name to get its ID
-    const category = categories.find(c => c.name === categoryName);
-    if (!category) return 'default';
+    const category = categories.find((c) => c.name === categoryName);
+    if (!category) return "default";
 
     // List of available MUI colors
-    const colors = ['primary', 'secondary', 'success', 'warning', 'error', 'info'];
+    const colors = [
+      "primary",
+      "secondary",
+      "success",
+      "warning",
+      "error",
+      "info",
+    ];
 
     // Use the category ID to consistently assign a color
     return colors[category.id % colors.length];
@@ -316,13 +313,13 @@ const TaskManagement = () => {
       setSelectedCategory(category);
       setCategoryFormData({
         name: category.name,
-        description: category.description || ''
+        description: category.description || "",
       });
     } else {
       setSelectedCategory(null);
       setCategoryFormData({
-        name: '',
-        description: ''
+        name: "",
+        description: "",
       });
     }
     setCategoryDialog(true);
@@ -336,7 +333,7 @@ const TaskManagement = () => {
   const handleCategoryInputChange = (e) => {
     setCategoryFormData({
       ...categoryFormData,
-      [e.target.name]: e.target.value
+      [e.target.name]: e.target.value,
     });
   };
 
@@ -344,19 +341,22 @@ const TaskManagement = () => {
     e.preventDefault();
     try {
       if (selectedCategory) {
-        await axios.put(`/api/task-categories/${selectedCategory.id}`, categoryFormData);
+        await axios.put(
+          `/api/task-categories/${selectedCategory.id}`,
+          categoryFormData
+        );
       } else {
-        await axios.post('/api/task-categories', categoryFormData);
+        await axios.post("/api/task-categories", categoryFormData);
       }
       await fetchCategories();
       handleCloseCategoryDialog();
     } catch (error) {
-      console.error('Error saving task category:', error);
+      console.error("Error saving task category:", error);
     }
   };
 
   const handleDeleteCategory = async (categoryId) => {
-    if (window.confirm('Are you sure you want to delete this category?')) {
+    if (window.confirm("Are you sure you want to delete this category?")) {
       try {
         await axios.delete(`/api/task-categories/${categoryId}`);
         await fetchCategories();
@@ -365,18 +365,20 @@ const TaskManagement = () => {
           // Get tasks using this category
           const tasksResponse = await axios.get(`/api/tasks`, {
             params: {
-              category_id: categoryId
-            }
+              category_id: categoryId,
+            },
           });
           setReassignmentData({
             oldCategoryId: categoryId,
-            newCategoryId: '',
-            affectedTasks: tasksResponse.data.filter(task => task.category_id === categoryId)
+            newCategoryId: "",
+            affectedTasks: tasksResponse.data.filter(
+              (task) => task.category_id === categoryId
+            ),
           });
           setReassignDialog(true);
         } else {
-          console.error('Error deleting category:', error);
-          alert('Failed to delete category');
+          console.error("Error deleting category:", error);
+          alert("Failed to delete category");
         }
       }
     }
@@ -386,8 +388,8 @@ const TaskManagement = () => {
     setReassignDialog(false);
     setReassignmentData({
       oldCategoryId: null,
-      newCategoryId: '',
-      affectedTasks: []
+      newCategoryId: "",
+      affectedTasks: [],
     });
   };
 
@@ -398,17 +400,20 @@ const TaskManagement = () => {
 
     try {
       // Single API call to reassign tasks and delete category
-      await axios.post(`/api/task-categories/${reassignmentData.oldCategoryId}/reassign`, {
-        newCategoryId: reassignmentData.newCategoryId
-      });
+      await axios.post(
+        `/api/task-categories/${reassignmentData.oldCategoryId}/reassign`,
+        {
+          newCategoryId: reassignmentData.newCategoryId,
+        }
+      );
 
       // Refresh the data
       await fetchCategories();
       await fetchTasks();
       handleReassignmentClose();
     } catch (error) {
-      console.error('Error in reassignment:', error);
-      alert('Failed to reassign tasks and delete category');
+      console.error("Error in reassignment:", error);
+      alert("Failed to reassign tasks and delete category");
     }
   };
 
@@ -418,25 +423,27 @@ const TaskManagement = () => {
 
   const handleOpenAssignDialog = (task) => {
     setSelectedTask(task);
-    setSelectedEmployee(task.assigned_to?.id || '');
+    setSelectedEmployee(task.assigned_to?.id || "");
     setAssignDialog(true);
   };
 
   const handleCloseAssignDialog = () => {
     setAssignDialog(false);
     setSelectedTask(null);
-    setSelectedEmployee('');
+    setSelectedEmployee("");
   };
 
   const handleAssignTask = async () => {
     try {
-      await axios.put(`/api/tasks/${selectedTask.id}`, {
-        assigned_to: selectedEmployee || null
+      await axios.put(`/api/tasks/${selectedTask.id}/assign`, {
+        employee_id: selectedEmployee,
       });
-      fetchTasks();
       handleCloseAssignDialog();
+      fetchTasks();
+      enqueueSnackbar("Task assigned successfully", { variant: "success" });
     } catch (error) {
-      console.error('Error assigning task:', error);
+      console.error("Error assigning task:", error);
+      enqueueSnackbar("Error assigning task", { variant: "error" });
     }
   };
 
@@ -448,7 +455,7 @@ const TaskManagement = () => {
       setTaskReport(response.data);
       setTaskReportDialog(true);
     } catch (error) {
-      console.error('Error fetching task report:', error);
+      console.error("Error fetching task report:", error);
     }
   };
 
@@ -459,9 +466,9 @@ const TaskManagement = () => {
   };
 
   const handleClearFilter = (fieldName) => {
-    setFilters(prev => ({
+    setFilters((prev) => ({
       ...prev,
-      [fieldName]: fieldName.includes('date') ? null : ''
+      [fieldName]: fieldName.includes("date") ? null : "",
     }));
   };
 
@@ -472,9 +479,7 @@ const TaskManagement = () => {
       maxWidth="md"
       fullWidth
     >
-      <DialogTitle>
-        Task Report - {selectedTaskReport?.title}
-      </DialogTitle>
+      <DialogTitle>Task Report - {selectedTaskReport?.title}</DialogTitle>
       <DialogContent>
         {taskReport && (
           <Box>
@@ -510,27 +515,39 @@ const TaskManagement = () => {
             </Grid>
 
             {/* Task Details */}
-            <Typography variant="h6" sx={{ mb: 2 }}>Task Details</Typography>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              Task Details
+            </Typography>
             <Grid container spacing={2} sx={{ mb: 3 }}>
               <Grid item xs={12} md={6}>
                 <Paper sx={{ p: 2 }}>
                   <Box sx={{ mb: 2 }}>
-                    <Typography variant="subtitle2" color="text.secondary">Description</Typography>
-                    <Typography>{taskReport.description || 'No description'}</Typography>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Description
+                    </Typography>
+                    <Typography>
+                      {taskReport.description || "No description"}
+                    </Typography>
                   </Box>
                   <Box sx={{ mb: 2 }}>
-                    <Typography variant="subtitle2" color="text.secondary">Category</Typography>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Category
+                    </Typography>
                     <Chip
-                      label={taskReport.category_name || 'No Category'}
+                      label={taskReport.category_name || "No Category"}
                       size="small"
                       color={getCategoryColor(taskReport.category_name)}
                       sx={{ mt: 0.5 }}
                     />
                   </Box>
                   <Box>
-                    <Typography variant="subtitle2" color="text.secondary">Due Date</Typography>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Due Date
+                    </Typography>
                     <Typography>
-                      {taskReport.due_date ? new Date(taskReport.due_date).toLocaleDateString() : 'Not set'}
+                      {taskReport.due_date
+                        ? new Date(taskReport.due_date).toLocaleDateString()
+                        : "Not set"}
                     </Typography>
                   </Box>
                 </Paper>
@@ -538,25 +555,35 @@ const TaskManagement = () => {
               <Grid item xs={12} md={6}>
                 <Paper sx={{ p: 2 }}>
                   <Box sx={{ mb: 2 }}>
-                    <Typography variant="subtitle2" color="text.secondary">Notes</Typography>
-                    <Typography>{taskReport.notes || 'No notes'}</Typography>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Notes
+                    </Typography>
+                    <Typography>{taskReport.notes || "No notes"}</Typography>
                   </Box>
                   <Box sx={{ mb: 2 }}>
-                    <Typography variant="subtitle2" color="text.secondary">Assigned To</Typography>
-                    <Typography>{taskReport.assigned_to_name || 'Unassigned'}</Typography>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Assigned To
+                    </Typography>
+                    <Typography>
+                      {taskReport.assigned_to_name || "Unassigned"}
+                    </Typography>
                   </Box>
-                  <Box sx={{ display: 'flex', gap: 2 }}>
+                  <Box sx={{ display: "flex", gap: 2 }}>
                     <Box>
-                      <Typography variant="subtitle2" color="text.secondary">Priority</Typography>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Priority
+                      </Typography>
                       <Chip
-                        label={taskReport.priority || 'Not Set'}
+                        label={taskReport.priority || "Not Set"}
                         color={getPriorityColor(taskReport.priority)}
                         size="small"
                         sx={{ mt: 0.5 }}
                       />
                     </Box>
                     <Box>
-                      <Typography variant="subtitle2" color="text.secondary">Status</Typography>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Status
+                      </Typography>
                       <Chip
                         label={taskReport.status}
                         color={getStatusColor(taskReport.status)}
@@ -570,7 +597,9 @@ const TaskManagement = () => {
             </Grid>
 
             {/* Task History */}
-            <Typography variant="h6" sx={{ mb: 2 }}>History & Updates</Typography>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              History & Updates
+            </Typography>
             <TableContainer component={Paper}>
               <Table>
                 <TableHead>
@@ -584,7 +613,9 @@ const TaskManagement = () => {
                 <TableBody>
                   {taskReport.history?.map((entry, index) => (
                     <TableRow key={index}>
-                      <TableCell>{new Date(entry.created_at).toLocaleDateString()}</TableCell>
+                      <TableCell>
+                        {new Date(entry.created_at).toLocaleDateString()}
+                      </TableCell>
                       <TableCell>
                         <Chip
                           label={entry.status}
@@ -619,21 +650,24 @@ const TaskManagement = () => {
       <DialogContent>
         <Box sx={{ mt: 2 }}>
           <Alert severity="info" sx={{ mb: 2 }}>
-            This category has tasks assigned to it. Please select a new category for these tasks before deleting.
+            This category has tasks assigned to it. Please select a new category
+            for these tasks before deleting.
           </Alert>
 
           <FormControl fullWidth sx={{ mb: 2 }}>
             <InputLabel>New Category</InputLabel>
             <Select
               value={reassignmentData.newCategoryId}
-              onChange={(e) => setReassignmentData(prev => ({
-                ...prev,
-                newCategoryId: e.target.value
-              }))}
+              onChange={(e) =>
+                setReassignmentData((prev) => ({
+                  ...prev,
+                  newCategoryId: e.target.value,
+                }))
+              }
               label="New Category"
             >
               {categories
-                .filter(c => c.id !== reassignmentData.oldCategoryId)
+                .filter((c) => c.id !== reassignmentData.oldCategoryId)
                 .map((category) => (
                   <MenuItem key={category.id} value={category.id}>
                     {category.name}
@@ -673,11 +707,18 @@ const TaskManagement = () => {
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          mb: 4,
+        }}
+      >
         <Typography variant="h4" sx={{ fontWeight: 600 }}>
           Task Management
         </Typography>
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: "flex", gap: 2 }}>
           <Button
             variant="outlined"
             startIcon={<AddIcon />}
@@ -737,11 +778,11 @@ const TaskManagement = () => {
         </Grid>
       </Grid>
 
-      <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
+      <Paper elevation={0} sx={{ border: "1px solid", borderColor: "divider" }}>
         <Tabs
           value={activeTab}
           onChange={handleTabChange}
-          sx={{ borderBottom: 1, borderColor: 'divider', px: 2, pt: 2 }}
+          sx={{ borderBottom: 1, borderColor: "divider", px: 2, pt: 2 }}
         >
           <Tab label="Tasks" />
           <Tab label="Categories" />
@@ -754,7 +795,9 @@ const TaskManagement = () => {
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ width: '35%', maxWidth: '400px' }}>Title</TableCell>
+                  <TableCell sx={{ width: "35%", maxWidth: "400px" }}>
+                    Title
+                  </TableCell>
                   <TableCell>Category</TableCell>
                   <TableCell>Assigned To</TableCell>
                   <TableCell>Due Date</TableCell>
@@ -766,17 +809,19 @@ const TaskManagement = () => {
               <TableBody>
                 {tasks.map((task) => (
                   <TableRow key={task.id} hover>
-                    <TableCell sx={{
-                      width: '35%',
-                      maxWidth: '400px',
-                      '& .MuiTypography-root': {
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical'
-                      }
-                    }}>
+                    <TableCell
+                      sx={{
+                        width: "35%",
+                        maxWidth: "400px",
+                        "& .MuiTypography-root": {
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                        },
+                      }}
+                    >
                       <Typography variant="body2" sx={{ fontWeight: 500 }}>
                         {task.title}
                       </Typography>
@@ -790,19 +835,21 @@ const TaskManagement = () => {
                           label={task.category_name}
                           size="small"
                           color={getCategoryColor(task.category_name)}
-                          sx={{ textTransform: 'capitalize' }}
+                          sx={{ textTransform: "capitalize" }}
                         />
                       )}
                     </TableCell>
                     <TableCell>
-                      {task.assigned_to_name || 'Unassigned'}
+                      {task.assigned_to_name || "Unassigned"}
                     </TableCell>
                     <TableCell>
-                      {task.due_date ? new Date(task.due_date).toLocaleDateString() : '-'}
+                      {task.due_date
+                        ? new Date(task.due_date).toLocaleDateString()
+                        : "-"}
                     </TableCell>
                     <TableCell>
                       <Chip
-                        label={task.priority || 'Not Set'}
+                        label={task.priority || "Not Set"}
                         color={getPriorityColor(task.priority)}
                         size="small"
                       />
@@ -815,8 +862,15 @@ const TaskManagement = () => {
                       />
                     </TableCell>
                     <TableCell align="right">
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
-                        {task.status !== 'cancelled' && (
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "flex-end",
+                          gap: 1,
+                        }}
+                      >
+                        {task.status !== "cancelled" && (
                           <Button
                             size="small"
                             color="warning"
@@ -825,12 +879,12 @@ const TaskManagement = () => {
                             Cancel
                           </Button>
                         )}
-                        <Box sx={{ display: 'flex', gap: 0.5 }}>
-                          {task.status !== 'cancelled' && (
+                        <Box sx={{ display: "flex", gap: 0.5 }}>
+                          {task.status !== "cancelled" && (
                             <IconButton
                               size="small"
                               onClick={() => handleOpenAssignDialog(task)}
-                              sx={{ color: 'info.main' }}
+                              sx={{ color: "info.main" }}
                               title="Assign Task"
                             >
                               <AssignIcon />
@@ -839,14 +893,14 @@ const TaskManagement = () => {
                           <IconButton
                             size="small"
                             onClick={() => handleOpenDialog(task)}
-                            sx={{ color: 'primary.main' }}
+                            sx={{ color: "primary.main" }}
                           >
                             <EditIcon />
                           </IconButton>
                           <IconButton
                             size="small"
                             onClick={() => handleDeleteTask(task.id)}
-                            sx={{ color: 'error.main' }}
+                            sx={{ color: "error.main" }}
                           >
                             <DeleteIcon />
                           </IconButton>
@@ -876,20 +930,20 @@ const TaskManagement = () => {
                 {categories.map((category) => (
                   <TableRow key={category.id} hover>
                     <TableCell>{category.name}</TableCell>
-                    <TableCell>{category.description || '-'}</TableCell>
+                    <TableCell>{category.description || "-"}</TableCell>
                     <TableCell>{category.task_count || 0}</TableCell>
                     <TableCell align="right">
                       <IconButton
                         size="small"
                         onClick={() => handleOpenCategoryDialog(category)}
-                        sx={{ color: 'primary.main' }}
+                        sx={{ color: "primary.main" }}
                       >
                         <EditIcon />
                       </IconButton>
                       <IconButton
                         size="small"
                         onClick={() => handleDeleteCategory(category.id)}
-                        sx={{ color: 'error.main', ml: 1 }}
+                        sx={{ color: "error.main", ml: 1 }}
                       >
                         <DeleteIcon />
                       </IconButton>
@@ -913,13 +967,15 @@ const TaskManagement = () => {
                     <Select
                       value={filters.employee}
                       label="Employee"
-                      onChange={(e) => handleFilterChange('employee', e.target.value)}
+                      onChange={(e) =>
+                        handleFilterChange("employee", e.target.value)
+                      }
                       endAdornment={
                         filters.employee && (
                           <IconButton
                             size="small"
                             sx={{ mr: 2 }}
-                            onClick={() => handleClearFilter('employee')}
+                            onClick={() => handleClearFilter("employee")}
                           >
                             <ClearIcon fontSize="small" />
                           </IconButton>
@@ -943,13 +999,15 @@ const TaskManagement = () => {
                     <Select
                       value={filters.category}
                       label="Category"
-                      onChange={(e) => handleFilterChange('category', e.target.value)}
+                      onChange={(e) =>
+                        handleFilterChange("category", e.target.value)
+                      }
                       endAdornment={
                         filters.category && (
                           <IconButton
                             size="small"
                             sx={{ mr: 2 }}
-                            onClick={() => handleClearFilter('category')}
+                            onClick={() => handleClearFilter("category")}
                           >
                             <ClearIcon fontSize="small" />
                           </IconButton>
@@ -972,8 +1030,10 @@ const TaskManagement = () => {
                     fullWidth
                     label="Start Date"
                     type="date"
-                    value={filters.startDate || ''}
-                    onChange={(e) => handleFilterChange('startDate', e.target.value)}
+                    value={filters.startDate || ""}
+                    onChange={(e) =>
+                      handleFilterChange("startDate", e.target.value)
+                    }
                     InputLabelProps={{
                       shrink: true,
                     }}
@@ -981,11 +1041,11 @@ const TaskManagement = () => {
                       endAdornment: filters.startDate && (
                         <IconButton
                           size="small"
-                          onClick={() => handleClearFilter('startDate')}
+                          onClick={() => handleClearFilter("startDate")}
                         >
                           <ClearIcon fontSize="small" />
                         </IconButton>
-                      )
+                      ),
                     }}
                   />
                 </Grid>
@@ -994,8 +1054,10 @@ const TaskManagement = () => {
                     fullWidth
                     label="End Date"
                     type="date"
-                    value={filters.endDate || ''}
-                    onChange={(e) => handleFilterChange('endDate', e.target.value)}
+                    value={filters.endDate || ""}
+                    onChange={(e) =>
+                      handleFilterChange("endDate", e.target.value)
+                    }
                     InputLabelProps={{
                       shrink: true,
                     }}
@@ -1003,14 +1065,14 @@ const TaskManagement = () => {
                       endAdornment: filters.endDate && (
                         <IconButton
                           size="small"
-                          onClick={() => handleClearFilter('endDate')}
+                          onClick={() => handleClearFilter("endDate")}
                         >
                           <ClearIcon fontSize="small" />
                         </IconButton>
                       ),
                       inputProps: {
-                        min: filters.startDate || undefined
-                      }
+                        min: filters.startDate || undefined,
+                      },
                     }}
                   />
                 </Grid>
@@ -1024,12 +1086,12 @@ const TaskManagement = () => {
                   <Paper
                     sx={{
                       p: 2,
-                      height: '100%',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      cursor: 'pointer',
-                      '&:hover': {
-                        bgcolor: 'action.hover',
+                      height: "100%",
+                      display: "flex",
+                      flexDirection: "column",
+                      cursor: "pointer",
+                      "&:hover": {
+                        bgcolor: "action.hover",
                       },
                     }}
                     onClick={() => handleOpenTaskReport(task)}
@@ -1038,7 +1100,11 @@ const TaskManagement = () => {
                       <Typography variant="h6" gutterBottom>
                         {task.title}
                       </Typography>
-                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        gutterBottom
+                      >
                         {task.description}
                       </Typography>
                     </Box>
@@ -1062,7 +1128,7 @@ const TaskManagement = () => {
                         </Typography>
                         <Box sx={{ mt: 0.5 }}>
                           <Chip
-                            label={task.priority || 'Not Set'}
+                            label={task.priority || "Not Set"}
                             color={getPriorityColor(task.priority)}
                             size="small"
                           />
@@ -1075,11 +1141,11 @@ const TaskManagement = () => {
                         Assigned To
                       </Typography>
                       <Typography variant="body2">
-                        {task.assigned_to_name || 'Unassigned'}
+                        {task.assigned_to_name || "Unassigned"}
                       </Typography>
                     </Box>
 
-                    <Box sx={{ mt: 'auto', pt: 2 }}>
+                    <Box sx={{ mt: "auto", pt: 2 }}>
                       <Button
                         variant="outlined"
                         fullWidth
@@ -1108,7 +1174,7 @@ const TaskManagement = () => {
         fullWidth
       >
         <DialogTitle>
-          {selectedTask ? 'Edit Task' : 'Create New Task'}
+          {selectedTask ? "Edit Task" : "Create New Task"}
         </DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -1138,7 +1204,7 @@ const TaskManagement = () => {
                 <InputLabel>Assigned To</InputLabel>
                 <Select
                   name="assigned_to"
-                  value={formData.assigned_to}
+                  value={formData.assigned_to || ""}
                   label="Assigned To"
                   onChange={handleInputChange}
                 >
@@ -1162,7 +1228,6 @@ const TaskManagement = () => {
                 InputLabelProps={{ shrink: true }}
                 value={formData.due_date}
                 onChange={handleInputChange}
-                required
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -1203,7 +1268,7 @@ const TaskManagement = () => {
                 <InputLabel>Category</InputLabel>
                 <Select
                   name="category_id"
-                  value={formData.category_id}
+                  value={formData.category_id || ""}
                   label="Category"
                   onChange={handleInputChange}
                 >
@@ -1224,9 +1289,9 @@ const TaskManagement = () => {
                 label="Estimated Hours"
                 type="number"
                 fullWidth
-                value={formData.estimated_hours}
+                value={formData.estimated_hours || ""}
                 onChange={handleInputChange}
-                InputProps={{ inputProps: { min: 0 } }}
+                InputProps={{ inputProps: { min: 0, step: 0.5 } }}
               />
             </Grid>
             <Grid item xs={12}>
@@ -1244,12 +1309,8 @@ const TaskManagement = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog}>Cancel</Button>
-          <Button
-            variant="contained"
-            onClick={handleSubmit}
-            color="primary"
-          >
-            {selectedTask ? 'Update Task' : 'Create Task'}
+          <Button variant="contained" onClick={handleSubmit} color="primary">
+            {selectedTask ? "Update Task" : "Create Task"}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1261,15 +1322,11 @@ const TaskManagement = () => {
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle>
-          Assign Task
-        </DialogTitle>
+        <DialogTitle>Assign Task</DialogTitle>
         <DialogContent>
           <Box sx={{ mt: 2 }}>
             <FormControl fullWidth>
-              <InputLabel
-              required
-              >Assign To</InputLabel>
+              <InputLabel required>Assign To</InputLabel>
               <Select
                 value={selectedEmployee}
                 label="Assign To"
@@ -1307,7 +1364,7 @@ const TaskManagement = () => {
         fullWidth
       >
         <DialogTitle>
-          {selectedCategory ? 'Edit Category' : 'New Category'}
+          {selectedCategory ? "Edit Category" : "New Category"}
         </DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -1341,7 +1398,7 @@ const TaskManagement = () => {
             onClick={handleCategorySubmit}
             color="primary"
           >
-            {selectedCategory ? 'Update Category' : 'Create Category'}
+            {selectedCategory ? "Update Category" : "Create Category"}
           </Button>
         </DialogActions>
       </Dialog>

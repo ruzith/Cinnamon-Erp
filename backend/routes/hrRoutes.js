@@ -4,8 +4,13 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 const { pool } = require('../config/db');
 const SalaryAdvance = require('../models/domain/SalaryAdvance');
 const Payroll = require('../models/domain/Payroll');
-const hrController = require('../controllers/hrController');
+const {
+  approvePayroll,
+  getPayrollById,
+  generatePayrollPrint
+} = require('../controllers/hrController');
 const { deletePayroll } = require('../controllers/payrollController');
+const { generatePayrollSlip } = require('../utils/pdfTemplates');
 
 const salaryAdvanceModel = new SalaryAdvance();
 const payrollModel = new Payroll();
@@ -106,8 +111,6 @@ router.put('/payroll/:id/status', [protect, authorize('admin', 'hr')], async (re
   }
 });
 
-router.put('/payroll/:id/approve', [protect, authorize('admin', 'hr')], hrController.approvePayroll);
-
 router.get('/reports/payroll', [protect, authorize('admin', 'hr')], async (req, res) => {
   try {
     const filters = {
@@ -191,7 +194,7 @@ router.get('/reports/employee', [protect, authorize('admin', 'hr')], async (req,
           amount,
           request_date as date,
           approval_status,
-          CONCAT('Requested salary advance of $', amount) as description
+          CONCAT('Requested salary advance of ', amount) as description
         FROM salary_advances
         WHERE employee_id = ?
           AND (? IS NULL OR request_date >= ?)
@@ -207,7 +210,7 @@ router.get('/reports/employee', [protect, authorize('admin', 'hr')], async (req,
           net_salary as amount,
           created_at as date,
           'completed' as approval_status,
-          CONCAT('Received salary of $', net_salary, ' for ',
+          CONCAT('Received salary of ', net_salary, ' for ',
                  MONTHNAME(STR_TO_DATE(month, '%m')), ' ', year) as description
         FROM employee_payrolls
         WHERE employee_id = ?
@@ -242,5 +245,9 @@ router.get('/reports/employee', [protect, authorize('admin', 'hr')], async (req,
 });
 
 router.delete('/payroll/:id', deletePayroll);
+
+router.get('/payroll/:id', protect, getPayrollById);
+router.post('/payroll/print', protect, generatePayrollPrint);
+router.put('/payroll/:id/approve', [protect, authorize('admin', 'hr')], approvePayroll);
 
 module.exports = router;

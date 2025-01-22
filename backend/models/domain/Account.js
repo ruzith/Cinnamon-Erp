@@ -225,6 +225,89 @@ class Account extends BaseModel {
     `, [startDate, endDate]);
     return rows;
   }
+
+  // Get cash book
+  async getCashBook(startDate, endDate) {
+    const connection = await this.pool.getConnection();
+    try {
+      // Start with zero balance
+      const openingBalance = 0;
+
+      // Get all transactions including and before the start date
+      const [transactions] = await connection.execute(`
+        SELECT
+          t.date,
+          t.reference,
+          t.description,
+          CASE WHEN te.debit > 0 THEN te.debit ELSE 0 END as receipt,
+          CASE WHEN te.credit > 0 THEN te.credit ELSE 0 END as payment
+        FROM transactions t
+        JOIN transactions_entries te ON t.id = te.transaction_id
+        JOIN accounts a ON te.account_id = a.id
+        WHERE
+          a.code = '1001'
+          AND t.status = 'posted'
+          AND t.date <= ?
+        ORDER BY t.date, t.id
+      `, [endDate]);
+
+      // Calculate running balance for all transactions
+      let runningBalance = openingBalance;
+      const allTransactions = transactions.map(t => {
+        const receipt = Number(t.receipt);
+        const payment = Number(t.payment);
+        runningBalance = runningBalance + receipt - payment;
+
+        return {
+          ...t,
+          receipt,
+          payment,
+          balance: runningBalance
+        };
+      });
+
+      // Split transactions into before and during period
+      const beforePeriod = allTransactions.filter(t =>
+        new Date(t.date) < new Date(startDate)
+      );
+
+      const duringPeriod = allTransactions.filter(t =>
+        new Date(t.date) >= new Date(startDate) &&
+        new Date(t.date) <= new Date(endDate)
+      );
+
+      // Calculate opening balance from transactions before period
+      const actualOpeningBalance = beforePeriod.reduce((balance, t) =>
+        balance + t.receipt - t.payment,
+        openingBalance
+      );
+
+      // Recalculate running balances for period transactions
+      runningBalance = actualOpeningBalance;
+      const formattedTransactions = duringPeriod.map(t => ({
+        ...t,
+        balance: (runningBalance = runningBalance + t.receipt - t.payment)
+      }));
+
+      // Calculate totals
+      const totalReceipts = formattedTransactions.reduce((sum, t) => sum + t.receipt, 0);
+      const totalPayments = formattedTransactions.reduce((sum, t) => sum + t.payment, 0);
+      const closingBalance = actualOpeningBalance + totalReceipts - totalPayments;
+      return {
+        openingBalance: actualOpeningBalance,
+        entries: formattedTransactions,
+        totalReceipts,
+        totalPayments,
+        closingBalance
+      };
+
+    } catch (error) {
+      console.error('Error in getCashBook:', error);
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
 }
 
 module.exports = new Account();

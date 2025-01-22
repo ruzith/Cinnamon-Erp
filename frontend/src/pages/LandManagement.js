@@ -48,10 +48,12 @@ import {
   Clear as ClearIcon,
 } from '@mui/icons-material';
 import { getLands, deleteLand } from '../features/lands/landSlice';
+import { getLands as fetchLands } from '../features/lands/landSlice';
 import LandForm from '../components/lands/LandForm';
 import LandCategoryManager from '../components/lands/LandCategoryManager';
 import SummaryCard from '../components/common/SummaryCard';
 import axios from 'axios';
+import { useSnackbar } from 'notistack';
 
 const CategoryDialog = ({
   open,
@@ -250,6 +252,7 @@ const LandManagement = () => {
     contractorId: ''
   });
   const navigate = useNavigate();
+  const { enqueueSnackbar } = useSnackbar();
 
   useEffect(() => {
     if (!user) {
@@ -330,23 +333,14 @@ const LandManagement = () => {
   };
 
   const handleReassignmentSubmit = async () => {
-    if (!reassignmentData.newCategoryId) {
-      return;
-    }
-
     try {
-      // Single API call to reassign lands and delete category
-      await axios.post(`/api/land-categories/${reassignmentData.oldCategoryId}/reassign`, {
-        newCategoryId: reassignmentData.newCategoryId
-      });
-
-      // Refresh the data
-      await fetchCategories();
-      dispatch(getLands());
+      await axios.post('/api/lands/reassign', reassignmentData);
       handleReassignmentClose();
+      fetchLands();
+      enqueueSnackbar('Lands reassigned successfully', { variant: 'success' });
     } catch (error) {
-      console.error('Error in reassignment:', error);
-      alert('Failed to reassign lands and delete category');
+      console.error('Error reassigning lands:', error);
+      enqueueSnackbar('Error reassigning lands', { variant: 'error' });
     }
   };
 
@@ -430,12 +424,14 @@ const LandManagement = () => {
     dispatch(getLands());
   };
 
-  const handleDelete = async (landId) => {
+  const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this land?')) {
       try {
-        await dispatch(deleteLand(landId)).unwrap();
+        await dispatch(deleteLand(id)).unwrap();
+        enqueueSnackbar('Land deleted successfully', { variant: 'success' });
       } catch (error) {
         console.error('Error deleting land:', error);
+        enqueueSnackbar('Error deleting land', { variant: 'error' });
       }
     }
   };
@@ -510,19 +506,15 @@ const LandManagement = () => {
           </Box>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, alignItems: 'flex-end' }}>
             <Chip
-              label={selectedLandReport?.status.replace(/_/g, ' ').toUpperCase()}
+              label={selectedLandReport?.status.replace(/_/g, ' ')}
               color={getStatusColor(selectedLandReport?.status)}
               size="small"
+              sx={{ textTransform: 'capitalize' }}
             />
             <Chip
-              label={selectedLandReport?.category_name.toUpperCase()}
-              color={
-                selectedLandReport?.category_name === 'Agricultural' ? 'success' :
-                selectedLandReport?.category_name === 'Residential' ? 'primary' :
-                selectedLandReport?.category_name === 'Commercial' ? 'warning' :
-                selectedLandReport?.category_name === 'Forest' ? 'success' : 'default'
-              }
+              label={selectedLandReport?.category_name}
               size="small"
+              sx={{ textTransform: 'capitalize' }}
             />
           </Box>
         </Box>
@@ -617,6 +609,7 @@ const LandManagement = () => {
                           color="primary"
                           variant="outlined"
                           size="small"
+                          sx={{ textTransform: 'capitalize' }}
                         />
                       ))}
                     </Box>
@@ -640,10 +633,10 @@ const LandManagement = () => {
                       Status
                     </Typography>
                     <Chip
-                      label={selectedLandReport.ownership_status.toUpperCase()}
+                      label={selectedLandReport.ownership_status}
                       color={selectedLandReport.ownership_status === 'owned' ? 'success' : 'warning'}
                       size="small"
-                      sx={{ mt: 0.5 }}
+                      sx={{ mt: 0.5, textTransform: 'capitalize' }}
                     />
                   </Box>
                   {selectedLandReport.rent_details && (
@@ -713,6 +706,7 @@ const LandManagement = () => {
                                 label={`${entry.progress}%`}
                                 color={entry.progress >= 100 ? 'success' : 'warning'}
                                 size="small"
+                                sx={{ textTransform: 'capitalize' }}
                               />
                             </TableCell>
                           </TableRow>
@@ -851,12 +845,7 @@ const LandManagement = () => {
                     <TableCell>
                       <Chip
                         label={land.category_name}
-                        color={
-                          land.category_name === 'Agricultural' ? 'success' :
-                          land.category_name === 'Residential' ? 'primary' :
-                          land.category_name === 'Commercial' ? 'warning' :
-                          land.category_name === 'Forest' ? 'success' : 'default'
-                        }
+                        sx={{ textTransform: 'capitalize' }}
                         size="small"
                       />
                     </TableCell>
@@ -918,7 +907,7 @@ const LandManagement = () => {
                     <TableCell>{category.description}</TableCell>
                     <TableCell>
                       <Chip
-                        label={category.status.toUpperCase()}
+                        label={category.status}
                         color={category.status === 'active' ? 'success' : 'default'}
                         size="small"
                       />
@@ -1191,9 +1180,10 @@ const LandManagement = () => {
                         </Typography>
                         <Box sx={{ mt: 0.5 }}>
                           <Chip
-                            label={land.status.replace(/_/g, ' ').toUpperCase()}
+                            label={land.status.replace(/_/g, ' ')}
                             color={getStatusColor(land.status)}
                             size="small"
+                            sx={{ textTransform: 'capitalize' }}
                           />
                         </Box>
                       </Grid>
@@ -1203,7 +1193,7 @@ const LandManagement = () => {
                         </Typography>
                         <Box sx={{ mt: 0.5 }}>
                           <Chip
-                            label={land.category_name.toUpperCase()}
+                            label={land.category_name}
                             color={
                               land.category_name === 'Agricultural' ? 'success' :
                               land.category_name === 'Residential' ? 'primary' :
@@ -1211,6 +1201,7 @@ const LandManagement = () => {
                               land.category_name === 'Forest' ? 'success' : 'default'
                             }
                             size="small"
+                            sx={{ textTransform: 'capitalize' }}
                           />
                         </Box>
                       </Grid>

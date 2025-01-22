@@ -8,6 +8,7 @@ const PDFDocument = require('pdfkit');
 const Customer = require('../models/domain/Customer');
 const pool = require('../config/database');
 const db = require('../config/database');
+const { generateSalesInvoice } = require('../utils/pdfTemplates');
 
 // Get all sales invoices
 router.get('/', protect, async (req, res) => {
@@ -123,13 +124,13 @@ router.get('/:id/print', protect, async (req, res) => {
       );
 
       if (!saleResult.length) {
-      return res.status(404).json({ message: 'Sale not found' });
-    }
+        return res.status(404).json({ message: 'Sale not found' });
+      }
 
       const sale = saleResult[0];
 
       // Get sale items
-      const [itemsResult] = await connection.execute(
+      const [items] = await connection.execute(
         `SELECT si.*, p.product_name, p.unit
          FROM sales_items si
          LEFT JOIN inventory p ON si.product_id = p.id
@@ -137,282 +138,18 @@ router.get('/:id/print', protect, async (req, res) => {
         [req.params.id]
       );
 
-      sale.items = itemsResult;
-
-      // Get company settings
-      const [settingsResult] = await connection.execute(
-        'SELECT * FROM settings WHERE id = 1'
-      );
+      // Get company settings and currency
+      const [settingsResult] = await connection.execute(`
+        SELECT s.*, c.symbol as currency_symbol
+        FROM settings s
+        JOIN currencies c ON s.default_currency = c.id
+        WHERE c.status = 'active'
+        LIMIT 1
+      `);
       const settings = settingsResult[0] || {};
 
-      // Format dates and numbers
-      const formattedDate = new Date(sale.date).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      });
-
-      // Generate invoice HTML
-      const invoiceHtml = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="UTF-8">
-          <title>Sales Invoice - ${sale.invoice_number}</title>
-          <style>
-            @media print {
-              @page {
-                size: A4;
-                margin: 15mm;
-              }
-            }
-            body {
-              font-family: Arial, sans-serif;
-              padding: 15px;
-              max-width: 800px;
-              margin: 0 auto;
-              color: #333;
-              line-height: 1.5;
-              font-size: 13px;
-            }
-            .watermark {
-              position: fixed;
-              top: 50%;
-              left: 50%;
-              transform: translate(-50%, -50%) rotate(-45deg);
-              font-size: 90px;
-              opacity: 0.05;
-              z-index: -1;
-              color: #000;
-              white-space: nowrap;
-            }
-            .company-header {
-              text-align: center;
-              margin-bottom: 15px;
-              padding-bottom: 15px;
-              border-bottom: 2px solid #333;
-            }
-            .company-name {
-              font-size: 22px;
-              font-weight: bold;
-              margin: 0;
-              color: #1976d2;
-            }
-            .company-details {
-              font-size: 13px;
-              color: #666;
-              margin: 3px 0;
-            }
-            .document-title {
-              font-size: 18px;
-              font-weight: bold;
-              text-align: center;
-              margin: 15px 0;
-              color: #333;
-              text-transform: uppercase;
-            }
-            .slip-header {
-              display: flex;
-              justify-content: space-between;
-              margin-bottom: 15px;
-              padding: 12px;
-              background-color: #f5f5f5;
-              border-radius: 5px;
-            }
-            .customer-info, .invoice-info {
-              flex: 1;
-            }
-            .info-label {
-              font-weight: bold;
-              color: #666;
-              font-size: 11px;
-              text-transform: uppercase;
-            }
-            .info-value {
-              font-size: 13px;
-              margin-bottom: 6px;
-            }
-            .payment-details {
-              margin: 12px 0;
-              border: 1px solid #ddd;
-              border-radius: 5px;
-            }
-            .detail-row {
-              display: flex;
-              justify-content: space-between;
-              padding: 10px 15px;
-              border-bottom: 1px solid #eee;
-            }
-            .detail-row:last-child {
-              border-bottom: none;
-            }
-            .detail-label {
-              font-weight: bold;
-              color: #333;
-            }
-            .amount {
-              font-family: monospace;
-              font-size: 13px;
-            }
-            .items-table {
-              width: 100%;
-              border-collapse: collapse;
-              margin: 12px 0;
-              font-size: 12px;
-            }
-            .items-table th,
-            .items-table td {
-              padding: 8px 10px;
-              text-align: left;
-              border-bottom: 1px solid #eee;
-            }
-            .items-table th {
-              background-color: #f8f9fa;
-              font-weight: bold;
-              color: #666;
-              font-size: 11px;
-              text-transform: uppercase;
-            }
-            .items-table td.amount {
-              text-align: right;
-            }
-            .total-section {
-              margin-top: 12px;
-              padding: 12px 15px;
-              background-color: #1976d2;
-              color: white;
-              border-radius: 5px;
-            }
-            .footer {
-              margin-top: 25px;
-              padding-top: 12px;
-              border-top: 1px solid #ddd;
-              font-size: 11px;
-              color: #666;
-              text-align: center;
-            }
-            .company-registration {
-              font-size: 11px;
-              color: #666;
-              margin: 3px 0;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="watermark">SALES INVOICE</div>
-
-          <div class="company-header">
-            <h1 class="company-name">${settings.company_name || 'COMPANY NAME'}</h1>
-            <p class="company-details">${settings.company_address || ''}</p>
-            <p class="company-details">Phone: ${settings.company_phone || ''}</p>
-            <p class="company-registration">VAT No: ${settings.vat_number || ''} | Tax No: ${settings.tax_number || ''}</p>
-          </div>
-
-          <div class="document-title">Sales Invoice</div>
-
-          <div class="slip-header">
-            <div class="customer-info">
-              <div class="info-label">Invoice To</div>
-              <div class="info-value">${sale.customer_name}</div>
-              <div class="info-value">${sale.customer_address || ''}</div>
-              <div class="info-value">${sale.customer_phone || ''}</div>
-              <div class="info-value">${sale.customer_email || ''}</div>
-            </div>
-            <div class="invoice-info">
-              <div class="info-label">Invoice Number</div>
-              <div class="info-value">${sale.invoice_number}</div>
-              <div class="info-label">Date</div>
-              <div class="info-value">${formattedDate}</div>
-              <div class="info-label">Status</div>
-              <div class="info-value">${sale.status.toUpperCase()}</div>
-            </div>
-          </div>
-
-          <div class="payment-details">
-            <div class="detail-row">
-              <span class="detail-label">Payment Method</span>
-              <span class="amount">${sale.payment_method.toUpperCase()}</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">Payment Status</span>
-              <span class="amount">${sale.payment_status.toUpperCase()}</span>
-            </div>
-          </div>
-
-          <table class="items-table">
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th>Quantity</th>
-                <th>Unit</th>
-                <th>Unit Price</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${sale.items.map(item => `
-                <tr>
-                  <td>${item.product_name}</td>
-                  <td>${item.quantity}</td>
-                  <td>${item.unit || ''}</td>
-                  <td class="amount">Rs. ${Number(item.unit_price).toFixed(2)}</td>
-                  <td class="amount">Rs. ${Number(item.sub_total).toFixed(2)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-
-          <div style="display: flex; gap: 20px; margin-top: 20px;">
-            <div style="flex: 1;">
-              ${sale.notes ? `
-              <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; height: 100%;">
-                <div class="info-label">Notes</div>
-                <div style="font-size: 13px; margin-top: 5px;">${sale.notes}</div>
-              </div>
-              ` : ''}
-            </div>
-
-            <div style="flex: 1;">
-              <div class="payment-details">
-                <div class="detail-row">
-                  <span class="detail-label">Subtotal</span>
-                  <span class="amount">Rs. ${Number(sale.sub_total).toFixed(2)}</span>
-                </div>
-                ${Number(sale.discount) > 0 ? `
-                <div class="detail-row">
-                  <span class="detail-label">Discount</span>
-                  <span class="amount">-Rs. ${Number(sale.discount).toFixed(2)}</span>
-                </div>
-                ` : ''}
-                ${Number(sale.tax) > 0 ? `
-                <div class="detail-row">
-                  <span class="detail-label">Tax</span>
-                  <span class="amount">Rs. ${Number(sale.tax).toFixed(2)}</span>
-                </div>
-                ` : ''}
-              </div>
-
-              <div class="total-section detail-row">
-                <span class="detail-label">Total Amount</span>
-                <span class="amount">Rs. ${Number(sale.total).toFixed(2)}</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="footer">
-            <p>Generated on ${new Date().toLocaleString('en-US', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
-            })} IST</p>
-            <p>Thank you for your business!</p>
-            <p>For any queries, please contact us at ${settings.company_phone || ''}</p>
-          </div>
-        </body>
-        </html>
-      `;
+      // Generate invoice HTML using the template
+      const invoiceHtml = await generateSalesInvoice(sale, settings, items);
 
       res.json({ invoiceHtml });
     } finally {
@@ -681,7 +418,7 @@ router.delete('/:id', protect, async (req, res) => {
   }
 });
 
-// Add this new route handler with your other routes
+// Update the mark-paid route handler
 router.put('/:id/mark-paid', protect, async (req, res) => {
   const connection = await db.getConnection();
 
@@ -699,6 +436,12 @@ router.put('/:id/mark-paid', protect, async (req, res) => {
 
     if (!sale[0]) {
       throw new Error('Sale not found');
+    }
+
+    // Validate payment method
+    const validPaymentMethods = ['cash', 'card', 'bank', 'check'];
+    if (!validPaymentMethods.includes(sale[0].payment_method)) {
+      throw new Error('Invalid payment method');
     }
 
     // Get the relevant account IDs first

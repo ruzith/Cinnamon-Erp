@@ -15,4 +15,4 @@ router.put('/', protect, authorize('admin'), upload.single('logo'), updateSettin
 router.get('/:key', protect, getSetting);
 router.put('/:key', protect, authorize('admin'), updateSetting);
 
-module.exports = router; 
+module.exports = router;

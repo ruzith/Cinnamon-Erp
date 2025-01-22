@@ -49,6 +49,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { getCustomers, createCustomer, updateCustomer } from '../features/customers/customerSlice';
 import { useTheme } from '@mui/material/styles';
 import { useSnackbar } from 'notistack';
+import { updateInvoice as updateSale, createInvoice as createSale } from '../features/sales/salesSlice';
 
 const TabPanel = (props) => {
   const { children, value, index, ...other } = props;
@@ -369,10 +370,8 @@ const Sales = () => {
       let response;
       if (selectedSale) {
         response = await axios.put(`/api/sales/${selectedSale.id}`, formattedData);
-        console.log('Updated sale:', response.data);
       } else {
         response = await axios.post('/api/sales', formattedData);
-        console.log('Created sale:', response.data);
       }
 
       // Refresh sales list and close dialog
@@ -582,6 +581,23 @@ const Sales = () => {
     }
   };
 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      if (selectedSale) {
+        await dispatch(updateSale({ id: selectedSale.id, saleData: formData })).unwrap();
+        enqueueSnackbar('Sale updated successfully', { variant: 'success' });
+      } else {
+        await dispatch(createSale(formData)).unwrap();
+        enqueueSnackbar('Sale created successfully', { variant: 'success' });
+      }
+      handleCloseDialog();
+    } catch (error) {
+      console.error('Error saving sale:', error);
+      enqueueSnackbar('Error saving sale', { variant: 'error' });
+    }
+  };
+
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
       {/* Header */}
@@ -664,7 +680,7 @@ const Sales = () => {
                 <TableCell align="right">Total</TableCell>
                 <TableCell>Payment</TableCell>
                 <TableCell>Status</TableCell>
-                <TableCell>Actions</TableCell>
+                <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -697,43 +713,37 @@ const Sales = () => {
                     />
                   </TableCell>
                   <TableCell>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleViewDetails(sale)}
-                      sx={{ color: 'info.main' }}
-                    >
-                      <VisibilityIcon fontSize="small" />
-                    </IconButton>
                     {sale.payment_status !== 'paid' && (
                       <Button
-                        size="small"
                         color="success"
                         onClick={() => handleMarkAsPaid(sale.id)}
-                        sx={{ ml: 1 }}
                       >
                         Paid
                       </Button>
                     )}
                     <IconButton
-                      size="small"
-                      onClick={() => handlePrintInvoice(sale)}
-                      sx={{ color: 'success.main', ml: 1 }}
+                      onClick={() => handleViewDetails(sale)}
+                      sx={{ color: 'info.main', ml: sale.payment_status !== 'paid' ? 1 : 0 }}
                     >
-                      <PrintIcon fontSize="small" />
+                      <VisibilityIcon/>
                     </IconButton>
                     <IconButton
-                      size="small"
+                      onClick={() => handlePrintInvoice(sale)}
+                      sx={{ color: 'warning.main', ml: 1 }}
+                    >
+                      <PrintIcon/>
+                    </IconButton>
+                    <IconButton
                       onClick={() => handleEdit(sale)}
                       sx={{ color: 'primary.main', ml: 1 }}
                     >
-                      <EditIcon fontSize="small" />
+                      <EditIcon/>
                     </IconButton>
                     <IconButton
-                      size="small"
                       onClick={() => handleDelete(sale)}
                       sx={{ color: 'error.main', ml: 1 }}
                     >
-                      <DeleteIcon fontSize="small" />
+                      <DeleteIcon />
                     </IconButton>
                   </TableCell>
                 </TableRow>
@@ -977,8 +987,8 @@ const Sales = () => {
                           >
                             <MenuItem value="cash">Cash</MenuItem>
                             <MenuItem value="card">Card</MenuItem>
-                            <MenuItem value="bank-transfer">Bank Transfer</MenuItem>
-                            <MenuItem value="other">Other</MenuItem>
+                            <MenuItem value="bank">Bank Transfer</MenuItem>
+                            <MenuItem value="check">Check</MenuItem>
                           </Select>
                         </FormControl>
                       </Grid>

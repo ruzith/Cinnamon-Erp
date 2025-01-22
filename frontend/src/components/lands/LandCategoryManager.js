@@ -28,6 +28,7 @@ import {
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
+import { useSnackbar } from 'notistack';
 
 const LandCategoryManager = () => {
   const [categories, setCategories] = useState([]);
@@ -38,6 +39,7 @@ const LandCategoryManager = () => {
     description: '',
     status: 'active'
   });
+  const { enqueueSnackbar } = useSnackbar();
 
   useEffect(() => {
     fetchCategories();
@@ -94,13 +96,16 @@ const LandCategoryManager = () => {
     try {
       if (selectedCategory) {
         await axios.put(`/api/land-categories/${selectedCategory.id}`, formData);
+        enqueueSnackbar('Category updated successfully', { variant: 'success' });
       } else {
         await axios.post('/api/land-categories', formData);
+        enqueueSnackbar('Category created successfully', { variant: 'success' });
       }
       handleCloseDialog();
       fetchCategories();
     } catch (error) {
       console.error('Error saving category:', error);
+      enqueueSnackbar('Error saving category', { variant: 'error' });
     }
   };
 
@@ -109,11 +114,13 @@ const LandCategoryManager = () => {
       try {
         await axios.delete(`/api/land-categories/${id}`);
         fetchCategories();
+        enqueueSnackbar('Category deleted successfully', { variant: 'success' });
       } catch (error) {
         if (error.response?.status === 400) {
-          alert(error.response.data.message);
+          enqueueSnackbar(error.response.data.message, { variant: 'error' });
         } else {
           console.error('Error deleting category:', error);
+          enqueueSnackbar('Error deleting category', { variant: 'error' });
         }
       }
     }

@@ -27,15 +27,17 @@ import {
 } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { useDispatch } from 'react-redux';
-import { createInvoice } from '../features/purchases/purchaseSlice';
+import { createInvoice } from '../../features/purchases/purchaseSlice';
 import axios from 'axios';
-import { useCurrencyFormatter } from '../utils/currencyUtils';
+import { useCurrencyFormatter } from '../../utils/currencyUtils';
 import { useTheme } from '@mui/material/styles';
 import PropTypes from 'prop-types';
+import { useSnackbar } from 'notistack';
 
 const PurchaseInvoiceForm = ({ open, onClose, selectedContractor, onSuccess, contractors }) => {
   const dispatch = useDispatch();
   const { formatCurrency } = useCurrencyFormatter();
+  const { enqueueSnackbar } = useSnackbar();
   const [finishedGoods, setFinishedGoods] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [advancePayments, setAdvancePayments] = useState({
@@ -60,6 +62,7 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor, onSuccess, con
         setFinishedGoods(goodsRes.data);
       } catch (error) {
         console.error('Error fetching data:', error);
+        enqueueSnackbar('Error fetching inventory data', { variant: 'error' });
       }
       setIsLoading(false);
     };
@@ -76,6 +79,7 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor, onSuccess, con
           setSelectedAdvances(new Set(response.data.payments.map(p => p.id)));
         } catch (error) {
           console.error('Error fetching advance payments:', error);
+          enqueueSnackbar('Error fetching advance payments', { variant: 'error' });
         }
       }
     };
@@ -142,59 +146,59 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor, onSuccess, con
     };
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
     try {
+      // Validate required fields
       if (!formData.contractor) {
-        throw new Error('Please select a contractor');
+        enqueueSnackbar('Please select a contractor', { variant: 'error' });
+        return;
       }
 
-      const requestData = {
-        contractor: formData.contractor,
+      if (formData.items.length === 0) {
+        enqueueSnackbar('Please add at least one item', { variant: 'error' });
+        return;
+      }
+
+      // Validate each item
+      const invalidItems = formData.items.filter(item => !item.grade || !item.total_weight || !item.rate);
+      if (invalidItems.length > 0) {
+        enqueueSnackbar('Please fill in all required fields for each item', { variant: 'error' });
+        return;
+      }
+
+      const totals = calculateTotals();
+
+      const invoiceData = {
+        contractor_id: formData.contractor,
         items: formData.items.map(item => ({
           grade: item.grade,
-          total_weight: parseFloat(item.total_weight),
-          deduct_weight1: parseFloat(item.deduct_weight1),
-          deduct_weight2: parseFloat(item.deduct_weight2),
-          net_weight: parseFloat(item.net_weight),
-          rate: parseFloat(item.rate),
-          amount: parseFloat(item.amount)
+          total_weight: Number(item.total_weight),
+          deduct_weight1: Number(item.deduct_weight1 || 0),
+          deduct_weight2: Number(item.deduct_weight2 || 0),
+          net_weight: Number(item.net_weight),
+          rate: Number(item.rate),
+          amount: Number(item.amount)
         })),
-        status: formData.status,
-        notes: formData.notes,
-        selectedAdvanceIds: Array.from(selectedAdvances),
-        totalAmount: calculateTotals().totalAmount,
-        totalNetWeight: calculateTotals().totalNetWeight,
-        cuttingRate: formData.cuttingRate,
-        cuttingCharges: calculateTotals().cuttingCharges,
-        advancePayment: calculateTotalSelectedAdvances(),
-        finalAmount: calculateTotals().finalAmount
+        cutting_rate: Number(formData.cuttingRate),
+        status: formData.status || 'draft',
+        notes: formData.notes || '',
+        total_net_weight: Number(totals.totalNetWeight),
+        subtotal: Number(totals.totalAmount),
+        cutting_charges: Number(totals.cuttingCharges),
+        final_amount: Number(totals.finalAmount),
+        advance_payment_ids: Array.from(selectedAdvances)
       };
 
-      console.log('Sending purchase invoice data:', requestData);
+      const response = await axios.post('/api/manufacturing/purchase-invoices', invoiceData);
 
-      const response = await axios.post('/api/manufacturing/purchase-invoices', requestData);
-      console.log('Purchase invoice response:', response.data);
-
-      if (onSuccess) {
-        onSuccess();
+      if (response.data) {
+        enqueueSnackbar('Purchase invoice created successfully', { variant: 'success' });
+        onSuccess && onSuccess();
+        onClose();
       }
-
-      // Reset form state after successful submission
-      setFormData({
-        contractor: '',
-        items: [],
-        cuttingRate: 250,
-        status: 'draft',
-        notes: ''
-      });
-      setSelectedAdvances(new Set());
-
-      onClose();
     } catch (error) {
-      console.error('Error creating purchase invoice:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Error creating purchase invoice';
-      alert(`Failed to create purchase invoice: ${errorMessage}`);
+      console.error('Error creating invoice:', error);
+      enqueueSnackbar(error.response?.data?.message || 'Error creating invoice', { variant: 'error' });
     }
   };
 

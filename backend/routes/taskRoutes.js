@@ -117,4 +117,25 @@ router.get('/:id/report', protect, async (req, res) => {
   }
 });
 
+// Assign task to employee
+router.put('/:id/assign', protect, authorize('admin', 'manager'), async (req, res) => {
+  try {
+    const { employee_id } = req.body;
+
+    // Update task with new assignment - only update assigned_to field
+    const task = await Task.update(req.params.id, {
+      assigned_to: employee_id
+    });
+
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    res.json(task);
+  } catch (error) {
+    console.error('Error assigning task:', error);
+    res.status(400).json({ message: error.message });
+  }
+});
+
 module.exports = router;

@@ -15,6 +15,7 @@ import {
   OutlinedInput,
   Chip
 } from '@mui/material';
+import { useSnackbar } from 'notistack';
 
 const SALARY_TYPES = {
   DAILY: 'daily',
@@ -26,6 +27,7 @@ const EmployeeForm = ({ employee, setIsEditing, onClose, onSubmitSuccess }) => {
   const dispatch = useDispatch();
   const { designations } = useSelector((state) => state.designations);
   const { employeeGroups } = useSelector((state) => state.employeeGroups);
+  const { enqueueSnackbar } = useSnackbar();
 
   const [formData, setFormData] = useState({
     name: employee ? employee.name : '',
@@ -77,17 +79,18 @@ const EmployeeForm = ({ employee, setIsEditing, onClose, onSubmitSuccess }) => {
       if (employee) {
         await dispatch(updateEmployee({ id: employee.id, employeeData: formData })).unwrap();
         await dispatch(getEmployees()).unwrap();
+        enqueueSnackbar('Employee updated successfully', { variant: 'success' });
       } else {
         await dispatch(createEmployee(formData)).unwrap();
         await dispatch(getEmployees()).unwrap();
+        enqueueSnackbar('Employee created successfully', { variant: 'success' });
       }
 
-      // Call the success callback to trigger refetching in parent
       onSubmitSuccess && onSubmitSuccess();
-
       onClose && onClose();
     } catch (error) {
       console.error('Error saving employee:', error);
+      enqueueSnackbar('Error saving employee', { variant: 'error' });
     }
   };
 

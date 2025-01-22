@@ -38,6 +38,7 @@ import {
 import axios from 'axios';
 import { useCurrencyFormatter } from '../utils/currencyUtils';
 import SummaryCard from '../components/common/SummaryCard';
+import { useSnackbar } from 'notistack';
 
 const TabPanel = (props) => {
   const { children, value, index, ...other } = props;
@@ -98,6 +99,7 @@ const Inventory = () => {
   });
 
   const { formatCurrency } = useCurrencyFormatter();
+  const { enqueueSnackbar } = useSnackbar();
 
   useEffect(() => {
     fetchInventory();
@@ -119,7 +121,6 @@ const Inventory = () => {
   const fetchTransactions = async () => {
     try {
       const response = await axios.get('/api/inventory/transactions');
-      console.log('Fetched transactions:', response.data);
       setTransactions(response.data);
     } catch (error) {
       console.error('Error fetching transactions:', error);
@@ -147,7 +148,6 @@ const Inventory = () => {
   const fetchManufacturingPurchases = async () => {
     try {
       const response = await axios.get('/api/manufacturing/invoices');
-      console.log('Manufacturing Purchases Response:', response.data);
       const purchases = Array.isArray(response.data) ? response.data :
                        (response.data?.invoices || response.data?.data || []);
       setManufacturingPurchases(purchases);
@@ -208,7 +208,6 @@ const Inventory = () => {
   };
 
   const handleOpenTransactionDialog = (transaction = null) => {
-    console.log('Opening transaction dialog with:', transaction);
     if (transaction && transaction.id) {
       // Map backend type to frontend type
       const typeMap = {
@@ -295,13 +294,16 @@ const Inventory = () => {
 
       if (selectedItem) {
         await axios.put(`/api/inventory/${selectedItem.id}`, payload);
+        enqueueSnackbar('Item updated successfully', { variant: 'success' });
       } else {
         await axios.post('/api/inventory', payload);
+        enqueueSnackbar('Item created successfully', { variant: 'success' });
       }
       fetchInventory();
       handleCloseDialog();
     } catch (error) {
       console.error('Error saving inventory item:', error);
+      enqueueSnackbar('Error saving inventory item', { variant: 'error' });
     }
   };
 
@@ -341,8 +343,10 @@ const Inventory = () => {
       fetchInventory();
       fetchTransactions();
       handleCloseTransactionDialog();
+      enqueueSnackbar('Transaction recorded successfully', { variant: 'success' });
     } catch (error) {
       console.error('Error processing transaction:', error);
+      enqueueSnackbar('Error recording transaction', { variant: 'error' });
     }
   };
 
@@ -362,6 +366,7 @@ const Inventory = () => {
       try {
         await axios.delete(`/api/inventory/${itemId}`);
         fetchInventory();
+        enqueueSnackbar('Item deleted successfully', { variant: 'success' });
       } catch (error) {
         console.error('Error deleting inventory item:', error);
         if (error.response?.status === 400 &&
@@ -370,6 +375,7 @@ const Inventory = () => {
             await handleDeactivate(itemId, false);
           }
         }
+        enqueueSnackbar('Error deleting item', { variant: 'error' });
       }
     }
   };
@@ -578,7 +584,7 @@ const Inventory = () => {
           <Paper sx={{ p: 2, mb: 3 }}>
             <Grid container spacing={2} alignItems="center">
               <Grid item xs={12} sm={4}>
-                <FormControl fullWidth size="small">
+                <FormControl fullWidth>
                   <InputLabel id="product-filter-label-2">Product</InputLabel>
                   <Select
                     labelId="product-filter-label-2"
@@ -616,7 +622,6 @@ const Inventory = () => {
                   fullWidth
                   label="Start Date"
                   type="date"
-                  size="small"
                   value={dateFilters.start_date}
                   onChange={(e) => setDateFilters(prev => ({
                     ...prev,
@@ -645,7 +650,6 @@ const Inventory = () => {
                   fullWidth
                   label="End Date"
                   type="date"
-                  size="small"
                   value={dateFilters.end_date}
                   onChange={(e) => setDateFilters(prev => ({
                     ...prev,

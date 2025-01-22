@@ -64,6 +64,7 @@ import { useCurrencyFormatter } from '../utils/currencyUtils';
 import SummaryCard from '../components/common/SummaryCard';
 import EmployeeForm from '../components/employees/EmployeeForm';
 import employeeService from '../features/employees/employeeService';
+import { useSnackbar } from 'notistack';
 
 const SALARY_TYPES = {
   DAILY: 'daily',
@@ -119,6 +120,7 @@ const EmployeeManagement = () => {
   const [taskReportDialog, setTaskReportDialog] = useState(false);
   const [selectedEmployeeReport, setSelectedEmployeeReport] = useState(null);
   const [taskReport, setTaskReport] = useState(null);
+  const { enqueueSnackbar } = useSnackbar();
 
   useEffect(() => {
     dispatch(getEmployees());
@@ -294,42 +296,46 @@ const EmployeeManagement = () => {
   const handleDesignationSubmit = async () => {
     try {
       if (selectedDesignation) {
-        await dispatch(updateDesignation({
-          id: selectedDesignation.id,
-          designationData: designationFormData
-        }));
+        await dispatch(updateDesignation({ id: selectedDesignation.id, designationData: designationFormData })).unwrap();
+        enqueueSnackbar('Designation updated successfully', { variant: 'success' });
       } else {
-        await dispatch(createDesignation(designationFormData));
+        await dispatch(createDesignation(designationFormData)).unwrap();
+        enqueueSnackbar('Designation created successfully', { variant: 'success' });
       }
-      // Fetch updated designations after successful submission
+
+      // Refetch designations after successful submission
       const response = await axios.get('/api/designations');
       setDesignations(response.data);
+
       handleCloseDesignationDialog();
     } catch (error) {
-      console.error('Error handling designation submission:', error);
+      console.error('Error saving designation:', error);
+      enqueueSnackbar('Error saving designation', { variant: 'error' });
     }
   };
 
   const handleDeleteDesignation = async (id) => {
-    try {
-      if (window.confirm('Are you sure you want to delete this designation?')) {
+    if (window.confirm('Are you sure you want to delete this designation?')) {
+      try {
         await dispatch(deleteDesignation(id)).unwrap();
-        // Refresh the designations list
+
+        // Refetch designations after successful deletion
         const response = await axios.get('/api/designations');
         setDesignations(response.data);
-      }
-    } catch (error) {
-      // Check if the error contains employees data
-      if (error.employees) {
-        setReassignmentData({
-          oldDesignationId: id,
-          newDesignationId: '',
-          affectedEmployees: error.employees,
-        });
-        setReassignDialog(true);
-      } else {
-        console.error('Error deleting designation:', error);
-        alert(error?.message || 'Error deleting designation');
+
+        enqueueSnackbar('Designation deleted successfully', { variant: 'success' });
+      } catch (error) {
+        if (error.response?.status === 400) {
+          setReassignmentData({
+            oldDesignationId: id,
+            newDesignationId: '',
+            affectedEmployees: error.response.data.employees
+          });
+          setReassignDialog(true);
+        } else {
+          console.error('Error deleting designation:', error);
+          enqueueSnackbar('Error deleting designation', { variant: 'error' });
+        }
       }
     }
   };
@@ -344,25 +350,14 @@ const EmployeeManagement = () => {
   };
 
   const handleReassignmentSubmit = async () => {
-    if (!reassignmentData.newDesignationId) {
-      return;
-    }
-
     try {
-      // Single API call to reassign employees and delete designation
-      await axios.post(`/api/designations/${reassignmentData.oldDesignationId}/reassign`, {
-        newDesignationId: reassignmentData.newDesignationId
-      });
-
-      // Refresh the lists
-      await dispatch(getEmployees()).unwrap();
-      const response = await axios.get('/api/designations');
-      setDesignations(response.data);
-
+      await axios.post('/api/employees/reassign', reassignmentData);
       handleReassignmentClose();
+      dispatch(getEmployees());
+      enqueueSnackbar('Employees reassigned successfully', { variant: 'success' });
     } catch (error) {
-      console.error('Error in reassignment:', error);
-      alert(error?.response?.data?.message || 'Error during reassignment process');
+      console.error('Error reassigning employees:', error);
+      enqueueSnackbar('Error reassigning employees', { variant: 'error' });
     }
   };
 
@@ -404,13 +399,16 @@ const EmployeeManagement = () => {
     try {
       if (selectedGroup) {
         await axios.put(`/api/employee-groups/${selectedGroup.id}`, groupFormData);
+        enqueueSnackbar('Group updated successfully', { variant: 'success' });
       } else {
         await axios.post('/api/employee-groups', groupFormData);
+        enqueueSnackbar('Group created successfully', { variant: 'success' });
       }
-      await fetchEmployeeGroups();
       handleCloseGroupDialog();
+      fetchEmployeeGroups();
     } catch (error) {
-      console.error('Error saving employee group:', error);
+      console.error('Error saving group:', error);
+      enqueueSnackbar('Error saving group', { variant: 'error' });
     }
   };
 
@@ -418,9 +416,11 @@ const EmployeeManagement = () => {
     if (window.confirm('Are you sure you want to delete this group?')) {
       try {
         await axios.delete(`/api/employee-groups/${groupId}`);
-        await fetchEmployeeGroups();
+        fetchEmployeeGroups();
+        enqueueSnackbar('Group deleted successfully', { variant: 'success' });
       } catch (error) {
-        console.error('Error deleting employee group:', error);
+        console.error('Error deleting group:', error);
+        enqueueSnackbar('Error deleting group', { variant: 'error' });
       }
     }
   };
@@ -454,31 +454,15 @@ const EmployeeManagement = () => {
 
   const handleUpdateGroupMembers = async () => {
     try {
-      // Get current members of the group
-      const currentMembers = selectedGroup.members.map(member => member.id);
-
-      // Find members to add and remove
-      const membersToAdd = selectedEmployees.filter(id => !currentMembers.includes(id));
-      const membersToRemove = currentMembers.filter(id => !selectedEmployees.includes(id));
-
-      // Add new members if any
-      if (membersToAdd.length > 0) {
-        await axios.post(`/api/employee-groups/${selectedGroup.id}/members`, {
-          employeeIds: membersToAdd
-        });
-      }
-
-      // Remove unselected members if any
-      if (membersToRemove.length > 0) {
-        await axios.delete(`/api/employee-groups/${selectedGroup.id}/members`, {
-          data: { employeeIds: membersToRemove }
-        });
-      }
-
-      await fetchEmployeeGroups();
+      await axios.put(`/api/employee-groups/${selectedGroup.id}/members`, {
+        employeeIds: selectedEmployees
+      });
       handleCloseGroupMembersDialog();
+      fetchEmployeeGroups();
+      enqueueSnackbar('Group members updated successfully', { variant: 'success' });
     } catch (error) {
       console.error('Error updating group members:', error);
+      enqueueSnackbar('Error updating group members', { variant: 'error' });
     }
   };
 

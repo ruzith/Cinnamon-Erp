@@ -11,6 +11,7 @@ import {
   Alert
 } from '@mui/material'
 import { register, reset } from '../features/auth/authSlice'
+import { useSnackbar } from 'notistack'
 
 const Register = () => {
   const [formData, setFormData] = useState({
@@ -25,6 +26,7 @@ const Register = () => {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const { user, isLoading, isError, isSuccess, message } = useSelector(state => state.auth)
+  const { enqueueSnackbar } = useSnackbar()
 
   useEffect(() => {
     if (isSuccess || user) {
@@ -45,15 +47,21 @@ const Register = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    
+
     if (formData.password !== formData.confirmPassword) {
-      setPasswordError('Passwords do not match')
+      enqueueSnackbar('Passwords do not match', { variant: 'error' })
       return
     }
-    
-    setPasswordError('')
+
     const { confirmPassword, ...registrationData } = formData
     dispatch(register(registrationData))
+      .unwrap()
+      .then(() => {
+        enqueueSnackbar('Registration successful', { variant: 'success' })
+      })
+      .catch((error) => {
+        enqueueSnackbar(error.message || 'Registration failed', { variant: 'error' })
+      })
   }
 
   return (
@@ -154,4 +162,4 @@ const Register = () => {
   )
 }
 
-export default Register 
+export default Register

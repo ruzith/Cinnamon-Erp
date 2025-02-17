@@ -334,7 +334,9 @@ const LandManagement = () => {
 
   const handleReassignmentSubmit = async () => {
     try {
-      await axios.post('/api/lands/reassign', reassignmentData);
+      await axios.post(`/api/land-categories/${reassignmentData.oldCategoryId}/reassign`, {
+        newCategoryId: reassignmentData.newCategoryId
+      });
       handleReassignmentClose();
       fetchLands();
       enqueueSnackbar('Lands reassigned successfully', { variant: 'success' });

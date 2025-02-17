@@ -138,8 +138,8 @@ router.get('/reports/employee', [protect, authorize('admin', 'hr')], async (req,
       SELECT
         e.*,
         COALESCE(SUM(wh.hours_worked), 0) as total_hours,
-        COALESCE(SUM(CASE WHEN sa.approval_status = 'approved' THEN sa.amount ELSE 0 END), 0) as total_advances,
-        COUNT(DISTINCT CASE WHEN sa.approval_status = 'approved' THEN sa.id END) as advance_count,
+        COALESCE(SUM(CASE WHEN sa.status = 'approved' THEN sa.amount ELSE 0 END), 0) as total_advances,
+        COUNT(DISTINCT CASE WHEN sa.status = 'approved' THEN sa.id END) as advance_count,
         MAX(p.basic_salary) as basic_salary,
         MAX(p.deductions) as deductions,
         MAX(p.net_salary) as net_salary
@@ -193,7 +193,7 @@ router.get('/reports/employee', [protect, authorize('admin', 'hr')], async (req,
           'Salary Advance' as type,
           amount,
           request_date as date,
-          approval_status,
+          status,
           CONCAT('Requested salary advance of ', amount) as description
         FROM salary_advances
         WHERE employee_id = ?
@@ -209,7 +209,7 @@ router.get('/reports/employee', [protect, authorize('admin', 'hr')], async (req,
           'Payroll' as type,
           net_salary as amount,
           created_at as date,
-          'completed' as approval_status,
+          'completed' as status,
           CONCAT('Received salary of ', net_salary, ' for ',
                  MONTHNAME(STR_TO_DATE(month, '%m')), ' ', year) as description
         FROM employee_payrolls

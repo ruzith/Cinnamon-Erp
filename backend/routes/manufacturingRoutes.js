@@ -180,8 +180,8 @@ router.put(
   authorize("admin", "manager"),
   updateAssignmentStatus
 );
-router.post(
-  "/assignments/complete",
+router.put(
+  "/assignments/:id/complete",
   protect,
   authorize("admin"),
   completeAssignment

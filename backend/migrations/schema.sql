@@ -494,7 +494,6 @@ CREATE TABLE purchase_invoices (
   invoice_number VARCHAR(20) NOT NULL,
   contractor_id INT,
   invoice_date DATE NOT NULL,
-  due_date DATE NOT NULL,
   subtotal DECIMAL(10, 2) DEFAULT 0.00,
   total_amount DECIMAL(10, 2) DEFAULT 0.00,
   cutting_rate DECIMAL(10, 2) DEFAULT 0.00,
@@ -506,7 +505,7 @@ CREATE TABLE purchase_invoices (
   created_by INT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (contractor_id) REFERENCES cutting_contractors(id),
+  FOREIGN KEY (contractor_id) REFERENCES manufacturing_contractors(id),
   FOREIGN KEY (created_by) REFERENCES users(id)
 );
 -- Then create cutting_advance_payments table
@@ -514,6 +513,8 @@ CREATE TABLE cutting_advance_payments (
   id INT PRIMARY KEY AUTO_INCREMENT,
   contractor_id INT NOT NULL,
   amount DECIMAL(10, 2) NOT NULL,
+  receipt_number VARCHAR(50) NOT NULL UNIQUE,
+  payment_date DATE NOT NULL,
   notes TEXT,
   status ENUM('pending', 'paid', 'used', 'cancelled') DEFAULT 'pending',
   used_in_invoice INT NULL,
@@ -862,19 +863,6 @@ CREATE TABLE task_history (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 -- HR Management Tables
-CREATE TABLE salary_advances (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  employee_id INT NOT NULL,
-  amount DECIMAL(10, 2) NOT NULL,
-  request_date DATE NOT NULL,
-  approval_status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
-  approved_by INT,
-  notes TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (employee_id) REFERENCES employees(id),
-  FOREIGN KEY (approved_by) REFERENCES users(id)
-);
 CREATE TABLE employee_payrolls (
   id INT PRIMARY KEY AUTO_INCREMENT,
   employee_id INT NOT NULL,
@@ -900,6 +888,22 @@ CREATE TABLE employee_payroll_items (
   description VARCHAR(255) NOT NULL,
   amount DECIMAL(10, 2) NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (payroll_id) REFERENCES employee_payrolls(id)
+);
+CREATE TABLE salary_advances (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  employee_id INT NOT NULL,
+  amount DECIMAL(10, 2) NOT NULL,
+  request_date DATE NOT NULL,
+  status ENUM('pending', 'approved', 'rejected', 'paid') DEFAULT 'pending',
+  approved_by INT,
+  payment_date DATETIME NULL,
+  payroll_id INT NULL,
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (employee_id) REFERENCES employees(id),
+  FOREIGN KEY (approved_by) REFERENCES users(id),
   FOREIGN KEY (payroll_id) REFERENCES employee_payrolls(id)
 );
 CREATE TABLE employee_work_hours (
@@ -938,7 +942,7 @@ CREATE TABLE manufacturing_payment_usages (
   advance_payment_id INT NOT NULL,
   amount_used DECIMAL(15, 2) NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (payment_id) REFERENCES manufacturing_payments(id),
+  FOREIGN KEY (payment_id) REFERENCES purchase_invoices(id),
   FOREIGN KEY (advance_payment_id) REFERENCES manufacturing_advance_payments(id)
 );
 

@@ -396,12 +396,17 @@ const LoanBook = () => {
         response = await axios.post("/api/loans", requestData);
       }
 
-      fetchLoans();
-      fetchSummary();
+      // Refetch both loans and payments
+      await Promise.all([
+        fetchLoans(),
+        fetchPayments(),
+        fetchSummary()
+      ]);
+
       handleCloseLoanDialog();
 
       // Show success message
-      enqueueSnackbar('Loan created successfully', { variant: 'success' });
+      enqueueSnackbar(selectedLoan ? 'Loan updated successfully' : 'Loan created successfully', { variant: 'success' });
 
     } catch (error) {
       console.error("Error saving loan:", error);
@@ -434,9 +439,14 @@ const LoanBook = () => {
       };
 
       await axios.post("/api/loans/payments", paymentData);
-      fetchLoans();
-      fetchPayments();
-      fetchSummary();
+
+      // Refetch both loans and payments
+      await Promise.all([
+        fetchLoans(),
+        fetchPayments(),
+        fetchSummary()
+      ]);
+
       handleClosePaymentDialog();
 
       // Show success message

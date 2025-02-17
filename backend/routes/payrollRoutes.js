@@ -1,112 +1,164 @@
 const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/authMiddleware');
+const { pool } = require('../config/db');
 const Payroll = require('../models/domain/Payroll');
 const Employee = require('../models/domain/Employee');
 const SalaryAdvance = require('../models/domain/SalaryAdvance');
 
 // Generate payroll
 router.post('/generate', protect, authorize('admin', 'hr'), async (req, res) => {
+  const connection = await pool.getConnection();
+
   try {
-    const { month, year, employeeId, additionalAmounts = [], deductionItems = [] } = req.body;
+    await connection.beginTransaction();
+
+    const {
+      month,
+      year,
+      employee_id,
+      basic_salary,
+      additional_amount = 0,
+      deductions = 0,
+      net_salary,
+      additional_amounts = [],
+      deduction_items = []
+    } = req.body;
 
     // Check if payroll already exists
-    const [existingPayrolls] = await Payroll.pool.execute(
+    const [existingPayrolls] = await connection.execute(
       'SELECT id FROM employee_payrolls WHERE month = ? AND year = ? AND employee_id = ?',
-      [month, year, employeeId]
+      [month, year, employee_id]
     );
 
     if (existingPayrolls.length > 0) {
-      return res.status(400).json({
-        message: 'Payroll already exists for this employee in the specified month'
-      });
+      throw new Error('Payroll already exists for this employee in the specified month');
     }
 
-    // Get employee details
-    const [employees] = await Employee.pool.execute(
-      'SELECT * FROM employees WHERE id = ?',
-      [employeeId]
-    );
-    const employee = employees[0];
-    if (!employee) {
-      return res.status(404).json({ message: 'Employee not found' });
-    }
-
-    // Get approved salary advances for the month
-    const [advances] = await SalaryAdvance.pool.execute(
-      `SELECT * FROM salary_advances
-       WHERE employee_id = ?
-       AND approval_status = 'approved'
-       AND request_date >= ?
-       AND request_date <= ?`,
-      [employeeId,
-       new Date(year, month - 1, 1).toISOString(),
-       new Date(year, month, 0).toISOString()]
+    // Get approved salary advances for the employee
+    const [approvedAdvances] = await connection.execute(`
+      SELECT id, amount, request_date
+      FROM salary_advances
+      WHERE employee_id = ?
+      AND status = 'approved'`,
+      [employee_id]
     );
 
-    // Calculate totals
-    const basicSalary = Number(employee.basic_salary);
-    const totalAdditional = additionalAmounts.reduce((sum, item) => sum + Number(item.amount), 0);
-    const totalAdvances = advances.reduce((sum, advance) => sum + Number(advance.amount), 0);
-    const totalDeductions = deductionItems.reduce((sum, item) => sum + Number(item.amount), 0) + totalAdvances;
+    // Add salary advances to deduction items
+    const advanceDeductions = approvedAdvances.map(advance => ({
+      description: `Salary Advance (${new Date(advance.request_date).toLocaleDateString()})`,
+      amount: advance.amount,
+      advance_id: advance.id
+    }));
 
-    const grossSalary = basicSalary + totalAdditional;
-    const netSalary = grossSalary - totalDeductions;
+    const allDeductionItems = [...deduction_items, ...advanceDeductions];
+    const totalDeductions = allDeductionItems.reduce((sum, item) => sum + Number(item.amount), 0);
+
+    // Recalculate net salary with advance deductions
+    const netSalaryWithAdvances = basic_salary + additional_amount - totalDeductions;
 
     // Create payroll record
-    const [payrollResult] = await Payroll.pool.execute(
+    const [payrollResult] = await connection.execute(
       `INSERT INTO employee_payrolls
-       (employee_id, month, year, basic_salary, gross_salary, net_salary, status, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [employeeId, month, year, basicSalary, grossSalary, netSalary, 'draft', req.user.id]
+       (employee_id, month, year, basic_salary, additional_amount, deductions, net_salary, status, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?)`,
+      [employee_id, month, year, basic_salary, additional_amount, totalDeductions, netSalaryWithAdvances, req.user.id]
     );
 
     const payrollId = payrollResult.insertId;
 
-    // Insert payroll items
-    const itemValues = [
-      // Additional amounts
-      ...additionalAmounts.map(item => [
-        payrollId, 'earning', item.description, Number(item.amount)
-      ]),
-      // Deduction items
-      ...deductionItems.map(item => [
-        payrollId, 'deduction', item.description, Number(item.amount)
-      ]),
-      // Salary advances
-      ...advances.map(advance => [
-        payrollId, 'deduction', 'Salary Advance', Number(advance.amount)
-      ])
-    ];
+    // Insert additional amounts
+    if (additional_amounts.length > 0) {
+      const additionalValues = additional_amounts.map(item => [
+        payrollId, 'addition', item.description, Number(item.amount)
+      ]);
 
-    if (itemValues.length > 0) {
-      await Payroll.pool.execute(
-        `INSERT INTO payroll_items (payroll_id, type, description, amount)
-         VALUES ${itemValues.map(() => '(?, ?, ?, ?)').join(', ')}`,
-        itemValues.flat()
+      await connection.query(
+        `INSERT INTO employee_payroll_items (payroll_id, type, description, amount)
+         VALUES ?`,
+        [additionalValues]
+      );
+    }
+
+    // Insert all deduction items including advances
+    if (allDeductionItems.length > 0) {
+      const deductionValues = allDeductionItems.map(item => [
+        payrollId, 'deduction', item.description, Number(item.amount)
+      ]);
+
+      await connection.query(
+        `INSERT INTO employee_payroll_items (payroll_id, type, description, amount)
+         VALUES ?`,
+        [deductionValues]
+      );
+    }
+
+    // Mark salary advances as paid
+    if (approvedAdvances.length > 0) {
+      const advanceIds = approvedAdvances.map(advance => advance.id);
+      await connection.query(
+        `UPDATE salary_advances
+         SET status = 'paid',
+             payment_date = CURRENT_TIMESTAMP,
+             payroll_id = ?
+         WHERE id IN (?)`,
+        [payrollId, advanceIds]
       );
     }
 
     // Get the created payroll with items
-    const [payroll] = await Payroll.pool.execute(
-      `SELECT p.*, GROUP_CONCAT(pi.type, ':', pi.description, ':', pi.amount) as items
-       FROM employee_payrolls p
-       LEFT JOIN payroll_items pi ON p.id = pi.payroll_id
-       WHERE p.id = ?
-       GROUP BY p.id`,
+    const [payroll] = await connection.execute(`
+      SELECT
+        p.*,
+        e.name as employee_name,
+        d.department,
+        GROUP_CONCAT(
+          DISTINCT CASE
+            WHEN pi.type = 'addition' THEN CONCAT('addition:', pi.description, ':', pi.amount)
+          END
+        ) as additional_amounts,
+        GROUP_CONCAT(
+          DISTINCT CASE
+            WHEN pi.type = 'deduction' THEN CONCAT('deduction:', pi.description, ':', pi.amount)
+          END
+        ) as deduction_items
+      FROM employee_payrolls p
+      JOIN employees e ON p.employee_id = e.id
+      LEFT JOIN designations d ON e.designation_id = d.id
+      LEFT JOIN employee_payroll_items pi ON p.id = pi.payroll_id
+      WHERE p.id = ?
+      GROUP BY p.id`,
       [payrollId]
     );
 
-    res.status(201).json({
-      payroll: payroll[0],
-      items: payroll[0].items ? payroll[0].items.split(',').map(item => {
-        const [type, description, amount] = item.split(':');
-        return { type, description, amount: Number(amount) };
-      }) : []
-    });
+    await connection.commit();
+
+    // Format the response
+    const formattedPayroll = {
+      ...payroll[0],
+      additional_amounts: payroll[0].additional_amounts ?
+        payroll[0].additional_amounts.split(',')
+          .filter(Boolean)
+          .map(item => {
+            const [_, description, amount] = item.split(':');
+            return { description, amount: Number(amount) };
+          }) : [],
+      deduction_items: payroll[0].deduction_items ?
+        payroll[0].deduction_items.split(',')
+          .filter(Boolean)
+          .map(item => {
+            const [_, description, amount] = item.split(':');
+            return { description, amount: Number(amount) };
+          }) : []
+    };
+
+    res.status(201).json(formattedPayroll);
 
   } catch (error) {
+    await connection.rollback();
     res.status(400).json({ message: error.message });
+  } finally {
+    connection.release();
   }
 });
 

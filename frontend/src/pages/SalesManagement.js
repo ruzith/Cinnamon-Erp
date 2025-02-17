@@ -568,12 +568,6 @@ const Sales = () => {
       // Refresh both sales and transactions data
       fetchSales();
 
-      // If you have access to the accounting context/state, refresh it
-      // This assumes you have a global state management setup
-      // dispatch(fetchTransactions());
-      // or
-      // accountingContext.refreshTransactions();
-
     } catch (error) {
       console.error('Error marking sale as paid:', error);
       enqueueSnackbar(

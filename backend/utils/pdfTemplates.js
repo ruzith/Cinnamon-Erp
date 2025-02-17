@@ -422,8 +422,8 @@ exports.generateManufacturingInvoice = async (invoice, settings = {}) => {
           <div class="info-value">${formattedDate}</div>
           <div class="info-label">Payment Status</div>
           <div class="info-value">
-            <span class="payment-status ${invoice.payment_status === 'paid' ? 'paid' : 'pending'}">
-              ${invoice.payment_status || 'Pending'}
+            <span class="payment-status ${invoice.status === 'paid' ? 'paid' : 'pending'}">
+              ${invoice.status || 'Pending'}
             </span>
           </div>
         </div>
@@ -433,23 +433,35 @@ exports.generateManufacturingInvoice = async (invoice, settings = {}) => {
         <table style="width: 100%">
           <thead>
             <tr>
-              <th>Product</th>
-              <th style="text-align: center">Quantity</th>
-              <th style="text-align: right">Unit Price</th>
-              <th style="text-align: right">Total</th>
+              <th>Grade</th>
+              <th style="text-align: right">Total Weight</th>
+              <th style="text-align: right">Deduct 1</th>
+              <th style="text-align: right">Deduct 2</th>
+              <th style="text-align: right">Net Weight</th>
+              <th style="text-align: right">Rate</th>
+              <th style="text-align: right">Amount</th>
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td>${invoice.product_name}</td>
-              <td style="text-align: center">${invoice.quantity} ${invoice.unit || 'units'}</td>
-              <td style="text-align: right" class="amount">
-                ${currencySymbol} ${Number(invoice.unit_price || 0).toLocaleString()}
-              </td>
-              <td style="text-align: right" class="amount">
-                ${currencySymbol} ${Number(invoice.total_amount || 0).toLocaleString()}
-              </td>
-            </tr>
+            ${invoice.items?.map(item => `
+              <tr>
+                <td>${item.grade_name || ''}</td>
+                <td style="text-align: right">${Number(item.total_weight).toFixed(2)} kg</td>
+                <td style="text-align: right">${Number(item.deduct_weight1).toFixed(2)} kg</td>
+                <td style="text-align: right">${Number(item.deduct_weight2).toFixed(2)} kg</td>
+                <td style="text-align: right">${Number(item.net_weight).toFixed(2)} kg</td>
+                <td style="text-align: right" class="amount">
+                  ${currencySymbol} ${Number(item.rate).toFixed(2)}
+                </td>
+                <td style="text-align: right" class="amount">
+                  ${currencySymbol} ${Number(item.amount).toFixed(2)}
+                </td>
+              </tr>
+            `).join('') || `
+              <tr>
+                <td colspan="7" style="text-align: center">No items found</td>
+              </tr>
+            `}
           </tbody>
         </table>
       </div>
@@ -475,13 +487,23 @@ exports.generateManufacturingInvoice = async (invoice, settings = {}) => {
                   <span class="amount">${currencySymbol} ${Number(invoice.subtotal || 0).toLocaleString()}</span>
                 </td>
               </tr>
-              ${invoice.tax_amount ? `
+              ${Number(invoice.cutting_charges || 0) > 0 ? `
+                <tr>
+                  <td style="padding: 10px 15px; border-bottom: 1px solid #e0e0e0;">
+                    <span style="color: #546e7a; font-size: 11px; font-weight: 600;">Cutting Charges</span>
+                  </td>
+                  <td style="padding: 10px 15px; text-align: right; border-bottom: 1px solid #e0e0e0;">
+                    <span class="amount" style="color: #e53935;">-${currencySymbol} ${Number(invoice.cutting_charges).toLocaleString()}</span>
+                  </td>
+                </tr>
+              ` : ''}
+              ${Number(invoice.advance_payment || 0) > 0 ? `
                 <tr>
                   <td style="padding: 10px 15px;">
-                    <span style="color: #546e7a; font-size: 11px; font-weight: 600;">Tax (${invoice.tax_rate || 0}%)</span>
+                    <span style="color: #546e7a; font-size: 11px; font-weight: 600;">Advance Payment</span>
                   </td>
                   <td style="padding: 10px 15px; text-align: right;">
-                    <span class="amount">${currencySymbol} ${Number(invoice.tax_amount).toLocaleString()}</span>
+                    <span class="amount" style="color: #e53935;">-${currencySymbol} ${Number(invoice.advance_payment).toLocaleString()}</span>
                   </td>
                 </tr>
               ` : ''}
@@ -490,7 +512,7 @@ exports.generateManufacturingInvoice = async (invoice, settings = {}) => {
 
           <div class="total-section" style="margin-top: 10px;">
             <span class="detail-label">Total Amount</span>
-            <span class="amount">${currencySymbol} ${Number(invoice.total_amount || 0).toLocaleString()}</span>
+            <span class="amount">${currencySymbol} ${Number(invoice.final_amount || 0).toLocaleString()}</span>
           </div>
         </div>
       </div>
@@ -806,7 +828,7 @@ exports.generatePayrollSlip = async (payroll, settings = {}) => {
             <div class="info-label">Department</div>
             <div class="info-value">${payroll.department || 'N/A'}</div>
             <div class="info-label">Pay Period</div>
-            <div class="info-value">${formattedDate}</div>
+            <div class="info-value">${payroll.month}/${payroll.year}</div>
           </div>
         </div>
 
@@ -836,7 +858,7 @@ exports.generatePayrollSlip = async (payroll, settings = {}) => {
               <tr style="background-color: #f8f9fa; font-weight: 600;">
                 <td>Total Earnings</td>
                 <td style="text-align: right" class="amount">
-                  ${currencySymbol} ${Number(payroll.total_earnings).toFixed(2)}
+                  ${currencySymbol} ${(Number(payroll.basic_salary) + Number(payroll.additional_amount)).toFixed(2)}
                 </td>
               </tr>
             </tbody>

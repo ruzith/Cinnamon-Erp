@@ -278,7 +278,7 @@ class Dashboard extends BaseModel {
     const [rows] = await this.pool.execute(`
       SELECT COUNT(*) as count
       FROM salary_advances
-      WHERE approval_status = 'approved'
+      WHERE status = 'approved'
     `);
     return rows[0].count;
   }
@@ -287,7 +287,7 @@ class Dashboard extends BaseModel {
     const [rows] = await this.pool.execute(`
       SELECT COUNT(*) as count
       FROM salary_advances
-      WHERE approval_status = 'pending'
+      WHERE status = 'pending'
     `);
     return rows[0].count;
   }

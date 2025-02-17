@@ -107,117 +107,17 @@ exports.updateContractor = async (req, res) => {
 // @route   DELETE /api/manufacturing/contractors/:id
 // @access  Private/Admin
 exports.deleteContractor = async (req, res) => {
-  const connection = await pool.getConnection();
-
   try {
     const { forceDelete, newContractorId } = req.query;
-    await connection.beginTransaction();
-
-    // Check if contractor exists
-    const [contractor] = await connection.execute(
-      'SELECT * FROM manufacturing_contractors WHERE id = ?',
-      [req.params.id]
+    await ManufacturingContractor.delete(
+      req.params.id,
+      forceDelete === 'true',
+      newContractorId ? parseInt(newContractorId) : null
     );
-
-    if (!contractor[0]) {
-      await connection.rollback();
-      connection.release();
-      return res.status(404).json({ message: 'Contractor not found' });
-    }
-
-    // Get all related data
-    const [assignments] = await connection.execute(
-      'SELECT * FROM cinnamon_assignments WHERE contractor_id = ? AND status = "active"',
-      [req.params.id]
-    );
-
-    const [advancePayments] = await connection.execute(
-      'SELECT * FROM manufacturing_advance_payments WHERE contractor_id = ?',
-      [req.params.id]
-    );
-
-    const [manufacturingPayments] = await connection.execute(
-      'SELECT * FROM manufacturing_payments WHERE contractor_id = ?',
-      [req.params.id]
-    );
-
-    // If there are pending payments or active assignments and forceDelete is not true
-    if (
-      (advancePayments.length > 0 || assignments.length > 0 || manufacturingPayments.length > 0) &&
-      forceDelete !== 'true'
-    ) {
-      await connection.rollback();
-      connection.release();
-      return res.status(400).json({
-        message: 'Contractor has related data that needs to be reassigned',
-        hasAdvancePayments: advancePayments.length > 0,
-        hasAssignments: assignments.length > 0,
-        hasManufacturingPayments: manufacturingPayments.length > 0,
-        advancePayments,
-        assignments,
-        manufacturingPayments,
-      });
-    }
-
-    if (forceDelete === 'true' && newContractorId) {
-      // Verify new contractor exists and is active
-      const [newContractor] = await connection.execute(
-        'SELECT * FROM manufacturing_contractors WHERE id = ? AND status = "active"',
-        [newContractorId]
-      );
-
-      if (!newContractor[0]) {
-        await connection.rollback();
-        connection.release();
-        return res.status(400).json({ message: 'Invalid or inactive new contractor' });
-      }
-
-      // Update all assignments
-      if (assignments.length > 0) {
-        await connection.execute(
-          'UPDATE cinnamon_assignments SET contractor_id = ? WHERE contractor_id = ?',
-          [newContractorId, req.params.id]
-        );
-      }
-
-      // Update all advance payments
-      if (advancePayments.length > 0) {
-        await connection.execute(
-          'UPDATE manufacturing_advance_payments SET contractor_id = ? WHERE contractor_id = ?',
-          [newContractorId, req.params.id]
-        );
-      }
-
-      // Update all manufacturing payments
-      if (manufacturingPayments.length > 0) {
-        await connection.execute(
-          'UPDATE manufacturing_payments SET contractor_id = ? WHERE contractor_id = ?',
-          [newContractorId, req.params.id]
-        );
-      }
-    }
-
-    // Delete the contractor
-    await connection.execute(
-      'DELETE FROM manufacturing_contractors WHERE id = ?',
-      [req.params.id]
-    );
-
-    await connection.commit();
-    res.status(200).json({
-      message: 'Contractor deleted successfully',
-      reassignedData: {
-        assignments: assignments.length > 0 ? assignments : [],
-        advancePayments: advancePayments.length > 0 ? advancePayments : [],
-        manufacturingPayments: manufacturingPayments.length > 0 ? manufacturingPayments : []
-      }
-    });
+    res.json({ message: 'Contractor deleted successfully' });
   } catch (error) {
-    console.error('Error in deleteContractor:', error);
-    await connection.rollback();
+    console.error('Error deleting contractor:', error);
     res.status(500).json({ message: error.message });
-  } finally {
-    connection.release();
   }
 };
 
@@ -565,12 +465,14 @@ exports.createAdvancePayment = async (req, res) => {
     }
 
     // Generate receipt number
-    const [lastReceipt] = await connection.execute(
-      "SELECT receipt_number FROM manufacturing_advance_payments ORDER BY id DESC LIMIT 1"
+    const date = new Date();
+    const year = date.getFullYear().toString().substr(-2);
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const [countResult] = await connection.execute(
+      'SELECT COUNT(*) as count FROM manufacturing_advance_payments WHERE YEAR(created_at) = YEAR(CURRENT_DATE)'
     );
-    const lastNumber = lastReceipt[0]?.receipt_number?.slice(-4) || "0000";
-    const nextNumber = (parseInt(lastNumber) + 1).toString().padStart(4, "0");
-    const receipt_number = `MAP${new Date().getFullYear()}${nextNumber}`;
+    const count = countResult[0].count + 1;
+    const receipt_number = `MADV${year}${month}${count.toString().padStart(4, '0')}`;
 
     // Insert payment record with initial status as 'pending'
     const [result] = await connection.execute(
@@ -1206,81 +1108,57 @@ exports.markOrderAsPaid = async (req, res) => {
 // @route   GET /api/manufacturing/invoices/:id/print
 // @access  Private
 exports.printInvoice = async (req, res) => {
-  const connection = await pool.getConnection();
   try {
-    const { id } = req.params;
+    const connection = await pool.getConnection();
+    try {
+      // Get invoice details with contractor info
+      const [invoiceResult] = await connection.execute(`
+        SELECT pi.*, mc.name as contractor_name, mc.contractor_id
+        FROM purchase_invoices pi
+        LEFT JOIN manufacturing_contractors mc ON pi.contractor_id = mc.id
+        WHERE pi.id = ?
+      `, [req.params.id]);
 
-    // Get invoice details with contractor info
-    const [invoices] = await connection.execute(
-      `
-      SELECT
-        pi.*,
-        mc.name as contractor_name,
-        mc.contractor_id,
-        mc.phone as contractor_phone,
-        mc.address as contractor_address,
-        u.name as created_by_name
-      FROM purchase_invoices pi
-      JOIN manufacturing_contractors mc ON pi.contractor_id = mc.id
-      LEFT JOIN users u ON pi.created_by = u.id
-      WHERE pi.id = ?
-    `,
-      [id]
-    );
+      if (!invoiceResult.length) {
+        return res.status(404).json({ message: 'Invoice not found' });
+      }
 
-    if (!invoices[0]) {
-      return res.status(404).json({ message: "Invoice not found" });
+      const invoice = invoiceResult[0];
+
+      // Get invoice items with grade names
+      const [items] = await connection.execute(`
+        SELECT pi.*, i.product_name as grade_name, i.unit
+        FROM purchase_items pi
+        JOIN inventory i ON pi.grade_id = i.id
+        WHERE pi.invoice_id = ?
+      `, [req.params.id]);
+
+      // Get company settings and currency
+      const [settingsResult] = await connection.execute(`
+        SELECT s.*, c.symbol as currency_symbol
+        FROM settings s
+        JOIN currencies c ON s.default_currency = c.id
+        WHERE c.status = 'active'
+        LIMIT 1
+      `);
+      const settings = settingsResult[0] || {};
+
+      // Add items to invoice object
+      invoice.items = items;
+
+      // Generate invoice HTML using the template
+      const invoiceHtml = await generateManufacturingInvoice(invoice, settings);
+
+      res.json({ invoiceHtml });
+    } finally {
+      connection.release();
     }
-
-    // Get invoice items with their details
-    const [items] = await connection.execute(
-      `
-      SELECT
-        pit.*,
-        i.product_name,
-        i.unit
-      FROM purchase_items pit
-      JOIN inventory i ON pit.grade_id = i.id
-      WHERE pit.invoice_id = ?
-    `,
-      [id]
-    );
-
-    const invoice = {
-      ...invoices[0],
-      items: items.map((item) => ({
-        ...item,
-        total_weight: Number(item.total_weight),
-        deduct_weight1: Number(item.deduct_weight1),
-        deduct_weight2: Number(item.deduct_weight2),
-        net_weight: Number(item.net_weight),
-        rate: Number(item.rate),
-        amount: Number(item.amount),
-      })),
-    };
-
-    // Get company settings and currency
-    const [settingsResult] = await connection.execute(`
-            SELECT s.*, c.symbol as currency_symbol
-            FROM settings s
-            JOIN currencies c ON s.default_currency = c.id
-            WHERE c.status = 'active'
-            LIMIT 1
-          `);
-    const settings = settingsResult[0] || {};
-
-    // Generate invoice HTML using the template
-    const invoiceHtml = await generateManufacturingInvoice(invoice, settings);
-
-    res.json({ invoiceHtml });
   } catch (error) {
-    console.error("Error printing invoice:", error);
+    console.error('Error generating invoice:', error);
     res.status(500).json({
-      message: "Error printing invoice",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+      message: 'Error generating invoice',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
-  } finally {
-    connection.release();
   }
 };
 
@@ -1632,10 +1510,18 @@ exports.getContractorAdvancePayments = async (req, res) => {
     const { status } = req.query;
     let payments;
 
-    if (status === "unused") {
-      payments = await AdvancePayment.getUnusedPaymentsByContractor(
-        req.params.id
+    if (status === "paid") {
+      const [rows] = await pool.execute(
+        `
+        SELECT ap.*, mc.name as contractor_name
+        FROM manufacturing_advance_payments ap
+        JOIN manufacturing_contractors mc ON ap.contractor_id = mc.id
+        WHERE ap.contractor_id = ? AND ap.status = 'paid'
+        ORDER BY ap.payment_date DESC
+        `,
+        [req.params.id]
       );
+      payments = rows;
     } else {
       const [rows] = await pool.execute(
         `
@@ -1671,11 +1557,13 @@ exports.getContractorAdvancePayments = async (req, res) => {
 // @access  Private/Admin
 exports.createPurchaseInvoice = async (req, res) => {
   const connection = await pool.getConnection();
+
   try {
     await connection.beginTransaction();
 
     const {
       contractor_id,
+      cutting_contractor_id,
       items,
       cutting_rate,
       status,
@@ -1684,161 +1572,144 @@ exports.createPurchaseInvoice = async (req, res) => {
       cutting_charges,
       final_amount,
       total_net_weight,
-      advance_payment_ids // Add this to receive the selected advance payment IDs
+      advance_payment_ids = []
     } = req.body;
 
     // Generate invoice number
     const date = new Date();
     const year = date.getFullYear().toString().substr(-2);
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
-
-    const [lastInvoice] = await connection.query(
-      "SELECT invoice_number FROM purchase_invoices WHERE invoice_number LIKE ? ORDER BY id DESC LIMIT 1",
-      [`PUR${year}${month}%`]
+    const [result] = await connection.execute(
+      'SELECT COUNT(*) as count FROM purchase_invoices WHERE YEAR(created_at) = YEAR(CURRENT_DATE)'
     );
+    const count = result[0].count + 1;
+    const invoiceNumber = `PUR-${year}${month}-${count.toString().padStart(4, '0')}`;
 
-    let invoiceNumber;
-    if (lastInvoice.length > 0) {
-      const lastNumber = parseInt(lastInvoice[0].invoice_number.slice(-4));
-      invoiceNumber = `PUR${year}${month}${(lastNumber + 1).toString().padStart(4, '0')}`;
-    } else {
-      invoiceNumber = `PUR${year}${month}0001`;
-    }
-
-    // Calculate total advance payment amount
-    let totalAdvanceAmount = 0;
-    if (advance_payment_ids && advance_payment_ids.length > 0) {
-      const [advancePayments] = await connection.execute(
-        `SELECT SUM(amount) as total FROM cutting_advance_payments
-         WHERE id IN (${advance_payment_ids.map(() => '?').join(',')})
-         AND status = 'paid'`,
-        advance_payment_ids
-      );
-      totalAdvanceAmount = advancePayments[0]?.total || 0;
-    }
-
-    // Insert purchase invoice with values from payload
+    // Create the purchase invoice
     const [invoice] = await connection.execute(
       `INSERT INTO purchase_invoices (
-        invoice_number,
-        contractor_id,
-        invoice_date,
-        due_date,
-        subtotal,
-        total_amount,
+        invoice_number, contractor_id,
         cutting_rate,
-        cutting_charges,
-        advance_payment,
-        final_amount,
-        status,
-        notes,
-        created_by
-      ) VALUES (?, ?, CURDATE(), DATE_ADD(CURDATE(), INTERVAL 15 DAY), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        subtotal, cutting_charges,
+        final_amount, total_amount, advance_payment,
+        status, notes, created_by,
+        invoice_date
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         invoiceNumber,
         contractor_id,
-        subtotal,
-        subtotal, // total_amount is same as subtotal
         cutting_rate,
+        subtotal,
         cutting_charges,
-        totalAdvanceAmount,
         final_amount,
+        subtotal,
+        0.00,  // Initial advance_payment value, will be updated later if there are advance payments
         status,
-        notes || '',
-        req.user.id
+        notes,
+        req.user.id,
+        new Date().toISOString().split('T')[0]
       ]
     );
 
     const invoiceId = invoice.insertId;
 
-    // Insert purchase items
+    // Insert items and update inventory
     for (const item of items) {
-      if (item.grade && item.total_weight) {
-        await connection.execute(
-          `INSERT INTO purchase_items (
-            invoice_id,
-            grade_id,
-            total_weight,
-            deduct_weight1,
-            deduct_weight2,
-            net_weight,
-            rate,
-            amount
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            invoiceId,
-            item.grade,
-            item.total_weight,
-            item.deduct_weight1 || 0,
-            item.deduct_weight2 || 0,
-            item.net_weight,
-            item.rate,
-            item.amount
-          ]
-        );
-      }
+      // Insert purchase item
+      await connection.execute(
+        `INSERT INTO purchase_items (
+          invoice_id, grade_id, total_weight, deduct_weight1,
+          deduct_weight2, net_weight, rate, amount
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          invoiceId,
+          item.grade,
+          item.total_weight,
+          item.deduct_weight1,
+          item.deduct_weight2,
+          item.net_weight,
+          item.rate,
+          item.amount
+        ]
+      );
+
+      // Update inventory quantity
+      await connection.execute(
+        `UPDATE inventory
+         SET quantity = quantity + ?,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [item.net_weight, item.grade]
+      );
+
+      // Create inventory transaction record
+      await connection.execute(
+        `INSERT INTO inventory_transactions
+         (item_id, type, quantity, reference, notes)
+         VALUES (?, 'IN', ?, ?, ?)`,
+        [
+          item.grade,
+          item.net_weight,
+          invoiceNumber,
+          `Purchase from manufacturing invoice ${invoiceNumber}`
+        ]
+      );
     }
 
-    // Handle advance payments if any
-    if (advance_payment_ids && advance_payment_ids.length > 0) {
-      // Update advance payments status to 'used'
-      await connection.execute(
-        `UPDATE cutting_advance_payments
-         SET status = 'used',
-             used_in_invoice = ?,
-             used_date = CURRENT_TIMESTAMP,
-             updated_at = CURRENT_TIMESTAMP
+    // Handle advance payments...
+    if (advance_payment_ids.length > 0) {
+      // Get the total advance payment amount
+      const [advancePayments] = await connection.execute(
+        `SELECT SUM(amount) as total_amount
+         FROM manufacturing_advance_payments
          WHERE id IN (${advance_payment_ids.map(() => '?').join(',')})`,
-        [invoiceId, ...advance_payment_ids]
+        advance_payment_ids
+      );
+      const totalAdvancePayment = advancePayments[0].total_amount || 0;
+
+      // Update advance payments status
+      await connection.execute(
+        `UPDATE manufacturing_advance_payments
+         SET status = 'used', updated_at = CURRENT_TIMESTAMP
+         WHERE id IN (${advance_payment_ids.map(() => '?').join(',')})`,
+        advance_payment_ids
       );
 
       // Create payment usage records
       for (const advanceId of advance_payment_ids) {
         const [advancePayment] = await connection.execute(
-          'SELECT amount FROM cutting_advance_payments WHERE id = ?',
+          'SELECT amount FROM manufacturing_advance_payments WHERE id = ?',
           [advanceId]
         );
 
-        if (advancePayment[0]) {
-          await connection.execute(
-            `INSERT INTO cutting_payment_usages (
-              advance_payment_id,
-              invoice_id,
-              used_date,
-              amount,
-              notes
-            ) VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?)`,
-            [
-              advanceId,
-              invoiceId,
-              advancePayment[0].amount,
-              `Used in purchase invoice ${invoiceNumber}`
-            ]
-          );
-        }
+        await connection.execute(
+          `INSERT INTO manufacturing_payment_usages
+           (payment_id, advance_payment_id, amount_used)
+           VALUES (?, ?, ?)`,
+          [invoiceId, advanceId, advancePayment[0].amount]
+        );
       }
+
+      // Update advance_payment in purchase_invoices
+      await connection.execute(
+        `UPDATE purchase_invoices
+         SET advance_payment = ?
+         WHERE id = ?`,
+        [totalAdvancePayment, invoiceId]
+      );
     }
 
     await connection.commit();
     res.status(201).json({
       message: 'Purchase invoice created successfully',
-      id: invoiceId,
-      invoice_number: invoiceNumber,
-      details: {
-        subtotal,
-        totalAmount: subtotal,
-        cuttingCharges: cutting_charges,
-        finalAmount: final_amount,
-        advancePaymentAmount: totalAdvanceAmount
-      }
+      invoice_id: invoiceId,
+      invoice_number: invoiceNumber
     });
+
   } catch (error) {
     await connection.rollback();
     console.error('Error creating purchase invoice:', error);
-    res.status(400).json({
-      message: error.message,
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
+    res.status(500).json({ message: error.message });
   } finally {
     connection.release();
   }
@@ -1855,26 +1726,52 @@ exports.getManufacturingInvoices = async (req, res) => {
         pi.id,
         pi.invoice_number,
         pi.invoice_date,
-        pi.due_date,
         pi.subtotal,
         pi.cutting_charges,
-        pi.advance_payment,
+        (SELECT SUM(amount_used) FROM manufacturing_payment_usages WHERE payment_id = pi.id) as advance_payment,
         pi.final_amount,
-        pi.total_amount,
         pi.status,
         pi.notes,
         pi.created_at,
-        cc.name as contractor_name,
+        mc.name as contractor_name,
+        (
+          SELECT GROUP_CONCAT(
+            CONCAT(
+              i.product_name, ' (', pit.net_weight, ' kg @ Rs.', pit.rate, '/kg)'
+            )
+            SEPARATOR '; '
+          )
+          FROM purchase_items pit
+          JOIN inventory i ON pit.grade_id = i.id
+          WHERE pit.invoice_id = pi.id AND i.category = 'finished_good'
+        ) as product_details,
+        (
+          SELECT SUM(net_weight)
+          FROM purchase_items
+          WHERE invoice_id = pi.id
+        ) as quantity,
         u.name as created_by_name
       FROM purchase_invoices pi
-      LEFT JOIN cutting_contractors cc ON pi.contractor_id = cc.id
+      LEFT JOIN manufacturing_contractors mc ON pi.contractor_id = mc.id
       LEFT JOIN users u ON pi.created_by = u.id
       ORDER BY pi.created_at DESC
     `);
 
+    // Format the response data
+    const formattedInvoices = invoices.map(invoice => ({
+      ...invoice,
+      advance_payment: parseFloat(invoice.advance_payment || 0).toFixed(2),
+      cutting_charges: parseFloat(invoice.cutting_charges || 0).toFixed(2),
+      final_amount: parseFloat(invoice.final_amount || 0).toFixed(2),
+      subtotal: parseFloat(invoice.subtotal || 0).toFixed(2),
+      cutting_rate: parseFloat(invoice.cutting_rate || 0).toFixed(2),
+      quantity: parseFloat(invoice.quantity || 0).toFixed(2),
+      unit: 'kg'
+    }));
+
     res.json({
       success: true,
-      data: invoices,
+      data: formattedInvoices,
     });
   } catch (error) {
     console.error("Error in getManufacturingInvoices:", error);
@@ -2061,12 +1958,10 @@ exports.markPurchaseAsPaid = async (req, res) => {
 
     // Get purchase details with contractor info
     const [purchases] = await connection.query(
-      `
-      SELECT pi.*, mc.name as contractor_name, mc.contractor_id as contractor_number
-      FROM purchase_invoices pi
-      LEFT JOIN manufacturing_contractors mc ON pi.contractor_id = mc.id
-      WHERE pi.id = ?
-    `,
+      `SELECT pi.*, mc.name as contractor_name, mc.contractor_id as contractor_number
+       FROM purchase_invoices pi
+       LEFT JOIN manufacturing_contractors mc ON pi.contractor_id = mc.id
+       WHERE pi.id = ?`,
       [id]
     );
 
@@ -2076,6 +1971,12 @@ exports.markPurchaseAsPaid = async (req, res) => {
     }
 
     const purchase = purchases[0];
+
+    // Check if already paid
+    if (purchase.status === 'paid') {
+      await connection.rollback();
+      return res.status(400).json({ message: "Purchase is already marked as paid" });
+    }
 
     // Get the user ID from the request
     const userId = req.user?.id;
@@ -2088,19 +1989,25 @@ exports.markPurchaseAsPaid = async (req, res) => {
     const [accounts] = await connection.execute(`
       SELECT id, code, name
       FROM accounts
-      WHERE code IN ('1001', '5002') AND status = 'active'
+      WHERE code IN ('1001', '2001') AND status = 'active'
     `);
 
     const cashAccountId = accounts.find((acc) => acc.code === "1001")?.id;
-    const manufacturingExpenseId = accounts.find(
-      (acc) => acc.code === "5002"
-    )?.id;
+    const payablesAccountId = accounts.find((acc) => acc.code === "2001")?.id;
 
-    if (!cashAccountId || !manufacturingExpenseId) {
+    if (!cashAccountId || !payablesAccountId) {
       await connection.rollback();
       return res.status(400).json({
         message: "Required accounts not found. Please check chart of accounts.",
       });
+    }
+
+    // Calculate payment amount (final_amount minus advance_payment)
+    const paymentAmount = purchase.final_amount - (purchase.advance_payment || 0);
+
+    if (paymentAmount < 0) {
+      await connection.rollback();
+      return res.status(400).json({ message: "Invalid payment amount" });
     }
 
     // Update purchase status
@@ -2114,8 +2021,7 @@ exports.markPurchaseAsPaid = async (req, res) => {
 
     // Create transaction record
     const [transactionResult] = await connection.execute(
-      `
-      INSERT INTO transactions (
+      `INSERT INTO transactions (
         date,
         reference,
         description,
@@ -2135,12 +2041,11 @@ exports.markPurchaseAsPaid = async (req, res) => {
         'posted',
         'cash',
         ?
-      )
-    `,
+      )`,
       [
-        `PUR-${purchase.id}`,
+        `PUR-${purchase.invoice_number}`,
         `Purchase Payment to ${purchase.contractor_name} (${purchase.contractor_number})`,
-        purchase.total_amount,
+        paymentAmount,
         userId,
       ]
     );
@@ -2149,41 +2054,44 @@ exports.markPurchaseAsPaid = async (req, res) => {
 
     // Create transaction entries (double-entry)
     await connection.execute(
-      `
-      INSERT INTO transactions_entries
+      `INSERT INTO transactions_entries
         (transaction_id, account_id, description, debit, credit)
       VALUES
-        (?, ?, ?, ?, 0),  -- Debit Manufacturing Expense
-        (?, ?, ?, 0, ?)   -- Credit Cash account
-    `,
+        (?, ?, ?, ?, 0),  -- Debit Accounts Payable
+        (?, ?, ?, 0, ?)   -- Credit Cash account`,
       [
         transactionId,
-        manufacturingExpenseId,
+        payablesAccountId,
         `Purchase payment to ${purchase.contractor_name} (${purchase.contractor_number})`,
-        purchase.total_amount,
+        paymentAmount,
         transactionId,
         cashAccountId,
         `Purchase payment to ${purchase.contractor_name} (${purchase.contractor_number})`,
-        purchase.total_amount,
+        paymentAmount,
       ]
     );
 
     // Update account balances
     await connection.execute(
       "UPDATE accounts SET balance = balance + ? WHERE id = ?",
-      [purchase.total_amount, manufacturingExpenseId] // Increase Manufacturing Expense
+      [paymentAmount, payablesAccountId] // Increase Accounts Payable
     );
 
     await connection.execute(
       "UPDATE accounts SET balance = balance - ? WHERE id = ?",
-      [purchase.total_amount, cashAccountId] // Decrease Cash account
+      [paymentAmount, cashAccountId] // Decrease Cash account
     );
 
     await connection.commit();
 
     res.json({
       message: "Purchase marked as paid successfully",
-      purchase: purchase,
+      transaction_id: transactionId,
+      purchase: {
+        ...purchase,
+        status: 'paid',
+        updated_at: new Date()
+      }
     });
   } catch (error) {
     await connection.rollback();
@@ -2278,95 +2186,53 @@ exports.updateAssignmentStatus = async (req, res) => {
   }
 };
 
-// @desc    Complete manufacturing assignment and update inventory
-// @route   POST /api/manufacturing/assignments/complete
+// @desc    Complete manufacturing assignment
+// @route   PUT /api/manufacturing/assignments/:id/complete
 // @access  Private/Admin
 exports.completeAssignment = async (req, res) => {
   const connection = await pool.getConnection();
 
   try {
-    const { assignment_id, finished_good_id, quantity_received } = req.body;
-
     // Start transaction
     await connection.beginTransaction();
 
-    try {
-      // Get assignment details first
-      const [assignment] = await connection.execute(
-        `
-        SELECT ma.*, mc.name as contractor_name
-        FROM cinnamon_assignments ma
-        JOIN manufacturing_contractors mc ON ma.contractor_id = mc.id
-        WHERE ma.id = ?
-      `,
-        [assignment_id]
-      );
+    // Get assignment details first
+    const [assignment] = await connection.execute(
+      `SELECT ma.*, mc.name as contractor_name
+       FROM cinnamon_assignments ma
+       JOIN manufacturing_contractors mc ON ma.contractor_id = mc.id
+       WHERE ma.id = ?`,
+      [req.params.id]
+    );
 
-      if (!assignment[0]) {
-        throw new Error("Assignment not found");
-      }
-
-      // Update assignment status
-      const updateAssignmentQuery = `
-        UPDATE cinnamon_assignments
-        SET status = 'completed',
-            updated_at = NOW(),
-            finished_good_id = ?,
-            quantity = ?
-        WHERE id = ?
-      `;
-      await connection.execute(updateAssignmentQuery, [
-        finished_good_id,
-        quantity_received,
-        assignment_id,
-      ]);
-
-      // Add finished good to inventory
-      const updateFinishedGoodQuery = `
-        UPDATE inventory
-        SET quantity = quantity + ?
-        WHERE id = ?
-      `;
-      await connection.execute(updateFinishedGoodQuery, [
-        quantity_received,
-        finished_good_id,
-      ]);
-
-      // Create inventory transaction records
-      // For finished good (IN)
-      await connection.execute(
-        `INSERT INTO inventory_transactions
-         (item_id, type, quantity, reference, notes)
-         VALUES (?, 'IN', ?, ?, ?)`,
-        [
-          finished_good_id,
-          quantity_received,
-          `MFG-${assignment_id}`,
-          `Produced from manufacturing by ${assignment[0].contractor_name}`,
-        ]
-      );
-
-      // Commit transaction
-      await connection.commit();
-
-      res.status(200).json({
-        message: "Assignment completed and inventory updated successfully",
-        details: {
-          assignment_id,
-          finished_good_id,
-          quantity_received,
-          contractor_name: assignment[0].contractor_name,
-        },
-      });
-    } catch (error) {
-      // Rollback in case of error
-      await connection.rollback();
-      throw error;
+    if (!assignment[0]) {
+      throw new Error("Assignment not found");
     }
+
+    if (assignment[0].status !== 'active') {
+      throw new Error("Only active assignments can be completed");
+    }
+
+    // Update assignment status
+    await connection.execute(
+      `UPDATE cinnamon_assignments
+       SET status = 'completed',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [req.params.id]
+    );
+
+    await connection.commit();
+    res.status(200).json({
+      message: "Assignment marked as completed successfully",
+      assignment: assignment[0]
+    });
+
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    await connection.rollback();
+    res.status(400).json({ message: error.message });
   } finally {
-    connection.release(); // Release the connection back to the pool
+    connection.release();
   }
 };
 
@@ -2620,6 +2486,163 @@ exports.markPaymentAsPaid = async (req, res) => {
     res.status(500).json({
       message: "Error marking payment as paid",
       error: error.message,
+    });
+  } finally {
+    connection.release();
+  }
+};
+
+exports.markPurchaseInvoiceAsPaid = async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const { id } = req.params;
+
+    // Get purchase invoice details with contractor info
+    const [invoices] = await connection.execute(
+      `SELECT pi.*, mc.name as contractor_name, mc.contractor_id as contractor_number
+       FROM purchase_invoices pi
+       JOIN manufacturing_contractors mc ON pi.contractor_id = mc.id
+       WHERE pi.id = ?`,
+      [id]
+    );
+
+    if (!invoices[0]) {
+      await connection.rollback();
+      return res.status(404).json({ message: 'Purchase invoice not found' });
+    }
+
+    const invoice = invoices[0];
+
+    // Check if already paid
+    if (invoice.payment_status === 'paid') {
+      await connection.rollback();
+      return res.status(400).json({ message: 'Invoice is already paid' });
+    }
+
+    // Get the user ID from the request
+    const userId = req.user?.id;
+    if (!userId) {
+      await connection.rollback();
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    // Get required account IDs
+    const [accounts] = await connection.execute(`
+      SELECT id, code, name
+      FROM accounts
+      WHERE code IN ('1001', '2001') AND status = 'active'
+    `);
+
+    const cashAccountId = accounts.find(acc => acc.code === '1001')?.id;
+    const payablesAccountId = accounts.find(acc => acc.code === '2001')?.id;
+
+    if (!cashAccountId || !payablesAccountId) {
+      await connection.rollback();
+      return res.status(400).json({
+        message: 'Required accounts not found. Please check chart of accounts.'
+      });
+    }
+
+    // Calculate payment amount (final_amount minus advance_payment)
+    const paymentAmount = invoice.final_amount - (invoice.advance_payment || 0);
+
+    if (paymentAmount < 0) {
+      await connection.rollback();
+      return res.status(400).json({ message: 'Invalid payment amount' });
+    }
+
+    // Create transaction record
+    const [transactionResult] = await connection.execute(
+      `INSERT INTO transactions (
+        date,
+        reference,
+        description,
+        type,
+        category,
+        amount,
+        status,
+        payment_method,
+        created_by
+      ) VALUES (
+        CURRENT_DATE(),
+        ?,
+        ?,
+        'expense',
+        'manufacturing_purchase',
+        ?,
+        'posted',
+        'cash',
+        ?
+      )`,
+      [
+        `PUR-PAY-${invoice.invoice_number}`,
+        `Payment for purchase invoice ${invoice.invoice_number} to ${invoice.contractor_name} (${invoice.contractor_number})`,
+        paymentAmount,
+        userId
+      ]
+    );
+
+    const transactionId = transactionResult.insertId;
+
+    // Create transaction entries (double-entry)
+    await connection.execute(
+      `INSERT INTO transactions_entries
+        (transaction_id, account_id, description, debit, credit)
+      VALUES
+        (?, ?, ?, ?, 0),  -- Debit Accounts Payable
+        (?, ?, ?, 0, ?)   -- Credit Cash account`,
+      [
+        transactionId,
+        payablesAccountId,
+        `Payment for purchase invoice ${invoice.invoice_number}`,
+        paymentAmount,
+        transactionId,
+        cashAccountId,
+        `Payment for purchase invoice ${invoice.invoice_number}`,
+        paymentAmount
+      ]
+    );
+
+    // Update account balances
+    await connection.execute(
+      'UPDATE accounts SET balance = balance + ? WHERE id = ?',
+      [paymentAmount, payablesAccountId] // Increase Accounts Payable
+    );
+
+    await connection.execute(
+      'UPDATE accounts SET balance = balance - ? WHERE id = ?',
+      [paymentAmount, cashAccountId] // Decrease Cash account
+    );
+
+    // Update purchase invoice status
+    await connection.execute(
+      `UPDATE purchase_invoices
+       SET payment_status = 'paid',
+           payment_date = CURRENT_DATE(),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [id]
+    );
+
+    await connection.commit();
+    res.json({
+      message: 'Purchase invoice marked as paid successfully',
+      transaction_id: transactionId,
+      invoice: {
+        ...invoice,
+        payment_status: 'paid',
+        payment_date: new Date()
+      }
+    });
+
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error marking purchase invoice as paid:', error);
+    res.status(500).json({
+      message: 'Error marking purchase invoice as paid',
+      error: error.message
     });
   } finally {
     connection.release();

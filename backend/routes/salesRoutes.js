@@ -173,9 +173,13 @@ router.put('/:id', protect, async (req, res) => {
 
     // Get the original sale and items for comparison
     const [originalSale] = await connection.query(
-      'SELECT status FROM sales_invoices WHERE id = ?',
+      'SELECT * FROM sales_invoices WHERE id = ?',
       [req.params.id]
     );
+
+    if (!originalSale[0]) {
+      throw new Error('Sale not found');
+    }
 
     const [originalItems] = await connection.query(
       'SELECT product_id, quantity FROM sales_items WHERE invoice_id = ?',
@@ -198,7 +202,7 @@ router.put('/:id', protect, async (req, res) => {
     } = req.body;
 
     // First update the sales_invoice
-    const [invoice] = await connection.query(
+    await connection.query(
       `UPDATE sales_invoices
        SET customer_name = (SELECT name FROM customers WHERE id = ?),
            customer_address = (SELECT address FROM customers WHERE id = ?),
@@ -229,6 +233,7 @@ router.put('/:id', protect, async (req, res) => {
       ]
     );
 
+    // Handle inventory updates
     // Delete existing items
     await connection.query(
       'DELETE FROM sales_items WHERE invoice_id = ?',
@@ -255,7 +260,7 @@ router.put('/:id', protect, async (req, res) => {
             'IN',
             item.quantity,
             `${req.params.id}-REV`,
-            `Sale Update Reversed for invoice ${req.params.id}`
+            `Sale Update Reversed for invoice ${originalSale[0].invoice_number}`
           ]
         );
       }
@@ -277,7 +282,7 @@ router.put('/:id', protect, async (req, res) => {
         ]
       );
 
-      if (req.body.status === 'confirmed') {
+      if (status === 'confirmed') {
         // Update inventory quantity
         await connection.query(
           `UPDATE inventory
@@ -296,10 +301,270 @@ router.put('/:id', protect, async (req, res) => {
             'OUT',
             item.quantity,
             `${req.params.id}-UPD`,
-            `Sale Updated for invoice ${req.params.id}`
+            `Sale Updated for invoice ${originalSale[0].invoice_number}`
           ]
         );
       }
+    }
+
+    // Handle accounting entries if payment status or amount changed
+    if (originalSale[0].payment_status === 'paid') {
+      // Get the relevant account IDs first
+      const [accounts] = await connection.execute(
+        'SELECT id, code FROM accounts WHERE code IN (?, ?, ?)',
+        ['1001', '1002', '4001']
+      );
+
+      const accountMap = accounts.reduce((acc, account) => {
+        acc[account.code] = account.id;
+        return acc;
+      }, {});
+
+      if (!accountMap['1001'] || !accountMap['1002'] || !accountMap['4001']) {
+        throw new Error('Required accounts not found. Please check account configuration.');
+      }
+
+      // If payment status changed from paid to unpaid or sale is being voided
+      if (payment_status !== 'paid' || status === 'cancelled') {
+        // Create reversal transaction record
+        const [transactionResult] = await connection.execute(
+          `INSERT INTO transactions
+           (date, reference, description, type, category, amount, status, payment_method, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            new Date(),
+            `${originalSale[0].invoice_number}-REV`,
+            `Reversal for updated sale invoice ${originalSale[0].invoice_number}`,
+            'revenue',
+            'sales_income',
+            originalSale[0].total,
+            'posted',
+            originalSale[0].payment_method,
+            req.user.id
+          ]
+        );
+
+        const transactionId = transactionResult.insertId;
+
+        // Create reversal transaction entries
+        // Credit Cash/Bank Account (reverse of original debit)
+        await connection.execute(
+          `INSERT INTO transactions_entries
+           (transaction_id, account_id, description, debit, credit)
+           VALUES (?, ?, ?, ?, ?)`,
+          [
+            transactionId,
+            originalSale[0].payment_method === 'cash' ? accountMap['1001'] : accountMap['1002'],
+            `Reversal for updated sale invoice ${originalSale[0].invoice_number}`,
+            0,
+            originalSale[0].total
+          ]
+        );
+
+        // Debit Sales Revenue Account (reverse of original credit)
+        await connection.execute(
+          `INSERT INTO transactions_entries
+           (transaction_id, account_id, description, debit, credit)
+           VALUES (?, ?, ?, ?, ?)`,
+          [
+            transactionId,
+            accountMap['4001'],
+            `Reversal of revenue for updated sale invoice ${originalSale[0].invoice_number}`,
+            originalSale[0].total,
+            0
+          ]
+        );
+
+        // Update account balances
+        await connection.execute(
+          'UPDATE accounts SET balance = balance - ? WHERE id = ?',
+          [originalSale[0].total, originalSale[0].payment_method === 'cash' ? accountMap['1001'] : accountMap['1002']]
+        );
+
+        await connection.execute(
+          'UPDATE accounts SET balance = balance - ? WHERE id = ?',
+          [originalSale[0].total, accountMap['4001']]
+        );
+      }
+      // If amount changed but still paid
+      else if (payment_status === 'paid' && originalSale[0].total !== total) {
+        const difference = total - originalSale[0].total;
+
+        // Create adjustment transaction record
+        const [transactionResult] = await connection.execute(
+          `INSERT INTO transactions
+           (date, reference, description, type, category, amount, status, payment_method, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            new Date(),
+            `${originalSale[0].invoice_number}-ADJ`,
+            `Adjustment for updated sale invoice ${originalSale[0].invoice_number}`,
+            'revenue',
+            'sales_income',
+            Math.abs(difference),
+            'posted',
+            payment_method,
+            req.user.id
+          ]
+        );
+
+        const transactionId = transactionResult.insertId;
+
+        if (difference > 0) {
+          // If new amount is higher, create additional debit/credit entries
+          await connection.execute(
+            `INSERT INTO transactions_entries
+             (transaction_id, account_id, description, debit, credit)
+             VALUES (?, ?, ?, ?, ?)`,
+            [
+              transactionId,
+              payment_method === 'cash' ? accountMap['1001'] : accountMap['1002'],
+              `Additional payment for updated sale invoice ${originalSale[0].invoice_number}`,
+              difference,
+              0
+            ]
+          );
+
+          await connection.execute(
+            `INSERT INTO transactions_entries
+             (transaction_id, account_id, description, debit, credit)
+             VALUES (?, ?, ?, ?, ?)`,
+            [
+              transactionId,
+              accountMap['4001'],
+              `Additional revenue for updated sale invoice ${originalSale[0].invoice_number}`,
+              0,
+              difference
+            ]
+          );
+
+          // Update account balances
+          await connection.execute(
+            'UPDATE accounts SET balance = balance + ? WHERE id = ?',
+            [difference, payment_method === 'cash' ? accountMap['1001'] : accountMap['1002']]
+          );
+
+          await connection.execute(
+            'UPDATE accounts SET balance = balance + ? WHERE id = ?',
+            [difference, accountMap['4001']]
+          );
+        } else {
+          // If new amount is lower, create reduction entries
+          await connection.execute(
+            `INSERT INTO transactions_entries
+             (transaction_id, account_id, description, debit, credit)
+             VALUES (?, ?, ?, ?, ?)`,
+            [
+              transactionId,
+              payment_method === 'cash' ? accountMap['1001'] : accountMap['1002'],
+              `Reduction for updated sale invoice ${originalSale[0].invoice_number}`,
+              0,
+              Math.abs(difference)
+            ]
+          );
+
+          await connection.execute(
+            `INSERT INTO transactions_entries
+             (transaction_id, account_id, description, debit, credit)
+             VALUES (?, ?, ?, ?, ?)`,
+            [
+              transactionId,
+              accountMap['4001'],
+              `Reduction in revenue for updated sale invoice ${originalSale[0].invoice_number}`,
+              Math.abs(difference),
+              0
+            ]
+          );
+
+          // Update account balances
+          await connection.execute(
+            'UPDATE accounts SET balance = balance - ? WHERE id = ?',
+            [Math.abs(difference), payment_method === 'cash' ? accountMap['1001'] : accountMap['1002']]
+          );
+
+          await connection.execute(
+            'UPDATE accounts SET balance = balance - ? WHERE id = ?',
+            [Math.abs(difference), accountMap['4001']]
+          );
+        }
+      }
+    }
+    // If new payment status is paid (wasn't paid before)
+    else if (payment_status === 'paid' && originalSale[0].payment_status !== 'paid') {
+      // Get the relevant account IDs first
+      const [accounts] = await connection.execute(
+        'SELECT id, code FROM accounts WHERE code IN (?, ?, ?)',
+        ['1001', '1002', '4001']
+      );
+
+      const accountMap = accounts.reduce((acc, account) => {
+        acc[account.code] = account.id;
+        return acc;
+      }, {});
+
+      if (!accountMap['1001'] || !accountMap['1002'] || !accountMap['4001']) {
+        throw new Error('Required accounts not found. Please check account configuration.');
+      }
+
+      // Create transaction record
+      const [transactionResult] = await connection.execute(
+        `INSERT INTO transactions
+         (date, reference, description, type, category, amount, status, payment_method, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          new Date(),
+          originalSale[0].invoice_number,
+          `Payment received for sale invoice ${originalSale[0].invoice_number}`,
+          'revenue',
+          'sales_income',
+          total,
+          'posted',
+          payment_method,
+          req.user.id
+        ]
+      );
+
+      const transactionId = transactionResult.insertId;
+
+      // Create transaction entries
+      // Debit Cash/Bank Account
+      await connection.execute(
+        `INSERT INTO transactions_entries
+         (transaction_id, account_id, description, debit, credit)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          transactionId,
+          payment_method === 'cash' ? accountMap['1001'] : accountMap['1002'],
+          `Payment received for sale invoice ${originalSale[0].invoice_number}`,
+          total,
+          0
+        ]
+      );
+
+      // Credit Sales Revenue Account
+      await connection.execute(
+        `INSERT INTO transactions_entries
+         (transaction_id, account_id, description, debit, credit)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          transactionId,
+          accountMap['4001'],
+          `Revenue from sale invoice ${originalSale[0].invoice_number}`,
+          0,
+          total
+        ]
+      );
+
+      // Update account balances
+      await connection.execute(
+        'UPDATE accounts SET balance = balance + ? WHERE id = ?',
+        [total, payment_method === 'cash' ? accountMap['1001'] : accountMap['1002']]
+      );
+
+      await connection.execute(
+        'UPDATE accounts SET balance = balance + ? WHERE id = ?',
+        [total, accountMap['4001']]
+      );
     }
 
     await connection.commit();
@@ -344,13 +609,12 @@ router.get('/:id/items', protect, async (req, res) => {
 // Delete a sale
 router.delete('/:id', protect, async (req, res) => {
   const connection = await db.getConnection();
-
   try {
     await connection.beginTransaction();
 
-    // Get the sale status and items
+    // Get the sale details including payment status
     const [sale] = await connection.query(
-      'SELECT status FROM sales_invoices WHERE id = ?',
+      'SELECT * FROM sales_invoices WHERE id = ?',
       [req.params.id]
     );
 
@@ -385,10 +649,88 @@ router.delete('/:id', protect, async (req, res) => {
             'IN',
             item.quantity,
             `${req.params.id}-DEL`,
-            `Sale Deleted for invoice ${req.params.id}`
+            `Sale Deleted for invoice ${sale[0].invoice_number}`
           ]
         );
       }
+    }
+
+    // If the sale was paid, reverse accounting entries
+    if (sale[0].payment_status === 'paid') {
+      // Get the relevant account IDs first
+      const [accounts] = await connection.execute(
+        'SELECT id, code FROM accounts WHERE code IN (?, ?, ?)',
+        ['1001', '1002', '4001']
+      );
+
+      const accountMap = accounts.reduce((acc, account) => {
+        acc[account.code] = account.id;
+        return acc;
+      }, {});
+
+      if (!accountMap['1001'] || !accountMap['1002'] || !accountMap['4001']) {
+        throw new Error('Required accounts not found. Please check account configuration.');
+      }
+
+      // Create reversal transaction record
+      const [transactionResult] = await connection.execute(
+        `INSERT INTO transactions
+         (date, reference, description, type, category, amount, status, payment_method, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          new Date(),
+          `${sale[0].invoice_number}-REV`,
+          `Reversal for deleted sale invoice ${sale[0].invoice_number}`,
+          'revenue',
+          'sales_income',
+          sale[0].total,
+          'posted',
+          sale[0].payment_method,
+          req.user.id
+        ]
+      );
+
+      const transactionId = transactionResult.insertId;
+
+      // Create reversal transaction entries
+      // Credit Cash/Bank Account (reverse of original debit)
+      await connection.execute(
+        `INSERT INTO transactions_entries
+         (transaction_id, account_id, description, debit, credit)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          transactionId,
+          sale[0].payment_method === 'cash' ? accountMap['1001'] : accountMap['1002'],
+          `Reversal for deleted sale invoice ${sale[0].invoice_number}`,
+          0,
+          sale[0].total
+        ]
+      );
+
+      // Debit Sales Revenue Account (reverse of original credit)
+      await connection.execute(
+        `INSERT INTO transactions_entries
+         (transaction_id, account_id, description, debit, credit)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          transactionId,
+          accountMap['4001'],
+          `Reversal of revenue for deleted sale invoice ${sale[0].invoice_number}`,
+          sale[0].total,
+          0
+        ]
+      );
+
+      // Update account balances
+      await connection.execute(
+        'UPDATE accounts SET balance = balance - ? WHERE id = ?',
+        [sale[0].total, sale[0].payment_method === 'cash' ? accountMap['1001'] : accountMap['1002']]
+      );
+
+      await connection.execute(
+        'UPDATE accounts SET balance = balance - ? WHERE id = ?',
+        [sale[0].total, accountMap['4001']]
+      );
     }
 
     // Delete sale items
@@ -461,7 +803,7 @@ router.put('/:id/mark-paid', protect, async (req, res) => {
 
     // Update the sale payment status
     await connection.execute(
-      'UPDATE sales_invoices SET payment_status = ?, payment_date = CURRENT_DATE() WHERE id = ?',
+      'UPDATE sales_invoices SET payment_status = ?, payment_date = CURRENT_TIMESTAMP() WHERE id = ?',
       ['paid', req.params.id]
     );
 
@@ -471,7 +813,7 @@ router.put('/:id/mark-paid', protect, async (req, res) => {
        (date, reference, description, type, category, amount, status, payment_method, created_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        new Date().toISOString().split('T')[0],
+        new Date(),
         sale[0].invoice_number,
         `Payment received for sale invoice ${sale[0].invoice_number}`,
         'revenue',

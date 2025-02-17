@@ -34,7 +34,7 @@ import { useTheme } from '@mui/material/styles';
 import PropTypes from 'prop-types';
 import { useSnackbar } from 'notistack';
 
-const PurchaseInvoiceForm = ({ open, onClose, selectedContractor, onSuccess, contractors }) => {
+const PurchaseInvoiceForm = ({ open, onClose, selectedContractor, onSuccess, cuttingContractors, manufacturingContractors }) => {
   const dispatch = useDispatch();
   const { formatCurrency } = useCurrencyFormatter();
   const { enqueueSnackbar } = useSnackbar();
@@ -45,13 +45,15 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor, onSuccess, con
     totalUnusedAdvance: 0
   });
   const [selectedAdvances, setSelectedAdvances] = useState(new Set());
-  const [formData, setFormData] = useState({
-    contractor: '',
+  const initialFormState = {
+    manufacturing_contractor: '',
+    cutting_contractor: '',
     items: [],
     cuttingRate: 250,
     status: 'draft',
     notes: ''
-  });
+  };
+  const [formData, setFormData] = useState(initialFormState);
   const theme = useTheme();
 
   useEffect(() => {
@@ -71,12 +73,18 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor, onSuccess, con
   }, []);
 
   useEffect(() => {
-    const fetchAdvancePayments = async () => {
-      if (formData.contractor) {
+    const fetchManufacturingAdvancePayments = async () => {
+      if (formData.manufacturing_contractor) {
         try {
-          const response = await axios.get(`/api/cutting/contractors/${formData.contractor}/advance-payments?status=paid`);
+          const response = await axios.get(`/api/manufacturing/contractors/${formData.manufacturing_contractor}/advance-payments`, {
+            params: {
+              status: 'paid'
+            }
+          });
           setAdvancePayments(response.data);
-          setSelectedAdvances(new Set(response.data.payments.map(p => p.id)));
+          setSelectedAdvances(new Set(response.data.payments
+            .filter(p => p.status === 'paid')
+            .map(p => p.id)));
         } catch (error) {
           console.error('Error fetching advance payments:', error);
           enqueueSnackbar('Error fetching advance payments', { variant: 'error' });
@@ -84,8 +92,8 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor, onSuccess, con
       }
     };
 
-    fetchAdvancePayments();
-  }, [formData.contractor]);
+    fetchManufacturingAdvancePayments();
+  }, [formData.manufacturing_contractor]);
 
   const handleAddItem = () => {
     setFormData(prev => ({
@@ -149,8 +157,13 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor, onSuccess, con
   const handleSubmit = async () => {
     try {
       // Validate required fields
-      if (!formData.contractor) {
-        enqueueSnackbar('Please select a contractor', { variant: 'error' });
+      if (!formData.manufacturing_contractor) {
+        enqueueSnackbar('Please select a manufacturing contractor', { variant: 'error' });
+        return;
+      }
+
+      if (!formData.cutting_contractor) {
+        enqueueSnackbar('Please select a cutting contractor', { variant: 'error' });
         return;
       }
 
@@ -169,7 +182,8 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor, onSuccess, con
       const totals = calculateTotals();
 
       const invoiceData = {
-        contractor_id: formData.contractor,
+        contractor_id: formData.manufacturing_contractor,
+        cutting_contractor_id: formData.cutting_contractor,
         items: formData.items.map(item => ({
           grade: item.grade,
           total_weight: Number(item.total_weight),
@@ -186,7 +200,7 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor, onSuccess, con
         subtotal: Number(totals.totalAmount),
         cutting_charges: Number(totals.cuttingCharges),
         final_amount: Number(totals.finalAmount),
-        advance_payment_ids: Array.from(selectedAdvances)
+        advance_payment_ids: Array.from(selectedAdvances).filter(id => id)
       };
 
       const response = await axios.post('/api/manufacturing/purchase-invoices', invoiceData);
@@ -194,6 +208,8 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor, onSuccess, con
       if (response.data) {
         enqueueSnackbar('Purchase invoice created successfully', { variant: 'success' });
         onSuccess && onSuccess();
+        setFormData(initialFormState);
+        setSelectedAdvances(new Set());
         onClose();
       }
     } catch (error) {
@@ -202,10 +218,16 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor, onSuccess, con
     }
   };
 
+  const handleClose = () => {
+    setFormData(initialFormState);
+    setSelectedAdvances(new Set());
+    onClose();
+  };
+
   return (
     <Dialog
       open={open}
-      onClose={onClose}
+      onClose={handleClose}
       maxWidth="lg"
       fullWidth
       PaperProps={{
@@ -232,25 +254,45 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor, onSuccess, con
             <Grid item xs={12}>
               <Paper elevation={0} variant="outlined" sx={{ p: 2, mb: 2 }}>
                 <Grid container spacing={2}>
-                  <Grid item xs={8}>
+                  <Grid item xs={12}>
                     <FormControl fullWidth size="small">
-                      <InputLabel
-                      required
-                      >Select Cutting Contractor</InputLabel>
+                      <InputLabel required>Select Manufacturing Contractor</InputLabel>
                       <Select
-                        value={formData.contractor}
+                        value={formData.manufacturing_contractor}
                         onChange={(e) => {
-                          const contractor = contractors.find(c => c.id === e.target.value);
                           setFormData(prev => ({
                             ...prev,
-                            contractor: e.target.value,
+                            manufacturing_contractor: e.target.value
+                          }));
+                        }}
+                        label="Select Manufacturing Contractor"
+                        required
+                      >
+                        {manufacturingContractors.map(contractor => (
+                          <MenuItem key={contractor.id} value={contractor.id}>
+                            {contractor.name} ({contractor.contractor_id})
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={8}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel required>Select Cutting Contractor</InputLabel>
+                      <Select
+                        value={formData.cutting_contractor}
+                        onChange={(e) => {
+                          const contractor = cuttingContractors.find(c => c.id === e.target.value);
+                          setFormData(prev => ({
+                            ...prev,
+                            cutting_contractor: e.target.value,
                             cuttingRate: contractor?.latest_manufacturing_contribution || 250.00
                           }));
                         }}
                         label="Select Cutting Contractor"
                         required
                       >
-                        {contractors.map(contractor => (
+                        {cuttingContractors.map(contractor => (
                           <MenuItem key={contractor.id} value={contractor.id}>
                             {contractor.name} ({contractor.contractor_id})
                             {contractor.latest_manufacturing_contribution ?
@@ -523,7 +565,7 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor, onSuccess, con
       <Divider />
       <DialogActions sx={{ p: 2 }}>
         <Button
-          onClick={onClose}
+          onClick={handleClose}
           color="inherit"
         >
           Cancel
@@ -531,7 +573,7 @@ const PurchaseInvoiceForm = ({ open, onClose, selectedContractor, onSuccess, con
         <Button
           onClick={handleSubmit}
           variant="contained"
-          disabled={!formData.contractor || formData.items.length === 0}
+          disabled={!formData.manufacturing_contractor || formData.items.length === 0}
         >
           Create
         </Button>
@@ -545,7 +587,8 @@ PurchaseInvoiceForm.propTypes = {
   onClose: PropTypes.func.isRequired,
   selectedContractor: PropTypes.object,
   onSuccess: PropTypes.func,
-  contractors: PropTypes.array.isRequired
+  cuttingContractors: PropTypes.array.isRequired,
+  manufacturingContractors: PropTypes.array.isRequired
 };
 
 export default PurchaseInvoiceForm;

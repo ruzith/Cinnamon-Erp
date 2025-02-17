@@ -95,10 +95,95 @@ class User extends BaseModel {
     if (!user) return null;
 
     if (permanent) {
-      await this.pool.execute(
-        'DELETE FROM users WHERE id = ?',
-        [id]
-      );
+      const connection = await this.pool.getConnection();
+      try {
+        await connection.beginTransaction();
+
+        // Update transactions to set created_by to NULL
+        await connection.execute(
+          'UPDATE transactions SET created_by = NULL WHERE created_by = ?',
+          [id]
+        );
+
+        // Update manufacturing_orders to set created_by to NULL
+        await connection.execute(
+          'UPDATE manufacturing_orders SET created_by = NULL WHERE created_by = ?',
+          [id]
+        );
+
+        // Update sales_invoices to set created_by to NULL
+        await connection.execute(
+          'UPDATE sales_invoices SET created_by = NULL WHERE created_by = ?',
+          [id]
+        );
+
+        // Update purchase_invoices to set created_by to NULL
+        await connection.execute(
+          'UPDATE purchase_invoices SET created_by = NULL WHERE created_by = ?',
+          [id]
+        );
+
+        // Update payrolls to set created_by and approved_by to NULL
+        await connection.execute(
+          'UPDATE payrolls SET created_by = NULL, approved_by = CASE WHEN approved_by = ? THEN NULL ELSE approved_by END WHERE created_by = ? OR approved_by = ?',
+          [id, id, id]
+        );
+
+        // Update customers to set created_by to NULL
+        await connection.execute(
+          'UPDATE customers SET created_by = NULL WHERE created_by = ?',
+          [id]
+        );
+
+        // Update loans to set created_by to NULL
+        await connection.execute(
+          'UPDATE loans SET created_by = NULL WHERE created_by = ?',
+          [id]
+        );
+
+        // Update loan_payments to set created_by to NULL
+        await connection.execute(
+          'UPDATE loan_payments SET created_by = NULL WHERE created_by = ?',
+          [id]
+        );
+
+        // Update assets to set created_by to NULL
+        await connection.execute(
+          'UPDATE assets SET created_by = NULL WHERE created_by = ?',
+          [id]
+        );
+
+        // Update asset_maintenance to set created_by to NULL
+        await connection.execute(
+          'UPDATE asset_maintenance SET created_by = NULL WHERE created_by = ?',
+          [id]
+        );
+
+        // Update manufacturing_advance_payments to set created_by to NULL
+        await connection.execute(
+          'UPDATE manufacturing_advance_payments SET created_by = NULL WHERE created_by = ?',
+          [id]
+        );
+
+        // Update tasks to set created_by, updated_by, and assigned_to to NULL
+        await connection.execute(
+          'UPDATE tasks SET created_by = NULL, updated_by = CASE WHEN updated_by = ? THEN NULL ELSE updated_by END, assigned_to = CASE WHEN assigned_to = ? THEN NULL ELSE assigned_to END WHERE created_by = ? OR updated_by = ? OR assigned_to = ?',
+          [id, id, id, id, id]
+        );
+
+        // Finally delete the user
+        await connection.execute(
+          'DELETE FROM users WHERE id = ?',
+          [id]
+        );
+
+        await connection.commit();
+      } catch (error) {
+        await connection.rollback();
+        throw error;
+      } finally {
+        connection.release();
+      }
     } else {
       // Soft delete - update status to inactive
       await this.pool.execute(

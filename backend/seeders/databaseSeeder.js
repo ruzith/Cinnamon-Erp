@@ -1125,6 +1125,7 @@ const generateCuttingAdvancePayments = async (connection) => {
   const [contractors] = await connection.query('SELECT id FROM cutting_contractors');
   const [users] = await connection.query('SELECT id FROM users WHERE role = "admin" LIMIT 1');
   const payments = [];
+  let globalCounter = 1; // Add global counter
 
   // Generate some advance payments for each contractor
   for (const contractor of contractors) {
@@ -1134,9 +1135,17 @@ const generateCuttingAdvancePayments = async (connection) => {
       const date = new Date();
       date.setDate(date.getDate() - faker.number.int({ min: 0, max: 30 }));
 
+      // Generate receipt number using global counter
+      const year = date.getFullYear().toString().substr(-2);
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const receiptNumber = `CADV${year}${month}${globalCounter.toString().padStart(4, '0')}`;
+      globalCounter++; // Increment global counter
+
       payments.push({
         contractor_id: contractor.id,
         amount: faker.number.float({ min: 5000, max: 50000, multipleOf: 100 }),
+        receipt_number: receiptNumber,
+        payment_date: date.toISOString().split('T')[0],
         notes: faker.lorem.sentence(),
         status: faker.helpers.arrayElement(['pending', 'paid', 'used', 'cancelled']),
         created_at: date,
@@ -1159,14 +1168,18 @@ const seedCuttingAdvancePayments = async (connection) => {
       INSERT INTO cutting_advance_payments (
         contractor_id,
         amount,
+        receipt_number,
+        payment_date,
         notes,
         status,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       payment.contractor_id,
       payment.amount,
+      payment.receipt_number,
+      payment.payment_date,
       payment.notes,
       payment.status,
       payment.created_at,
@@ -1482,16 +1495,17 @@ const generatePurchaseInvoices = async (connection) => {
       invoice_number: `PUR${date.getFullYear().toString().substr(-2)}${(date.getMonth() + 1).toString().padStart(2, '0')}${(i + 1).toString().padStart(4, '0')}`,
       contractor_id: selectedContractor.id,
       invoice_date: date,
-      due_date: new Date(date.getTime() + 15 * 24 * 60 * 60 * 1000),
       subtotal: totalAmount,
       total_amount: totalAmount,
       cutting_rate: cuttingRate,
       cutting_charges: cuttingCharges,
       advance_payment: advancePayment,
       final_amount: finalAmount,
-      status: ['draft', 'confirmed', 'paid', 'cancelled'][Math.floor(Math.random() * 4)],
+      status: faker.helpers.arrayElement(['draft', 'confirmed', 'paid', 'cancelled']),
       notes: faker.lorem.sentence(),
-      created_by: users[0].id
+      created_by: users[0].id,
+      created_at: new Date(),
+      updated_at: new Date()
     };
 
     invoices.push(invoice);
@@ -1520,6 +1534,7 @@ const generatePurchaseItems = async (connection, invoiceId) => {
     const deductWeight2 = faker.number.float({ min: 0, max: totalWeight * 0.05, multipleOf: 0.1 }); // Max 5% deduction
     const netWeight = totalWeight - deductWeight1 - deductWeight2;
     const rate = finishedGood.selling_price || faker.number.float({ min: 500, max: 1500, multipleOf: 0.01 });
+    const amount = (netWeight * rate).toFixed(2);
 
     return {
       invoice_id: invoiceId,
@@ -1529,7 +1544,7 @@ const generatePurchaseItems = async (connection, invoiceId) => {
       deduct_weight2: deductWeight2,
       net_weight: netWeight,
       rate: rate,
-      amount: netWeight * rate
+      amount: amount
     };
   });
 };
@@ -1680,7 +1695,7 @@ const generateSalaryAdvances = async (connection, count = 15) => {
       employee_id: faker.helpers.arrayElement(employees).id,
       amount: faker.number.float({ min: 5000, max: 50000, multipleOf: 100 }),
       request_date: requestDate.toISOString().split('T')[0],
-      approval_status: status,
+      status: status,
       approved_by: status !== 'pending' ? users[0].id : null,
       notes: faker.helpers.arrayElement([
         'Emergency medical expenses',
@@ -1914,6 +1929,101 @@ const generateManufacturingPaymentUsages = async (connection, payments) => {
     }
   }
   return usages;
+};
+
+// Add this function after generatePurchaseItems
+const seedPurchaseInvoices = async (connection) => {
+  console.log('Seeding purchase invoices...');
+
+  const purchaseInvoices = await generatePurchaseInvoices(connection);
+
+  for (const invoice of purchaseInvoices) {
+    // Insert the invoice first
+    const [result] = await connection.execute(`
+      INSERT INTO purchase_invoices (
+        invoice_number,
+        contractor_id,
+        invoice_date,
+        subtotal,
+        total_amount,
+        cutting_rate,
+        cutting_charges,
+        advance_payment,
+        final_amount,
+        status,
+        notes,
+        created_by,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    `, [
+      invoice.invoice_number,
+      invoice.contractor_id,
+      invoice.invoice_date,
+      invoice.subtotal || 0,
+      invoice.total_amount || 0,
+      invoice.cutting_rate || 0,
+      invoice.cutting_charges || 0,
+      invoice.advance_payment || 0,
+      invoice.final_amount || 0,
+      invoice.status,
+      invoice.notes,
+      invoice.created_by
+    ]);
+
+    const invoiceId = result.insertId;
+
+    // Generate and insert purchase items
+    const purchaseItems = await generatePurchaseItems(connection, invoiceId);
+    for (const item of purchaseItems) {
+      await connection.execute(`
+        INSERT INTO purchase_items (
+          invoice_id,
+          grade_id,
+          total_weight,
+          deduct_weight1,
+          deduct_weight2,
+          net_weight,
+          rate,
+          amount
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        invoiceId,
+        item.grade_id,
+        item.total_weight,
+        item.deduct_weight1,
+        item.deduct_weight2,
+        item.net_weight,
+        item.rate,
+        item.amount
+      ]);
+
+      // Update inventory quantity
+      await connection.execute(
+        'UPDATE inventory SET quantity = quantity + ? WHERE id = ?',
+        [item.net_weight, item.grade_id]
+      );
+
+      // Create inventory transaction record
+      await connection.execute(`
+        INSERT INTO inventory_transactions (
+          item_id,
+          type,
+          quantity,
+          reference,
+          notes
+        ) VALUES (?, ?, ?, ?, ?)
+      `, [
+        item.grade_id,
+        'IN',
+        item.net_weight,
+        invoice.invoice_number,
+        `Purchase from manufacturing invoice ${invoice.invoice_number}`
+      ]);
+    }
+  }
+
+  console.log('Purchase invoices seeded successfully');
 };
 
 const seedData = async () => {
@@ -2326,137 +2436,6 @@ const seedData = async () => {
       });
     }
 
-    // // Add manufacturing orders after products are seeded
-    // console.log('Seeding manufacturing orders...');
-    // const manufacturingOrders = await generateManufacturingOrders(connection);
-    // const insertedOrders = [];
-    // for (const order of manufacturingOrders) {
-    //   const [result] = await connection.query('INSERT INTO manufacturing_orders SET ?', order);
-    //   insertedOrders.push({ ...order, id: result.insertId });
-    // }
-
-    // // After seeding manufacturing orders, seed their materials
-    // console.log('Seeding manufacturing materials...');
-    // for (const order of insertedOrders) {
-    //   const materials = await generateManufacturingMaterials(connection, order.id);
-    //   for (const material of materials) {
-    //     await connection.query('INSERT INTO manufacturing_materials SET ?', material);
-
-    //     // Update inventory quantities for used materials
-    //     await connection.query(
-    //       'UPDATE inventory SET quantity = quantity - ? WHERE id = ?',
-    //       [material.quantity_used, material.material_id]
-    //     );
-
-    //     // Create inventory transaction record
-    //     await connection.query(
-    //       'INSERT INTO inventory_transactions SET ?',
-    //       {
-    //         item_id: material.material_id,
-    //         type: 'OUT',
-    //         quantity: material.quantity_used,
-    //         reference: `MO-${order.order_number}`,
-    //         notes: 'Used in manufacturing'
-    //       }
-    //     );
-    //   }
-    // }
-
-    // Seed revenue transactions
-    console.log('Seeding revenue transactions...');
-    const revenueTransactions = await generateRevenueTransactions(connection);
-    for (const { transaction, entries } of revenueTransactions) {
-      // Insert transaction
-      const [result] = await connection.query(
-        `INSERT INTO transactions
-         (date, type, category, amount, description, reference, payment_method, status, created_by, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          transaction.date,
-          transaction.type,
-          transaction.category,
-          transaction.amount,
-          transaction.description,
-          transaction.reference,
-          transaction.payment_method,
-          transaction.status,
-          transaction.created_by,
-          transaction.created_at,
-          transaction.updated_at
-        ]
-      );
-
-      // Insert transaction entries
-      for (const entry of entries) {
-        await connection.query(
-          `INSERT INTO transactions_entries
-           (transaction_id, account_id, description, debit, credit, created_at)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [
-            result.insertId,
-            entry.account_id,
-            entry.description,
-            entry.debit,
-            entry.credit,
-            entry.created_at
-          ]
-        );
-
-        // Update account balances for posted transactions
-        if (transaction.status === 'posted') {
-          await connection.query(
-            'UPDATE accounts SET balance = balance + ? - ? WHERE id = ?',
-            [entry.debit, entry.credit, entry.account_id]
-          );
-        }
-      }
-    }
-
-    // Seed employee groups
-    console.log('Seeding employee groups...');
-    const employeeGroups = generateEmployeeGroups();
-    for (const group of employeeGroups) {
-      await connection.query('INSERT INTO employee_groups SET ?', group);
-    }
-
-    // Assign employees to groups
-    console.log('Assigning employees to groups...');
-    const groupAssignments = await assignEmployeesToGroups(connection);
-    for (const assignment of groupAssignments) {
-      await connection.query('INSERT INTO employee_group_members SET ?', assignment);
-    }
-
-    // Add HR management seeding in the seedData function
-    console.log('Seeding salary advances...');
-    const salaryAdvances = await generateSalaryAdvances(connection);
-    for (const advance of salaryAdvances) {
-      await connection.query('INSERT INTO salary_advances SET ?', advance);
-    }
-
-    console.log('Seeding employee payrolls...');
-    const employeePayrolls = await generateEmployeePayrolls(connection);
-    for (const payroll of employeePayrolls) {
-      const [result] = await connection.query('INSERT INTO employee_payrolls SET ?', payroll);
-
-      // Generate and insert payroll items
-      const items = await generateEmployeePayrollItems(
-        connection,
-        result.insertId,
-        payroll.additional_amount,
-        payroll.deductions
-      );
-
-      for (const item of items) {
-        await connection.query('INSERT INTO employee_payroll_items SET ?', item);
-      }
-    }
-
-    console.log('Seeding employee work hours...');
-    const workHours = await generateEmployeeWorkHours(connection);
-    for (const workHour of workHours) {
-      await connection.query('INSERT INTO employee_work_hours SET ?', workHour);
-    }
-
     // Add this inside the seedData function, after seeding cutting payments
     console.log('Seeding cutting advance payments...');
     const cuttingAdvancePayments = await generateCuttingAdvancePayments(connection);
@@ -2464,85 +2443,21 @@ const seedData = async () => {
       await connection.query('INSERT INTO cutting_advance_payments SET ?', payment);
     }
 
-    // Update the seedData function to use the new purchase items generation
-    console.log('Seeding purchase invoices and items...');
-    const purchaseInvoices = await generatePurchaseInvoices(connection);
-    for (const invoice of purchaseInvoices) {
-      // Insert the invoice first with temporary totals
-      const [result] = await connection.query('INSERT INTO purchase_invoices SET ?', invoice);
-      const invoiceId = result.insertId;
+    // Seed purchase invoices
+    await seedPurchaseInvoices(connection);
 
-      // Generate and insert purchase items
-      const purchaseItems = await generatePurchaseItems(connection, invoiceId);
-      for (const item of purchaseItems) {
-        await connection.query('INSERT INTO purchase_items SET ?', item);
-      }
-
-      // Calculate and update invoice totals
-      const [itemTotals] = await connection.query(
-        'SELECT SUM(amount) as total_amount FROM purchase_items WHERE invoice_id = ?',
-        [invoiceId]
-      );
-
-      const totalAmount = itemTotals[0].total_amount || 0;
-
-      await connection.query(
-        'UPDATE purchase_invoices SET subtotal = ?, total_amount = ? WHERE id = ?',
-        [totalAmount, totalAmount, invoiceId]
-      );
-    }
-
-    // Modify the seedData function to include the new seeding
-    // Add this inside the try block of seedData, after seeding advance payments
-    console.log('Seeding manufacturing payments...');
-    const manufacturingPayments = await generateManufacturingPayments(connection);
-    const insertedPayments = [];
-    for (const payment of manufacturingPayments) {
-      const [result] = await connection.execute(
-        `INSERT INTO manufacturing_payments
-         (contractor_id, assignment_id, receipt_number, quantity_kg, price_per_kg, amount, payment_date, notes, status, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        payment
-      );
-      insertedPayments.push({ ...payment, id: result.insertId });
-    }
-
-    console.log('Seeding manufacturing payment usages...');
-    const paymentUsages = await generateManufacturingPaymentUsages(connection, insertedPayments);
-    for (const usage of paymentUsages) {
-      await connection.execute(
-        'INSERT INTO manufacturing_payment_usages (payment_id, advance_payment_id, amount_used) VALUES (?, ?, ?)',
-        usage
-      );
-
-      // Update advance payment status if fully used
-      const [advancePayment] = await connection.execute(
-        'SELECT amount FROM manufacturing_advance_payments WHERE id = ?',
-        [usage[1]] // advance_payment_id is second element
-      );
-
-      const [totalUsed] = await connection.execute(
-        'SELECT SUM(amount_used) as total FROM manufacturing_payment_usages WHERE advance_payment_id = ?',
-        [usage[1]]
-      );
-
-      if (totalUsed[0].total >= advancePayment[0].amount) {
-        await connection.execute(
-          'UPDATE manufacturing_advance_payments SET status = "used" WHERE id = ?',
-          [usage[1]]
-        );
-      }
-    }
+    // Re-enable foreign key checks
+    console.log('Re-enabling foreign key checks...');
+    await connection.query('SET FOREIGN_KEY_CHECKS = 1');
 
     await connection.commit();
     console.log('All data seeded successfully!');
   } catch (error) {
     await connection.rollback();
-    console.error(`Error: ${error.message}`);
-    process.exit(1);
+    console.error('Error seeding data:', error);
+    throw error;
   } finally {
     connection.release();
-    process.exit(0);
   }
 };
 

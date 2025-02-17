@@ -1260,19 +1260,21 @@ const CuttingManagement = () => {
                             <PaymentIcon />
                           </IconButton>
                         )}
-                        <IconButton
-                          size="small"
-                          onClick={() =>
-                            handleOpenAdvancePaymentDialog({
-                              ...assignment,
-                              id: assignment.contractor_id,
-                            })
-                          }
-                          sx={{ color: "warning.main" }}
-                          title="Advance Payment"
-                        >
-                          <MoneyIcon />
-                        </IconButton>
+                        {assignment.status !== "completed" && (
+                          <IconButton
+                            size="small"
+                            onClick={() =>
+                              handleOpenAdvancePaymentDialog({
+                                ...assignment,
+                                id: assignment.contractor_id,
+                              })
+                            }
+                            sx={{ color: "warning.main" }}
+                            title="Advance Payment"
+                          >
+                            <MoneyIcon />
+                          </IconButton>
+                        )}
                         <IconButton
                           size="small"
                           onClick={() => handleEditAssignment(assignment)}

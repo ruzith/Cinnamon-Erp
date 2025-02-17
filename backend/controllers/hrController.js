@@ -83,13 +83,13 @@ const approvePayroll = async (req, res) => {
     // Update related salary advances to approved
     await connection.execute(`
       UPDATE salary_advances
-      SET approval_status = 'approved',
+      SET status = 'approved',
           updated_at = CURRENT_TIMESTAMP,
           approved_by = ?
       WHERE employee_id = ?
       AND MONTH(request_date) = ?
       AND YEAR(request_date) = ?
-      AND approval_status = 'pending'
+      AND status = 'pending'
     `, [
       userId,
       payroll.employee_id,

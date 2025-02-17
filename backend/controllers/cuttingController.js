@@ -843,24 +843,22 @@ exports.createAdvancePayment = async (req, res) => {
       return res.status(400).json({ message: 'Contractor ID and amount are required' });
     }
 
-    // Check if contractor exists and is active
-    const [contractor] = await connection.execute(
-      'SELECT * FROM cutting_contractors WHERE id = ? AND status = "active"',
-      [contractor_id]
+    // Generate receipt number
+    const date = new Date();
+    const year = date.getFullYear().toString().substr(-2);
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const [countResult] = await connection.execute(
+      'SELECT COUNT(*) as count FROM cutting_advance_payments WHERE YEAR(created_at) = YEAR(CURRENT_DATE)'
     );
-
-    if (!contractor[0]) {
-      await connection.rollback();
-      connection.release();
-      return res.status(400).json({ message: 'Invalid or inactive contractor' });
-    }
+    const count = countResult[0].count + 1;
+    const receipt_number = `CADV${year}${month}${count.toString().padStart(4, '0')}`;
 
     // Insert advance payment
     const [result] = await connection.execute(
       `INSERT INTO cutting_advance_payments
-       (contractor_id, amount, notes, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, NOW(), NOW())`,
-      [contractor_id, amount, notes, status]
+       (contractor_id, amount, receipt_number, payment_date, notes, status, created_at, updated_at)
+       VALUES (?, ?, ?, CURRENT_DATE, ?, ?, NOW(), NOW())`,
+      [contractor_id, amount, receipt_number, notes, status]
     );
 
     await connection.commit();
@@ -870,6 +868,8 @@ exports.createAdvancePayment = async (req, res) => {
       id: result.insertId,
       contractor_id,
       amount,
+      receipt_number,
+      payment_date: new Date().toISOString().split('T')[0],
       notes,
       status,
       created_at: new Date()

@@ -103,7 +103,21 @@ const deleteEmployee = async (req, res) => {
       return res.status(404).json({ message: 'Employee not found' });
     }
 
-    // Delete payroll items first
+    // Delete transaction entries first
+    await connection.execute(
+      'DELETE te FROM transactions_entries te ' +
+      'INNER JOIN transactions t ON te.transaction_id = t.id ' +
+      'WHERE t.employee_id = ?',
+      [req.params.id]
+    );
+
+    // Then delete transactions
+    await connection.execute(
+      'DELETE FROM transactions WHERE employee_id = ?',
+      [req.params.id]
+    );
+
+    // Delete payroll items
     await connection.execute(
       'DELETE pi FROM employee_payroll_items pi ' +
       'INNER JOIN employee_payrolls p ON pi.payroll_id = p.id ' +
@@ -111,7 +125,7 @@ const deleteEmployee = async (req, res) => {
       [req.params.id]
     );
 
-    // Then delete payroll records
+    // Delete payroll records
     await connection.execute(
       'DELETE FROM employee_payrolls WHERE employee_id = ?',
       [req.params.id]

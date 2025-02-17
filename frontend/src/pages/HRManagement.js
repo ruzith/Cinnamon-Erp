@@ -413,8 +413,8 @@ export default function HRManagement() {
   // Calculate summary statistics
   const summaryStats = {
     totalAdvances: advances.length,
-    approvedAdvances: advances.filter(adv => adv.approval_status === 'approved').length,
-    pendingAdvances: advances.filter(adv => adv.approval_status === 'pending').length,
+    approvedAdvances: advances.filter(adv => adv.status === 'approved').length,
+    pendingAdvances: advances.filter(adv => adv.status === 'pending').length,
     totalPayrolls: payrolls.length,
   };
 
@@ -752,8 +752,8 @@ export default function HRManagement() {
                       <TableCell>{formatCurrency(activity.amount, false)}</TableCell>
                       <TableCell>
                         <Chip
-                          label={activity.approval_status}
-                          color={getStatusColor(activity.approval_status)}
+                          label={activity.status}
+                          color={getStatusColor(activity.status)}
                           size="small"
                         />
                       </TableCell>
@@ -798,72 +798,36 @@ export default function HRManagement() {
       const totalAdditional = formData.additional_amounts.reduce((sum, item) => sum + parseFloat(item.amount), 0);
       const totalDeductions = formData.deduction_items.reduce((sum, item) => sum + parseFloat(item.amount), 0);
 
-      // Get employee's basic salary and pending advances
+      // Get employee's basic salary
       const employee = employees.find(emp => emp.id === formData.employee_id);
       const basicSalary = employee ? parseFloat(employee.basic_salary) : 0;
 
-      // Fetch approved salary advances for this employee
-      const advancesResponse = await axios.get(`/api/hr/salary-advances/employee/${formData.employee_id}`);
+      // Calculate net salary
+      const netSalary = basicSalary + totalAdditional - totalDeductions;
 
-      // Filter advances for the specific month and year
-      const monthAdvances = advancesResponse.data
-        .filter(adv => {
-          const advanceDate = new Date(adv.request_date);
-          return advanceDate.getMonth() + 1 === formData.month &&
-                 advanceDate.getFullYear() === formData.year &&
-                 adv.approval_status === 'approved';
-        })
-        .reduce((sum, adv) => sum + parseFloat(adv.amount), 0);
-
-      // Total deductions include both deduction items and monthly advances
-      const totalAllDeductions = totalDeductions + monthAdvances;
-
-      // Ensure all numbers are properly parsed and calculated
-      const finalBasicSalary = parseFloat(basicSalary.toFixed(2));
-      const finalAdditional = parseFloat(totalAdditional.toFixed(2));
-      const finalDeductions = parseFloat(totalAllDeductions.toFixed(2));
-      const finalNetSalary = parseFloat((finalBasicSalary + finalAdditional - finalDeductions).toFixed(2));
-
-      // Create main payroll record with correct calculations
-      const payrollResponse = await axios.post('/api/hr/payroll', {
+      // Create payroll with all data in a single request
+      const response = await axios.post('/api/payroll/generate', {
         employee_id: formData.employee_id,
         month: parseInt(formData.month),
         year: parseInt(formData.year),
-        basic_salary: finalBasicSalary,
-        additional_amount: finalAdditional,
-        deductions: finalDeductions,
-        net_salary: finalNetSalary,
-        created_by: user.id
+        basic_salary: basicSalary,
+        additional_amount: totalAdditional,
+        deductions: totalDeductions,
+        net_salary: netSalary,
+        additional_amounts: formData.additional_amounts,
+        deduction_items: formData.deduction_items
       });
 
-      // If payroll created successfully, add the items
-      if (payrollResponse.data?.id) {
-        // Add additional amounts
-        for (const item of formData.additional_amounts) {
-          await axios.post('/api/hr/payroll-items', {
-            payroll_id: payrollResponse.data.id,
-            type: 'addition',
-            description: item.description,
-            amount: parseFloat(item.amount)
-          });
-        }
-
-        // Add deductions
-        for (const item of formData.deduction_items) {
-          await axios.post('/api/hr/payroll-items', {
-            payroll_id: payrollResponse.data.id,
-            type: 'deduction',
-            description: item.description,
-            amount: parseFloat(item.amount)
-          });
-        }
+      if (response.data) {
+        enqueueSnackbar('Payroll generated successfully', { variant: 'success' });
+        // Fetch both payrolls and advances to update the UI
+        await Promise.all([fetchPayrolls(), fetchAdvances()]);
+        setOpenPayrollDialog(false);
       }
-      enqueueSnackbar('Payroll generated successfully', { variant: 'success' });
     } catch (error) {
       console.error('Error generating payroll:', error);
-      enqueueSnackbar('Error generating payroll', { variant: 'error' });
+      enqueueSnackbar(error.response?.data?.message || 'Error generating payroll', { variant: 'error' });
     }
-    fetchPayrolls();
   };
 
   return (
@@ -1030,13 +994,13 @@ export default function HRManagement() {
                     <TableCell>{format(new Date(advance.request_date), 'dd/MM/yyyy')}</TableCell>
                     <TableCell>
                       <Chip
-                        label={advance.approval_status}
-                        color={getStatusColor(advance.approval_status)}
+                        label={advance.status}
+                        color={getStatusColor(advance.status)}
                         size="small"
                       />
                     </TableCell>
                     <TableCell align="right">
-                      {advance.approval_status === 'pending' && (
+                      {advance.status === 'pending' && (
                         <>
                           <IconButton
                             size="small"

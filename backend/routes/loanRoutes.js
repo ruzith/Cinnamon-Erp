@@ -148,9 +148,16 @@ router.post('/payments', protect, authorize('admin', 'accountant'), async (req, 
   try {
     const { loan_id, amount, payment_date, reference, status, notes, createAccountingEntry, accountingData } = req.body;
 
+    // Validate required fields
+    if (!loan_id || !amount || !payment_date) {
+      return res.status(400).json({
+        message: 'Missing required fields: loan_id, amount, payment_date'
+      });
+    }
+
     await connection.beginTransaction();
 
-    // First, get the account IDs
+    // First, get the account IDs for accounting entries
     const [accounts] = await connection.execute(
       'SELECT id, code FROM accounts WHERE code IN (?, ?)',
       ['1001', '1002'] // Cash and Accounts Receivable
@@ -184,11 +191,24 @@ router.post('/payments', protect, authorize('admin', 'accountant'), async (req, 
       amount,
       payment_date,
       reference,
-      paymentMethod, // Use mapped payment method
+      paymentMethod,
       status || 'completed',
       notes || null,
       req.user.id
     ]);
+
+    const paymentId = paymentResult.insertId;
+
+    // Update loan remaining balance and status
+    await connection.execute(`
+      UPDATE loans
+      SET remaining_balance = remaining_balance - ?,
+          status = CASE
+            WHEN remaining_balance - ? = 0 AND status != 'voided' THEN 'completed'
+            ELSE status
+          END
+      WHERE id = ?
+    `, [amount, amount, loan_id]);
 
     // Handle accounting entry if requested
     if (createAccountingEntry && accountingData) {
@@ -206,7 +226,7 @@ router.post('/payments', protect, authorize('admin', 'accountant'), async (req, 
         'loan_repayment',
         amount,
         'posted',
-        paymentMethod, // Use mapped payment method
+        paymentMethod,
         req.user.id
       ]);
 
@@ -252,7 +272,29 @@ router.post('/payments', protect, authorize('admin', 'accountant'), async (req, 
     }
 
     await connection.commit();
-    res.status(201).json(paymentResult);
+
+    // Get payment details with related information
+    const [payment] = await pool.execute(`
+      SELECT lp.*,
+             u.name as created_by_name,
+             l.loan_number,
+             l.borrower_type,
+             l.remaining_balance as loan_remaining_balance,
+             l.status as loan_status,
+             CASE
+               WHEN l.borrower_type = 'employee' THEN e.name
+               WHEN l.borrower_type = 'contractor' THEN COALESCE(mc.name, cc.name)
+             END as borrower_name
+      FROM loan_payments lp
+      JOIN loans l ON lp.loan_id = l.id
+      LEFT JOIN users u ON lp.created_by = u.id
+      LEFT JOIN employees e ON l.borrower_type = 'employee' AND l.borrower_id = e.id
+      LEFT JOIN manufacturing_contractors mc ON l.borrower_type = 'contractor' AND l.borrower_id = mc.id
+      LEFT JOIN cutting_contractors cc ON l.borrower_type = 'contractor' AND l.borrower_id = cc.id
+      WHERE lp.id = ?
+    `, [paymentId]);
+
+    res.status(201).json(payment[0]);
 
   } catch (error) {
     await connection.rollback();
@@ -283,57 +325,6 @@ router.get('/payments', protect, async (req, res) => {
     res.json(rows);
   } catch (error) {
     res.status(400).json({ message: error.message });
-  }
-});
-
-// Create loan payment
-router.post('/payments', protect, authorize('admin', 'accountant'), async (req, res) => {
-  try {
-    const { loan_id, amount, payment_date, reference, status, notes, createAccountingEntry, accountingData } = req.body;
-
-    // Validate required fields
-    if (!loan_id || !amount || !payment_date) {
-      return res.status(400).json({
-        message: 'Missing required fields: loan_id, amount, payment_date'
-      });
-    }
-
-    // Get loan details
-    const [loan] = await pool.execute(
-      'SELECT * FROM loans WHERE id = ?',
-      [loan_id]
-    );
-
-    if (!loan[0]) {
-      return res.status(404).json({ message: 'Loan not found' });
-    }
-
-    const paymentData = {
-      loan_id,
-      amount,
-      payment_date,
-      reference,
-      status: status || 'completed',
-      notes,
-      created_by: req.user.id
-    };
-
-    // Create payment using LoanPayment model
-    const payment = await LoanPayment.create(paymentData);
-
-    // Handle accounting entry if requested
-    if (createAccountingEntry && accountingData) {
-      // Create accounting entry logic here
-      // This would typically involve creating a transaction record
-    }
-
-    res.status(201).json(payment);
-  } catch (error) {
-    console.error('Error creating payment:', error);
-    res.status(400).json({
-      message: 'Error creating payment',
-      error: error.message
-    });
   }
 });
 
@@ -408,7 +399,145 @@ router.put('/:id', protect, authorize('admin', 'accountant'), async (req, res) =
     await connection.beginTransaction();
 
     try {
-      // Update loan record
+      // Get current loan details to calculate remaining balance adjustment
+      const [currentLoan] = await connection.execute(
+        'SELECT amount, remaining_balance, status FROM loans WHERE id = ?',
+        [loanId]
+      );
+
+      if (!currentLoan[0]) {
+        await connection.rollback();
+        connection.release();
+        return res.status(404).json({ message: 'Loan not found' });
+      }
+
+      // Calculate the difference in amount and adjust remaining balance proportionally
+      const amountDifference = Number(updateData.amount) - Number(currentLoan[0].amount);
+      const newRemainingBalance = Number(currentLoan[0].remaining_balance) + amountDifference;
+
+      // Determine the status based on remaining balance and current status
+      let newStatus = updateData.status || currentLoan[0].status;
+      if (newRemainingBalance <= 0 && newStatus !== 'voided') {
+        newStatus = 'completed';
+      } else if (newRemainingBalance > 0 && newStatus === 'completed') {
+        newStatus = 'active';
+      }
+
+      // If amount has changed, create accounting entries
+      if (amountDifference !== 0 && currentLoan[0].status !== 'voided') {
+        // Get the account IDs for accounting entries
+        const [accounts] = await connection.execute(
+          'SELECT id, code FROM accounts WHERE code IN (?, ?)',
+          ['1001', '1002'] // Cash and Accounts Receivable
+        );
+
+        const cashAccount = accounts.find(a => a.code === '1001');
+        const receivablesAccount = accounts.find(a => a.code === '1002');
+
+        if (!cashAccount || !receivablesAccount) {
+          throw new Error('Required accounts not found. Please check account configuration.');
+        }
+
+        // Create transaction record for the adjustment
+        const [result] = await connection.execute(`
+          INSERT INTO transactions (
+            date, reference, description, type, category,
+            amount, status, payment_method, created_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          new Date(),
+          `LOAN-ADJ-${loanId}`,
+          `Loan amount adjustment for loan #${loanId}`,
+          amountDifference > 0 ? 'expense' : 'revenue',
+          'loan_adjustment',
+          Math.abs(amountDifference),
+          'posted',
+          'cash',
+          req.user.id
+        ]);
+
+        const transactionId = result.insertId;
+
+        if (amountDifference > 0) {
+          // If loan amount increased
+          // Debit Loans Receivable
+          await connection.execute(`
+            INSERT INTO transactions_entries (
+              transaction_id, account_id, description, debit, credit
+            ) VALUES (?, ?, ?, ?, ?)
+          `, [
+            transactionId,
+            receivablesAccount.id,
+            `Loan amount increase adjustment`,
+            amountDifference,
+            0
+          ]);
+
+          // Credit Cash
+          await connection.execute(`
+            INSERT INTO transactions_entries (
+              transaction_id, account_id, description, debit, credit
+            ) VALUES (?, ?, ?, ?, ?)
+          `, [
+            transactionId,
+            cashAccount.id,
+            `Loan amount increase adjustment`,
+            0,
+            amountDifference
+          ]);
+
+          // Update account balances
+          await connection.execute(
+            'UPDATE accounts SET balance = balance + ? WHERE id = ?',
+            [amountDifference, receivablesAccount.id]
+          );
+
+          await connection.execute(
+            'UPDATE accounts SET balance = balance - ? WHERE id = ?',
+            [amountDifference, cashAccount.id]
+          );
+        } else {
+          // If loan amount decreased
+          // Debit Cash
+          await connection.execute(`
+            INSERT INTO transactions_entries (
+              transaction_id, account_id, description, debit, credit
+            ) VALUES (?, ?, ?, ?, ?)
+          `, [
+            transactionId,
+            cashAccount.id,
+            `Loan amount decrease adjustment`,
+            Math.abs(amountDifference),
+            0
+          ]);
+
+          // Credit Loans Receivable
+          await connection.execute(`
+            INSERT INTO transactions_entries (
+              transaction_id, account_id, description, debit, credit
+            ) VALUES (?, ?, ?, ?, ?)
+          `, [
+            transactionId,
+            receivablesAccount.id,
+            `Loan amount decrease adjustment`,
+            0,
+            Math.abs(amountDifference)
+          ]);
+
+          // Update account balances
+          await connection.execute(
+            'UPDATE accounts SET balance = balance + ? WHERE id = ?',
+            [Math.abs(amountDifference), cashAccount.id]
+          );
+
+          await connection.execute(
+            'UPDATE accounts SET balance = balance - ? WHERE id = ?',
+            [Math.abs(amountDifference), receivablesAccount.id]
+          );
+        }
+      }
+
+      // Update loan record with adjusted remaining balance
       const [result] = await connection.execute(`
         UPDATE loans
         SET borrower_type = ?,
@@ -422,7 +551,8 @@ router.put('/:id', protect, authorize('admin', 'accountant'), async (req, res) =
             purpose = ?,
             collateral = ?,
             status = ?,
-            notes = ?
+            notes = ?,
+            remaining_balance = ?
         WHERE id = ?`,
         [
           updateData.borrower_type,
@@ -435,8 +565,9 @@ router.put('/:id', protect, authorize('admin', 'accountant'), async (req, res) =
           updateData.end_date,
           updateData.purpose || null,
           updateData.collateral || null,
-          updateData.status || 'active',
+          newStatus,
           updateData.notes || null,
+          newRemainingBalance,
           loanId
         ]
       );
@@ -480,7 +611,6 @@ router.put('/:id', protect, authorize('admin', 'accountant'), async (req, res) =
       }
 
       await connection.commit();
-      connection.release();
 
       // Get updated loan details
       const [updatedLoan] = await pool.execute(`
@@ -605,9 +735,9 @@ router.delete('/:id', protect, authorize('admin'), async (req, res) => {
 
     const loanId = req.params.id;
 
-    // Check if loan exists and get its status
+    // Check if loan exists and get its details
     const [loan] = await connection.execute(
-      'SELECT status, remaining_balance FROM loans WHERE id = ?',
+      'SELECT status, remaining_balance, amount FROM loans WHERE id = ?',
       [loanId]
     );
 
@@ -626,6 +756,79 @@ router.delete('/:id', protect, authorize('admin'), async (req, res) => {
       });
     }
 
+    // If loan is not voided, reverse the accounting entries
+    if (loan[0].status !== 'voided' && loan[0].amount > 0) {
+      // Get the account IDs for accounting entries
+      const [accounts] = await connection.execute(
+        'SELECT id, code FROM accounts WHERE code IN (?, ?)',
+        ['1001', '1002'] // Cash and Accounts Receivable
+      );
+
+      const cashAccount = accounts.find(a => a.code === '1001');
+      const receivablesAccount = accounts.find(a => a.code === '1002');
+
+      if (!cashAccount || !receivablesAccount) {
+        throw new Error('Required accounts not found. Please check account configuration.');
+      }
+
+      // Create transaction record for the reversal
+      const [result] = await connection.execute(`
+        INSERT INTO transactions (
+          date, reference, description, type, category,
+          amount, status, payment_method, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        new Date(),
+        `LOAN-DEL-${loanId}`,
+        `Loan deletion reversal for loan #${loanId}`,
+        'revenue',
+        'loan_reversal',
+        loan[0].amount,
+        'posted',
+        'cash',
+        req.user.id
+      ]);
+
+      const transactionId = result.insertId;
+
+      // Debit Cash (reverse the original credit)
+      await connection.execute(`
+        INSERT INTO transactions_entries (
+          transaction_id, account_id, description, debit, credit
+        ) VALUES (?, ?, ?, ?, ?)
+      `, [
+        transactionId,
+        cashAccount.id,
+        `Loan deletion reversal`,
+        loan[0].amount,
+        0
+      ]);
+
+      // Credit Loans Receivable (reverse the original debit)
+      await connection.execute(`
+        INSERT INTO transactions_entries (
+          transaction_id, account_id, description, debit, credit
+        ) VALUES (?, ?, ?, ?, ?)
+      `, [
+        transactionId,
+        receivablesAccount.id,
+        `Loan deletion reversal`,
+        0,
+        loan[0].amount
+      ]);
+
+      // Update account balances
+      await connection.execute(
+        'UPDATE accounts SET balance = balance + ? WHERE id = ?',
+        [loan[0].amount, cashAccount.id]
+      );
+
+      await connection.execute(
+        'UPDATE accounts SET balance = balance - ? WHERE id = ?',
+        [loan[0].amount, receivablesAccount.id]
+      );
+    }
+
     // Delete in correct order to maintain referential integrity:
 
     // 1. First delete loan payments (they reference both loan and schedule)
@@ -634,7 +837,7 @@ router.delete('/:id', protect, authorize('admin'), async (req, res) => {
       [loanId]
     );
 
-    // 2. Then delete loan schedule
+    // 2. Delete loan schedule
     await connection.execute(
       'DELETE FROM loan_schedule WHERE loan_id = ?',
       [loanId]
@@ -676,35 +879,132 @@ router.patch('/:id/void', protect, authorize('admin'), async (req, res) => {
       });
     }
 
+    // Get loan details
+    const [loan] = await connection.execute(
+      'SELECT amount, remaining_balance, status FROM loans WHERE id = ?',
+      [loanId]
+    );
+
+    if (!loan[0]) {
+      await connection.rollback();
+      connection.release();
+      return res.status(404).json({ message: 'Loan not found' });
+    }
+
+    if (loan[0].status === 'voided') {
+      await connection.rollback();
+      connection.release();
+      return res.status(400).json({ message: 'Loan is already voided' });
+    }
+
+    // If loan has a remaining balance, create reversal entries
+    if (loan[0].remaining_balance > 0) {
+      // Get the account IDs for accounting entries
+      const [accounts] = await connection.execute(
+        'SELECT id, code FROM accounts WHERE code IN (?, ?)',
+        ['1001', '1002'] // Cash and Accounts Receivable
+      );
+
+      const cashAccount = accounts.find(a => a.code === '1001');
+      const receivablesAccount = accounts.find(a => a.code === '1002');
+
+      if (!cashAccount || !receivablesAccount) {
+        throw new Error('Required accounts not found. Please check account configuration.');
+      }
+
+      // Create transaction record for the reversal
+      const [result] = await connection.execute(`
+        INSERT INTO transactions (
+          date, reference, description, type, category,
+          amount, status, payment_method, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        new Date(),
+        `LOAN-VOID-${loanId}`,
+        `Loan void reversal for loan #${loanId}`,
+        'revenue',
+        'loan_reversal',
+        loan[0].remaining_balance,
+        'posted',
+        'cash',
+        req.user.id
+      ]);
+
+      const transactionId = result.insertId;
+
+      // Debit Cash (reverse the original credit)
+      await connection.execute(`
+        INSERT INTO transactions_entries (
+          transaction_id, account_id, description, debit, credit
+        ) VALUES (?, ?, ?, ?, ?)
+      `, [
+        transactionId,
+        cashAccount.id,
+        `Loan void reversal`,
+        loan[0].remaining_balance,
+        0
+      ]);
+
+      // Credit Loans Receivable (reverse the original debit)
+      await connection.execute(`
+        INSERT INTO transactions_entries (
+          transaction_id, account_id, description, debit, credit
+        ) VALUES (?, ?, ?, ?, ?)
+      `, [
+        transactionId,
+        receivablesAccount.id,
+        `Loan void reversal`,
+        0,
+        loan[0].remaining_balance
+      ]);
+
+      // Update account balances
+      await connection.execute(
+        'UPDATE accounts SET balance = balance + ? WHERE id = ?',
+        [loan[0].remaining_balance, cashAccount.id]
+      );
+
+      await connection.execute(
+        'UPDATE accounts SET balance = balance - ? WHERE id = ?',
+        [loan[0].remaining_balance, receivablesAccount.id]
+      );
+    }
+
     // Update loan status to voided
     await connection.execute(
       'UPDATE loans SET status = ?, notes = CONCAT(COALESCE(notes, ""), "\nVoid reason: ", ?) WHERE id = ?',
       ['voided', reason, loanId]
     );
 
-    // Mark all unpaid schedule items as voided
-    await connection.execute(
-      'UPDATE loan_schedule SET status = ? WHERE loan_id = ? AND status IN ("pending", "partial")',
-      ['voided', loanId]
-    );
-
     await connection.commit();
 
-    // Get updated loan details using instance method
-    const loanModel = new Loan();
-    const updatedLoan = await loanModel.getWithDetails(loanId);
+    // Get updated loan details
+    const [updatedLoan] = await pool.execute(`
+      SELECT l.*,
+             CASE
+               WHEN l.borrower_type = 'employee' THEN e.name
+               WHEN l.borrower_type = 'contractor' THEN COALESCE(mc.name, cc.name)
+             END as borrower_name,
+             u.name as created_by_name
+      FROM loans l
+      LEFT JOIN employees e ON l.borrower_type = 'employee' AND l.borrower_id = e.id
+      LEFT JOIN manufacturing_contractors mc ON l.borrower_type = 'contractor' AND l.borrower_id = mc.id
+      LEFT JOIN cutting_contractors cc ON l.borrower_type = 'contractor' AND l.borrower_id = cc.id
+      LEFT JOIN users u ON l.created_by = u.id
+      WHERE l.id = ?
+    `, [loanId]);
 
-    connection.release();
-    res.json(updatedLoan);
+    res.json(updatedLoan[0]);
 
   } catch (error) {
     await connection.rollback();
-    connection.release();
     console.error('Error voiding loan:', error);
     res.status(500).json({
       message: 'Error voiding loan',
       error: error.message
     });
+  } finally {
+    connection.release();
   }
 });
 

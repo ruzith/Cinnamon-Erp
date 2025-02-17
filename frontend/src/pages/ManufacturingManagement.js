@@ -135,14 +135,6 @@ const Manufacturing = () => {
   const [selectedReport, setSelectedReport] = useState(null);
   const [purchases, setPurchases] = useState([]);
   const [assignmentDialogSource, setAssignmentDialogSource] = useState(null);
-  const [openCompletionDialog, setOpenCompletionDialog] = useState(false);
-  const [selectedAssignment, setSelectedAssignment] = useState(null);
-  const [completionFormData, setCompletionFormData] = useState({
-    assignment_id: "",
-    raw_item_id: "",
-    finished_good_id: "",
-    quantity_received: "",
-  });
   const [finishedGoods, setFinishedGoods] = useState([]);
   const { enqueueSnackbar } = useSnackbar();
   const [advancePayments, setAdvancePayments] = useState([]);
@@ -154,29 +146,7 @@ const Manufacturing = () => {
     advancePayments: [],
     assignments: [],
     manufacturingPayments: [],
-    purchaseInvoices: [] // Keep this for backward compatibility
-  });
-  const [openManufacturingPaymentDialog, setOpenManufacturingPaymentDialog] =
-    useState(false);
-  const [manufacturingPaymentFormData, setManufacturingPaymentFormData] =
-    useState({
-      contractor_id: "",
-      assignment_id: "",
-      quantity_kg: "",
-      price_per_kg: "",
-      total_amount: "",
-      notes: "",
-      status: "pending",
-      id: null,
-      finished_good_id: "",
-      selectedAdvancePayments: [],
-    });
-  const [manufacturingPayments, setManufacturingPayments] = useState([]);
-  const [payments, setPayments] = useState([]);
-  const [paymentFormData, setPaymentFormData] = useState({
-    amount: '',
-    date: new Date().toISOString().split('T')[0],
-    notes: ''
+    purchaseInvoices: []
   });
 
   useEffect(() => {
@@ -188,8 +158,20 @@ const Manufacturing = () => {
     fetchPurchases();
     fetchFinishedGoods();
     fetchAdvancePayments();
-    fetchManufacturingPayments();
   }, []);
+
+  useEffect(() => {
+    if (currentTab === 4) {
+      generateReport();
+    }
+    if (currentTab === 2) {
+      fetchPurchases();
+    }
+    if (currentTab === 0) {
+      fetchManufacturingContractors();
+      fetchAssignments();
+    }
+  }, [currentTab]);
 
   const fetchProducts = async () => {
     try {
@@ -237,18 +219,6 @@ const Manufacturing = () => {
       setAdvancePayments(response.data);
     } catch (error) {
       console.error("Error fetching advance payments:", error);
-    }
-  };
-
-  const fetchManufacturingPayments = async () => {
-    try {
-      const response = await axios.get("/api/manufacturing/payments");
-      setManufacturingPayments(response.data);
-    } catch (error) {
-      console.error("Error fetching manufacturing payments:", error);
-      enqueueSnackbar("Error fetching manufacturing payments", {
-        variant: "error",
-      });
     }
   };
 
@@ -575,19 +545,6 @@ const Manufacturing = () => {
     setCurrentTab(newValue);
   };
 
-  const handleProcessPayment = (contractor) => {
-    setManufacturingPaymentFormData({
-      contractor_id: contractor.id,
-      assignment_id: "",
-      quantity_kg: "",
-      price_per_kg: "",
-      total_amount: "",
-      notes: "",
-      status: "pending",
-    });
-    setOpenManufacturingPaymentDialog(true);
-  };
-
   const renderContractorActions = (contractor) => (
     <Box sx={{ display: "flex", gap: 1, justifyContent: "flex-end" }}>
       <Button
@@ -641,7 +598,7 @@ const Manufacturing = () => {
         advancePayments: [],
         assignments: [],
         manufacturingPayments: [],
-        purchaseInvoices: [] // Keep this for backward compatibility
+        purchaseInvoices: []
       });
       enqueueSnackbar("Contractor deleted and data reassigned successfully", {
         variant: "success",
@@ -1008,50 +965,50 @@ const Manufacturing = () => {
     setAssignmentDialogSource(null);
   };
 
-  const handleOpenCompletionDialog = (assignment) => {
-    setSelectedAssignment(assignment);
-    setCompletionFormData({
-      assignment_id: assignment.id,
-      raw_item_id: assignment.raw_material_id,
-      finished_good_id: "",
-      quantity_received: "",
-    });
-    setOpenCompletionDialog(true);
-  };
-
-  const handleCloseCompletionDialog = () => {
-    setOpenCompletionDialog(false);
-    setSelectedAssignment(null);
-    setCompletionFormData({
-      assignment_id: "",
-      raw_item_id: "",
-      finished_good_id: "",
-      quantity_received: "",
-    });
-  };
-
-  const handleCompletionSubmit = async (e) => {
-    e.preventDefault();
+  const handleCompleteAssignment = async (assignment) => {
     try {
-      await axios.post(
-        "/api/manufacturing/assignments/complete",
-        completionFormData
-      );
-      handleCloseCompletionDialog();
-      // Refresh all relevant data
-      await Promise.all([
-        fetchAssignments(),
-        fetchManufacturingContractors(),
-        fetchRawMaterials(),
-      ]);
-      enqueueSnackbar("Assignment completed successfully", {
+      await axios.put(`/api/manufacturing/assignments/${assignment.id}/complete`);
+
+      // Show success message
+      enqueueSnackbar('Assignment marked as completed successfully', {
+        variant: 'success'
+      });
+
+      // Refresh assignments list
+      fetchAssignments();
+    } catch (error) {
+      console.error('Error completing assignment:', error);
+      enqueueSnackbar(error.response?.data?.message || 'Error completing assignment', {
+        variant: 'error'
+      });
+    }
+  };
+
+  const handleEditAdvancePayment = (payment) => {
+    setSelectedPayment(payment);
+    setAdvancePaymentData({
+      amount: payment.amount,
+      notes: payment.notes || "",
+    });
+    setOpenPaymentDialog(true);
+  };
+
+  const handleDeleteAdvancePayment = async (paymentId) => {
+    if (!window.confirm("Are you sure you want to delete this advance payment?")) return;
+
+    try {
+      await axios.delete(`/api/manufacturing/advance-payments/${paymentId}`);
+      enqueueSnackbar("Advance payment deleted successfully", {
         variant: "success",
       });
+      await fetchAdvancePayments();
     } catch (error) {
-      console.error("Error completing assignment:", error);
+      console.error("Error deleting advance payment:", error);
       enqueueSnackbar(
-        error.response?.data?.message || "Error completing assignment",
-        { variant: "error" }
+        error.response?.data?.message || "Error deleting advance payment",
+        {
+          variant: "error",
+        }
       );
     }
   };
@@ -1072,38 +1029,6 @@ const Manufacturing = () => {
     }
   };
 
-  const handleDeleteAdvancePayment = async (paymentId) => {
-    if (
-      !window.confirm("Are you sure you want to delete this advance payment?")
-    )
-      return;
-
-    try {
-      await axios.delete(`/api/manufacturing/advance-payments/${paymentId}`);
-      enqueueSnackbar("Advance payment deleted successfully", {
-        variant: "success",
-      });
-      await fetchAdvancePayments();
-    } catch (error) {
-      console.error("Error deleting advance payment:", error);
-      enqueueSnackbar(
-        error.response?.data?.message || "Error deleting advance payment",
-        {
-          variant: "error",
-        }
-      );
-    }
-  };
-
-  const handleEditAdvancePayment = (payment) => {
-    setSelectedPayment(payment);
-    setAdvancePaymentData({
-      amount: payment.amount,
-      notes: payment.notes || "",
-    });
-    setOpenPaymentDialog(true);
-  };
-
   const handleCloseAdvancePaymentDialog = () => {
     setOpenPaymentDialog(false);
     setSelectedPayment(null);
@@ -1121,7 +1046,7 @@ const Manufacturing = () => {
       advancePayments: [],
       assignments: [],
       manufacturingPayments: [],
-      purchaseInvoices: [] // Keep this for backward compatibility
+      purchaseInvoices: []
     });
   };
 
@@ -1229,22 +1154,6 @@ const Manufacturing = () => {
                 />
               </ListItem>
             )}
-
-            {reassignmentData.purchaseInvoices.length > 0 && (
-              <ListItem>
-                <ListItemText
-                  primary={`${reassignmentData.purchaseInvoices.length} Purchase Invoices`}
-                  secondary={reassignmentData.purchaseInvoices
-                    .map(
-                      (i) =>
-                        `Invoice #${i.invoice_number}: ${formatCurrency(
-                          i.total_amount
-                        )}`
-                    )
-                    .join(", ")}
-                />
-              </ListItem>
-            )}
           </List>
         </Box>
       </DialogContent>
@@ -1261,357 +1170,6 @@ const Manufacturing = () => {
       </DialogActions>
     </Dialog>
   );
-
-  const handleOpenManufacturingPaymentDialog = async (assignment) => {
-    try {
-      // Fetch available advance payments for this contractor
-      const response = await axios.get(
-        `/api/manufacturing/contractors/${assignment.contractor_id}/advance-payments?status=paid`
-      );
-      const contractorAdvancePayments = response.data.payments || [];
-
-      // Set the form data with the assignment details
-      setManufacturingPaymentFormData({
-        contractor_id: assignment.contractor_id,
-        assignment_id: assignment.id,
-        quantity_kg: assignment.completed_quantity || assignment.quantity || "",
-        price_per_kg: "",
-        total_amount: "",
-        notes: "",
-        status: "pending",
-        id: null,
-        finished_good_id: assignment.finished_good_id || "",
-        selectedAdvancePayments: [],
-      });
-
-      // Update the advance payments state with only this contractor's payments
-      setAdvancePayments(contractorAdvancePayments);
-
-      setOpenManufacturingPaymentDialog(true);
-    } catch (error) {
-      console.error("Error preparing manufacturing payment dialog:", error);
-      enqueueSnackbar("Error preparing payment form", { variant: "error" });
-    }
-  };
-
-  const handleCloseManufacturingPaymentDialog = () => {
-    setOpenManufacturingPaymentDialog(false);
-    setManufacturingPaymentFormData({
-      contractor_id: "",
-      assignment_id: "",
-      quantity_kg: "",
-      price_per_kg: "",
-      total_amount: "",
-      notes: "",
-      status: "pending",
-      id: null,
-      finished_good_id: "",
-      selectedAdvancePayments: [],
-    });
-    // Reset advance payments to empty array
-    setAdvancePayments([]);
-  };
-
-  const handleManufacturingPaymentSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const formattedData = {
-        contractor_id: Number(manufacturingPaymentFormData.contractor_id),
-        assignment_id: Number(manufacturingPaymentFormData.assignment_id),
-        quantity_kg: Number(manufacturingPaymentFormData.quantity_kg),
-        price_per_kg: Number(manufacturingPaymentFormData.price_per_kg),
-        amount: Number(manufacturingPaymentFormData.total_amount),
-        notes: manufacturingPaymentFormData.notes || null,
-        status: manufacturingPaymentFormData.status || "pending",
-        // Add selected advance payments
-        advance_payment_ids:
-          manufacturingPaymentFormData.selectedAdvancePayments || [],
-      };
-
-      if (manufacturingPaymentFormData.id) {
-        // Edit existing payment
-        await axios.put(
-          `/api/manufacturing/payments/${manufacturingPaymentFormData.id}`,
-          formattedData
-        );
-        enqueueSnackbar("Manufacturing payment updated successfully", {
-          variant: "success",
-        });
-      } else {
-        // Create new payment
-        const response = await axios.post(
-          "/api/manufacturing/payments",
-          formattedData
-        );
-        if (response.data.receiptHtml) {
-          const receiptWindow = window.open("", "_blank");
-          if (receiptWindow) {
-            receiptWindow.document.write(response.data.receiptHtml);
-            receiptWindow.document.close();
-            receiptWindow.onload = function () {
-              receiptWindow.print();
-            };
-          } else {
-            enqueueSnackbar("Please allow pop-ups to print receipts", {
-              variant: "warning",
-            });
-          }
-        }
-        enqueueSnackbar("Manufacturing payment processed successfully", {
-          variant: "success",
-        });
-      }
-
-      handleCloseManufacturingPaymentDialog();
-      // Refresh data
-      await Promise.all([
-        fetchManufacturingContractors(),
-        fetchAssignments(),
-        fetchAdvancePayments(),
-        fetchManufacturingPayments(),
-      ]);
-    } catch (error) {
-      console.error("Error processing manufacturing payment:", error);
-      enqueueSnackbar(
-        error.response?.data?.message ||
-          "Error processing manufacturing payment",
-        { variant: "error" }
-      );
-    }
-  };
-
-  const handleEditManufacturingPayment = (payment) => {
-    const price_per_kg = (
-      parseFloat(payment.amount) / parseFloat(payment.quantity_kg)
-    ).toFixed(2);
-    setManufacturingPaymentFormData({
-      id: payment.id,
-      contractor_id: payment.contractor_id,
-      assignment_id: payment.assignment_id,
-      quantity_kg: payment.quantity_kg,
-      price_per_kg: price_per_kg,
-      total_amount: payment.amount,
-      notes: payment.notes,
-      status: payment.status,
-    });
-    setOpenManufacturingPaymentDialog(true);
-  };
-
-  const handleDeleteManufacturingPayment = async (paymentId) => {
-    if (!window.confirm("Are you sure you want to delete this payment?"))
-      return;
-
-    try {
-      await axios.delete(`/api/manufacturing/payments/${paymentId}`);
-      enqueueSnackbar("Manufacturing payment deleted successfully", {
-        variant: "success",
-      });
-      await Promise.all([
-        fetchManufacturingContractors(),
-        fetchAssignments(),
-        fetchAdvancePayments(),
-        fetchManufacturingPayments(),
-      ]);
-    } catch (error) {
-      console.error("Error deleting payment:", error);
-      enqueueSnackbar(
-        error.response?.data?.message || "Error deleting payment",
-        { variant: "error" }
-      );
-    }
-  };
-
-  const handleMarkManufacturingPaymentAsPaid = async (paymentId) => {
-    try {
-      await axios.put(`/api/manufacturing/payments/${paymentId}/mark-paid`);
-      enqueueSnackbar("Manufacturing payment marked as paid", {
-        variant: "success",
-      });
-      await Promise.all([
-        fetchManufacturingContractors(),
-        fetchAssignments(),
-        fetchAdvancePayments(),
-      ]);
-    } catch (error) {
-      console.error("Error marking payment as paid:", error);
-      enqueueSnackbar(
-        error.response?.data?.message || "Error marking payment as paid",
-        { variant: "error" }
-      );
-    }
-  };
-
-  useEffect(() => {
-    if (
-      manufacturingPaymentFormData.quantity_kg &&
-      manufacturingPaymentFormData.price_per_kg
-    ) {
-      const quantity = parseFloat(manufacturingPaymentFormData.quantity_kg);
-      const pricePerKg = parseFloat(manufacturingPaymentFormData.price_per_kg);
-      const total = quantity * pricePerKg;
-
-      setManufacturingPaymentFormData((prev) => ({
-        ...prev,
-        total_amount: total,
-      }));
-    }
-  }, [
-    manufacturingPaymentFormData.quantity_kg,
-    manufacturingPaymentFormData.price_per_kg,
-  ]);
-
-  const handleAssignmentChange = (e) => {
-    const assignmentId = e.target.value;
-    const selectedAssignment = assignments.find((a) => a.id === assignmentId);
-
-    setManufacturingPaymentFormData((prev) => ({
-      ...prev,
-      assignment_id: assignmentId,
-      // Pre-fill quantity from the selected assignment
-      quantity_kg:
-        selectedAssignment?.completed_quantity ||
-        selectedAssignment?.quantity ||
-        "",
-    }));
-  };
-
-  // First, add these handler functions if they don't exist
-
-  const handlePrintPaymentReceipt = async (payment) => {
-    try {
-      const receiptResponse = await axios.post(
-        "/api/manufacturing/payments/receipt",
-        {
-          payment,
-        }
-      );
-
-      const receiptHtml = receiptResponse.data.receiptHtml;
-      const printWindow = window.open("", "_blank");
-      printWindow.document.write(receiptHtml);
-      printWindow.document.close();
-      printWindow.print();
-    } catch (error) {
-      console.error("Error generating receipt:", error);
-      enqueueSnackbar("Error generating receipt", { variant: "error" });
-    }
-  };
-
-  const handleMarkPaymentAsPaid = async (paymentId) => {
-    try {
-      await axios.put(`/api/manufacturing/payments/${paymentId}/mark-paid`);
-      enqueueSnackbar("Payment marked as paid successfully", {
-        variant: "success",
-      });
-      fetchManufacturingPayments();
-    } catch (error) {
-      console.error("Error marking payment as paid:", error);
-      enqueueSnackbar(
-        error.response?.data?.message || "Error marking payment as paid",
-        {
-          variant: "error",
-        }
-      );
-    }
-  };
-
-  // Add this function with other handler functions
-  const handlePrintAdvancePayment = async (payment) => {
-    try {
-      const receiptResponse = await axios.post(
-        "/api/manufacturing/advance-payments/receipt",
-        {
-          payment,
-        }
-      );
-
-      const receiptHtml = receiptResponse.data.receiptHtml;
-      const printWindow = window.open("", "_blank");
-      printWindow.document.write(receiptHtml);
-      printWindow.document.close();
-      printWindow.print();
-    } catch (error) {
-      console.error("Error generating receipt:", error);
-      enqueueSnackbar("Error generating receipt", { variant: "error" });
-    }
-  };
-
-  const handleOrderSubmit = async () => {
-    try {
-      if (selectedOrder) {
-        await axios.put(`/api/manufacturing/orders/${selectedOrder.id}`, orderFormData);
-        enqueueSnackbar('Order updated successfully', { variant: 'success' });
-      } else {
-        await axios.post('/api/manufacturing/orders', orderFormData);
-        enqueueSnackbar('Order created successfully', { variant: 'success' });
-      }
-      handleCloseOrderDialog();
-      fetchOrders();
-    } catch (error) {
-      console.error('Error saving order:', error);
-      enqueueSnackbar('Error saving order', { variant: 'error' });
-    }
-  };
-
-  const handlePaymentSubmit = async () => {
-    try {
-      await axios.post('/api/manufacturing/payments', manufacturingPaymentFormData);
-      handleClosePaymentDialog();
-      fetchPayments();
-      enqueueSnackbar('Payment processed successfully', { variant: 'success' });
-    } catch (error) {
-      console.error('Error processing payment:', error);
-      enqueueSnackbar('Error processing payment', { variant: 'error' });
-    }
-  };
-
-  const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this order?')) {
-      try {
-        await axios.delete(`/api/manufacturing/orders/${id}`);
-        fetchOrders();
-        enqueueSnackbar('Order deleted successfully', { variant: 'success' });
-      } catch (error) {
-        console.error('Error deleting order:', error);
-        enqueueSnackbar('Error deleting order', { variant: 'error' });
-      }
-    }
-  };
-
-  // Add these functions before the return statement
-  const handleCloseOrderDialog = () => {
-    setOpenOrderDialog(false);
-    setSelectedOrder(null);
-  };
-
-  const handleClosePaymentDialog = () => {
-    setOpenPaymentDialog(false);
-    setPaymentFormData({
-      amount: '',
-      date: new Date().toISOString().split('T')[0],
-      notes: ''
-    });
-  };
-
-  const fetchOrders = async () => {
-    try {
-      const response = await axios.get('/api/manufacturing/orders');
-      setManufacturingOrders(response.data);
-    } catch (error) {
-      console.error('Error fetching orders:', error);
-      enqueueSnackbar('Error fetching orders', { variant: 'error' });
-    }
-  };
-
-  const fetchPayments = async () => {
-    try {
-      const response = await axios.get('/api/manufacturing/payments');
-      setPayments(response.data);
-    } catch (error) {
-      console.error('Error fetching payments:', error);
-      enqueueSnackbar('Error fetching payments', { variant: 'error' });
-    }
-  };
 
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
@@ -1718,7 +1276,6 @@ const Manufacturing = () => {
           <Tab label="Contractors" />
           <Tab label="Purchases" />
           <Tab label="Advanced Payments" />
-          <Tab label="Payments" />
           <Tab label="Reports" />
         </Tabs>
 
@@ -1887,38 +1444,26 @@ const Manufacturing = () => {
                             <Button
                               size="small"
                               color="success"
-                              onClick={() =>
-                                handleOpenCompletionDialog(assignment)
-                              }
+                              onClick={() => handleCompleteAssignment(assignment)}
                             >
-                              Completed
+                              Complete
                             </Button>
                           )}
-                          {assignment.status === "completed" && (
+                          {assignment.status !== "completed" && (
                             <IconButton
                               size="small"
                               onClick={() =>
-                                handleOpenManufacturingPaymentDialog(assignment)
+                                handleOpenAdvancePaymentDialog({
+                                  id: assignment.contractor_id,
+                                  name: assignment.contractor_name,
+                                })
                               }
-                              sx={{ color: "info.main" }}
-                              title="Manufacturing Payment"
+                              sx={{ color: "warning.main" }}
+                              title="Advance Payment"
                             >
-                              <CreditCardIcon />
+                              <MoneyIcon />
                             </IconButton>
                           )}
-                          <IconButton
-                            size="small"
-                            onClick={() =>
-                              handleOpenAdvancePaymentDialog({
-                                id: assignment.contractor_id,
-                                name: assignment.contractor_name,
-                              })
-                            }
-                            sx={{ color: "warning.main" }}
-                            title="Advance Payment"
-                          >
-                            <MoneyIcon />
-                          </IconButton>
                           <IconButton
                             size="small"
                             onClick={() =>
@@ -2134,13 +1679,6 @@ const Manufacturing = () => {
                               Paid
                             </Button>
                           )}
-                        <IconButton
-                          size="small"
-                          onClick={() => handlePrintAdvancePayment(payment)}
-                          sx={{ color: "warning.main" }}
-                        >
-                          <PrintIcon />
-                        </IconButton>
                         {payment.status !== "used" && (
                           <>
                             <IconButton
@@ -2152,9 +1690,7 @@ const Manufacturing = () => {
                             </IconButton>
                             <IconButton
                               size="small"
-                              onClick={() =>
-                                handleDeleteAdvancePayment(payment.id)
-                              }
+                              onClick={() => handleDeleteAdvancePayment(payment.id)}
                               sx={{ color: "error.main" }}
                             >
                               <DeleteIcon />
@@ -2171,104 +1707,6 @@ const Manufacturing = () => {
         )}
 
         {currentTab === 4 && (
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Receipt Number</TableCell>
-                  <TableCell>Contractor</TableCell>
-                  <TableCell>Amount</TableCell>
-                  <TableCell>Quantity (kg)</TableCell>
-                  <TableCell>Payment Date</TableCell>
-                  <TableCell>Notes</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {manufacturingPayments.map((payment) => (
-                  <TableRow key={payment.id} hover>
-                    <TableCell>{payment.receipt_number}</TableCell>
-                    <TableCell>{payment.contractor_name}</TableCell>
-                    <TableCell>
-                      {formatCurrency(payment.amount, false)}
-                    </TableCell>
-                    <TableCell>{payment.quantity_kg}</TableCell>
-                    <TableCell>
-                      {new Date(payment.payment_date).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>{payment.notes}</TableCell>
-                    <TableCell>
-                      <Chip
-                        label={payment.status}
-                        color={
-                          payment.status === "paid"
-                            ? "success"
-                            : payment.status === "pending"
-                            ? "warning"
-                            : "error"
-                        }
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell align="right">
-                      <Box
-                        sx={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "flex-end",
-                          gap: 1,
-                        }}
-                      >
-                        {payment.status !== "paid" && (
-                          <Button
-                            size="small"
-                            color="success"
-                            onClick={() => handleMarkPaymentAsPaid(payment.id)}
-                          >
-                            Paid
-                          </Button>
-                        )}
-                        <IconButton
-                          size="small"
-                          onClick={() => handlePrintPaymentReceipt(payment)}
-                          sx={{ color: "warning.main" }}
-                        >
-                          <PrintIcon />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() => {
-                            setSelectedPayment(payment);
-                            setManufacturingPaymentFormData({
-                              ...payment,
-                              id: payment.id,
-                            });
-                            setOpenManufacturingPaymentDialog(true);
-                          }}
-                          sx={{ color: "primary.main" }}
-                        >
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() =>
-                            handleDeleteManufacturingPayment(payment.id)
-                          }
-                          sx={{ color: "error.main" }}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        )}
-
-        {currentTab === 5 && (
           <Box>
             <Paper sx={{ p: 2, mb: 3 }}>
               <Grid container spacing={2} alignItems="center">
@@ -2748,244 +2186,13 @@ const Manufacturing = () => {
         }}
         selectedContractor={selectedContractor}
         onSuccess={handlePurchaseSuccess}
-        contractors={cuttingContractors}
+        cuttingContractors={cuttingContractors}
+        manufacturingContractors={manufacturingContractors}
       />
 
       <ReassignmentDialog />
 
       <ReportDialog />
-
-      <Dialog open={openCompletionDialog} onClose={handleCloseCompletionDialog}>
-        <DialogTitle>Complete Manufacturing Assignment</DialogTitle>
-        <DialogContent>
-          <Box
-            component="form"
-            onSubmit={handleCompletionSubmit}
-            sx={{ mt: 2 }}
-          >
-            <Grid container spacing={2}>
-              <Grid item xs={12}>
-                <FormControl fullWidth>
-                  <InputLabel required>Finished Good</InputLabel>
-                  <Select
-                    value={completionFormData.finished_good_id}
-                    onChange={(e) =>
-                      setCompletionFormData({
-                        ...completionFormData,
-                        finished_good_id: e.target.value,
-                      })
-                    }
-                    required
-                  >
-                    {finishedGoods.map((good) => (
-                      <MenuItem key={good.id} value={good.id}>
-                        {good.product_name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Quantity Received (kg)"
-                  type="number"
-                  value={completionFormData.quantity_received}
-                  required
-                  onChange={(e) =>
-                    setCompletionFormData({
-                      ...completionFormData,
-                      quantity_received: e.target.value,
-                    })
-                  }
-                />
-                {selectedAssignment && (
-                  <FormHelperText>
-                    Original assigned quantity:{" "}
-                    {selectedAssignment.raw_material_quantity} kg
-                  </FormHelperText>
-                )}
-              </Grid>
-            </Grid>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseCompletionDialog}>Cancel</Button>
-          <Button
-            onClick={handleCompletionSubmit}
-            variant="contained"
-            disabled={
-              !completionFormData.quantity_received ||
-              !completionFormData.finished_good_id
-            }
-          >
-            Complete Assignment
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog
-        open={openManufacturingPaymentDialog}
-        onClose={handleCloseManufacturingPaymentDialog}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>
-          {manufacturingPaymentFormData.id
-            ? "Edit Manufacturing Payment"
-            : "Process Manufacturing Payment"}
-        </DialogTitle>
-        <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12}>
-              <FormControl fullWidth required>
-                <InputLabel>Finished Good</InputLabel>
-                <Select
-                  value={manufacturingPaymentFormData.finished_good_id || ""}
-                  onChange={(e) =>
-                    setManufacturingPaymentFormData((prev) => ({
-                      ...prev,
-                      finished_good_id: e.target.value,
-                    }))
-                  }
-                  label="Finished Good"
-                  disabled // Disable since it should come from the assignment
-                >
-                  {finishedGoods.map((good) => (
-                    <MenuItem key={good.id} value={good.id}>
-                      {good.product_name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Quantity (kg)"
-                type="number"
-                value={manufacturingPaymentFormData.quantity_kg || ""}
-                InputProps={{
-                  readOnly: true,
-                }}
-                disabled
-                required
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Price per kg"
-                type="number"
-                value={manufacturingPaymentFormData.price_per_kg}
-                onChange={(e) => {
-                  setManufacturingPaymentFormData((prev) => ({
-                    ...prev,
-                    price_per_kg: e.target.value,
-                  }));
-                }}
-                required
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Total Amount"
-                type="number"
-                value={manufacturingPaymentFormData.total_amount}
-                onChange={(e) =>
-                  setManufacturingPaymentFormData((prev) => ({
-                    ...prev,
-                    total_amount: e.target.value,
-                  }))
-                }
-                required
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Notes"
-                multiline
-                rows={2}
-                value={manufacturingPaymentFormData.notes}
-                onChange={(e) =>
-                  setManufacturingPaymentFormData((prev) => ({
-                    ...prev,
-                    notes: e.target.value,
-                  }))
-                }
-              />
-            </Grid>
-            {/* Add advance payments section */}
-            <Grid item xs={12}>
-              <FormControl fullWidth>
-                <InputLabel>Available Advance Payments</InputLabel>
-                <Select
-                  multiple
-                  value={
-                    manufacturingPaymentFormData.selectedAdvancePayments || []
-                  }
-                  onChange={(e) =>
-                    setManufacturingPaymentFormData((prev) => ({
-                      ...prev,
-                      selectedAdvancePayments: e.target.value,
-                    }))
-                  }
-                  label="Available Advance Payments"
-                  renderValue={(selected) => {
-                    const selectedPayments = advancePayments.filter((payment) =>
-                      selected.includes(payment.id)
-                    );
-                    return selectedPayments
-                      .map(
-                        (payment) =>
-                          `${formatCurrency(payment.amount, false)} (${new Date(
-                            payment.payment_date
-                          ).toLocaleDateString()})`
-                      )
-                      .join(", ");
-                  }}
-                >
-                  {advancePayments
-                    .filter((payment) => payment.status === "paid")
-                    .map((payment) => (
-                      <MenuItem key={payment.id} value={payment.id}>
-                        <Checkbox
-                          checked={
-                            manufacturingPaymentFormData.selectedAdvancePayments?.includes(
-                              payment.id
-                            ) || false
-                          }
-                        />
-                        <ListItemText
-                          primary={`${formatCurrency(payment.amount, false)}`}
-                          secondary={`Date: ${new Date(
-                            payment.payment_date
-                          ).toLocaleDateString()}`}
-                        />
-                      </MenuItem>
-                    ))}
-                </Select>
-              </FormControl>
-            </Grid>
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseManufacturingPaymentDialog}>
-            Cancel
-          </Button>
-          <Button
-            variant="contained"
-            onClick={handleManufacturingPaymentSubmit}
-            disabled={!manufacturingPaymentFormData.assignment_id}
-          >
-            {manufacturingPaymentFormData.id
-              ? "Update Payment"
-              : "Process Payment"}
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 };

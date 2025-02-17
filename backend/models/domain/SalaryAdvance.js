@@ -40,7 +40,7 @@ class SalaryAdvance extends BaseModel {
              e.employment_type
       FROM salary_advances sa
       JOIN employees e ON sa.employee_id = e.id
-      WHERE sa.approval_status = 'pending'
+      WHERE sa.status = 'pending'
       ORDER BY sa.request_date ASC
     `);
     return rows;
@@ -48,7 +48,7 @@ class SalaryAdvance extends BaseModel {
 
   async approve(id, approvedBy) {
     const [result] = await this.pool.execute(
-      'UPDATE salary_advances SET approval_status = ?, approved_by = ? WHERE id = ?',
+      'UPDATE salary_advances SET status = ?, approved_by = ? WHERE id = ?',
       ['approved', approvedBy, id]
     );
     return result.affectedRows > 0;
@@ -56,7 +56,7 @@ class SalaryAdvance extends BaseModel {
 
   async reject(id, approvedBy) {
     const [result] = await this.pool.execute(
-      'UPDATE salary_advances SET approval_status = ?, approved_by = ? WHERE id = ?',
+      'UPDATE salary_advances SET status = ?, approved_by = ? WHERE id = ?',
       ['rejected', approvedBy, id]
     );
     return result.affectedRows > 0;

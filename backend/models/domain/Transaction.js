@@ -92,7 +92,7 @@ class Transaction extends BaseModel {
         `INSERT INTO transactions (
           date, reference, description, status,
           type, amount, category,
-          well_id, lease_id, created_by
+          payment_method, employee_id, created_by
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           transactionData.date,
@@ -102,8 +102,8 @@ class Transaction extends BaseModel {
           transactionData.type,
           transactionData.amount,
           transactionData.category,
-          transactionData.well_id,
-          transactionData.lease_id,
+          transactionData.payment_method || 'cash',
+          transactionData.employee_id || null,
           transactionData.created_by
         ]
       );

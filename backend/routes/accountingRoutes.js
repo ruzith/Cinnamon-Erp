@@ -28,17 +28,21 @@ router.get('/accounts', protect, async (req, res) => {
 });
 
 router.post('/accounts', protect, authorize('admin', 'accountant'), async (req, res) => {
+  const connection = await Account.pool.getConnection();
   try {
-    // Validate account type
+    await connection.beginTransaction();
+
+    // Validate account type and ensure lowercase
     const validTypes = ['asset', 'liability', 'equity', 'revenue', 'expense'];
-    if (!validTypes.includes(req.body.type)) {
+    const accountType = (req.body.type || '').toLowerCase();
+    if (!validTypes.includes(accountType)) {
       return res.status(400).json({
         message: `Invalid account type. Must be one of: ${validTypes.join(', ')}`
       });
     }
 
-    // Create account with explicit field names
-    const [result] = await Account.pool.execute(
+    // Create account with explicit field names and zero initial balance
+    const [result] = await connection.execute(
       `INSERT INTO accounts (
         code,
         name,
@@ -51,24 +55,178 @@ router.post('/accounts', protect, authorize('admin', 'accountant'), async (req, 
       [
         req.body.code,
         req.body.name,
-        req.body.type,
+        accountType,
         req.body.category || '',
         req.body.description || '',
-        req.body.balance || 0,
+        0, // Always start with zero balance
         req.body.status || 'active'
       ]
     );
 
-    const [account] = await Account.pool.execute(
+    const accountId = result.insertId;
+
+    // If there's an opening balance, create a transaction for it
+    if (req.body.balance && parseFloat(req.body.balance) !== 0) {
+      const openingBalance = parseFloat(req.body.balance);
+      const transactionRef = await Transaction.generateReference();
+
+      // Get the Capital account (3001)
+      const [capitalAccount] = await connection.execute(
+        'SELECT id FROM accounts WHERE code = "3001"'
+      );
+
+      if (!capitalAccount[0]) {
+        throw new Error('Capital account (3001) not found');
+      }
+
+      const capitalAccountId = capitalAccount[0].id;
+
+      // Create the opening balance transaction
+      const [transactionResult] = await connection.execute(
+        `INSERT INTO transactions (
+          date,
+          reference,
+          description,
+          type,
+          category,
+          amount,
+          status,
+          created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          new Date().toISOString().split('T')[0],
+          transactionRef,
+          `Opening balance for account ${req.body.code} - ${req.body.name}`,
+          'equity',
+          'system',
+          Math.abs(openingBalance),
+          'posted',
+          req.user.id
+        ]
+      );
+
+      const transactionId = transactionResult.insertId;
+
+      // Determine debit and credit entries based on account type and balance
+      let debitAccountId, creditAccountId;
+      if (['asset', 'expense'].includes(accountType)) {
+        // For asset/expense accounts:
+        // Positive balance: Debit the account, Credit capital
+        // Negative balance: Credit the account, Debit capital
+        if (openingBalance > 0) {
+          debitAccountId = accountId;
+          creditAccountId = capitalAccountId;
+        } else {
+          debitAccountId = capitalAccountId;
+          creditAccountId = accountId;
+        }
+      } else {
+        // For liability/equity/revenue accounts:
+        // Positive balance: Credit the account, Debit capital
+        // Negative balance: Debit the account, Credit capital
+        if (openingBalance > 0) {
+          debitAccountId = capitalAccountId;
+          creditAccountId = accountId;
+        } else {
+          debitAccountId = accountId;
+          creditAccountId = capitalAccountId;
+        }
+      }
+
+      // Create transaction entries
+      await connection.execute(
+        `INSERT INTO transactions_entries (
+          transaction_id,
+          account_id,
+          description,
+          debit,
+          credit
+        ) VALUES (?, ?, ?, ?, ?), (?, ?, ?, ?, ?)`,
+        [
+          transactionId,
+          debitAccountId,
+          `Opening balance entry`,
+          Math.abs(openingBalance),
+          0,
+          transactionId,
+          creditAccountId,
+          `Opening balance entry`,
+          0,
+          Math.abs(openingBalance)
+        ]
+      );
+
+      // Update account balances
+      await connection.execute(
+        'UPDATE accounts SET balance = balance + ? WHERE id = ?',
+        [openingBalance, accountId]
+      );
+
+      // Update capital account balance based on the entry type
+      const capitalBalanceChange = ['asset', 'expense'].includes(accountType) ?
+        (openingBalance > 0 ? openingBalance : -openingBalance) :
+        (openingBalance > 0 ? -openingBalance : openingBalance);
+
+      await connection.execute(
+        'UPDATE accounts SET balance = balance + ? WHERE id = ?',
+        [capitalBalanceChange, capitalAccountId]
+      );
+    }
+
+    await connection.commit();
+
+    // Fetch the created account
+    const [account] = await connection.execute(
       'SELECT * FROM accounts WHERE id = ?',
-      [result.insertId]
+      [accountId]
     );
 
     res.status(201).json(account[0]);
+
   } catch (error) {
+    await connection.rollback();
+    console.error('Error creating account:', error);
     res.status(400).json({ message: error.message });
+  } finally {
+    connection.release();
   }
 });
+
+// Helper function to get or create Opening Balance Equity account
+async function getOpeningBalanceEquityAccount(connection) {
+  // Try to find existing Opening Balance Equity account
+  const [existingAccount] = await connection.execute(
+    'SELECT id FROM accounts WHERE code = "3001" AND name = "Opening Balance Equity"'
+  );
+
+  if (existingAccount.length > 0) {
+    return existingAccount[0].id;
+  }
+
+  // Create Opening Balance Equity account if it doesn't exist
+  const [result] = await connection.execute(
+    `INSERT INTO accounts (
+      code,
+      name,
+      type,
+      category,
+      description,
+      balance,
+      status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      '3001',
+      'Opening Balance Equity',
+      'equity',
+      'other_equity',
+      'Account used for opening balances',
+      0,
+      'active'
+    ]
+  );
+
+  return result.insertId;
+}
 
 // Transaction routes
 router.get('/transactions', protect, async (req, res) => {
@@ -126,19 +284,20 @@ router.get('/transactions/:id', protect, async (req, res) => {
   }
 });
 
-router.post('/transactions', protect, authorize('admin', 'accountant'), async (req, res) => {
+router.post('/transactions', protect, async (req, res) => {
   try {
-    const transactionId = await Account.createTransaction({
-      ...req.body,
-      created_by: req.user.id
-    });
+    const { entries, ...transactionData } = req.body;
 
-    res.status(201).json({
-      message: 'Transaction created successfully',
-      transactionId
-    });
+    // Add the user ID to the transaction data
+    transactionData.created_by = req.user.id;
+
+    // Create the transaction with its entries
+    const transaction = await Transaction.createWithEntries(transactionData, entries);
+
+    res.status(201).json(transaction);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Error creating transaction:', error);
+    res.status(400).json({ message: error.message });
   }
 });
 

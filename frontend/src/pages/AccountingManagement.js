@@ -708,40 +708,76 @@ const Accounting = () => {
 
     // Prepare entries based on transaction type
     let entries = [];
-    if (
-      type === "expense" ||
-      type === "manufacturing_payment" ||
-      type === "salary"
-    ) {
-      entries = [
-        {
-          account_id: account, // Expense account
-          description: transactionFormData.description,
-          debit: amount,
-          credit: 0,
-        },
-        {
-          account_id: cashAccount.id, // Use the actual cash account ID
-          description: transactionFormData.description,
-          debit: 0,
-          credit: amount,
-        },
-      ];
+
+    // Handle transactions based on type and whether cash account is involved
+    if (type === "expense" || type === "manufacturing_payment" || type === "salary") {
+      if (account === cashAccount.id) {
+        // Cash payment to another account (e.g., direct cash payment)
+        entries = [
+          {
+            account_id: cashAccount.id, // Cash account
+            description: transactionFormData.description,
+            debit: 0,
+            credit: amount, // Reduce cash
+          },
+          {
+            account_id: transactionFormData.secondaryAccount || account, // Account receiving the payment
+            description: transactionFormData.description,
+            debit: amount, // Increase the receiving account
+            credit: 0,
+          },
+        ];
+      } else {
+        // Regular expense/payment through cash
+        entries = [
+          {
+            account_id: account, // Expense/Payment account
+            description: transactionFormData.description,
+            debit: amount,
+            credit: 0,
+          },
+          {
+            account_id: cashAccount.id, // Cash account
+            description: transactionFormData.description,
+            debit: 0,
+            credit: amount,
+          },
+        ];
+      }
     } else if (type === "revenue" || type === "credit_payment") {
-      entries = [
-        {
-          account_id: cashAccount.id, // Use the actual cash account ID
-          description: transactionFormData.description,
-          debit: amount,
-          credit: 0,
-        },
-        {
-          account_id: account, // Revenue account
-          description: transactionFormData.description,
-          debit: 0,
-          credit: amount,
-        },
-      ];
+      if (account === cashAccount.id) {
+        // Cash receipt from another account (e.g., direct cash receipt)
+        entries = [
+          {
+            account_id: cashAccount.id, // Cash account
+            description: transactionFormData.description,
+            debit: amount, // Increase cash
+            credit: 0,
+          },
+          {
+            account_id: transactionFormData.secondaryAccount || account, // Account providing the money
+            description: transactionFormData.description,
+            debit: 0,
+            credit: amount, // Reduce the providing account
+          },
+        ];
+      } else {
+        // Regular revenue/receipt through cash
+        entries = [
+          {
+            account_id: cashAccount.id, // Cash account
+            description: transactionFormData.description,
+            debit: amount,
+            credit: 0,
+          },
+          {
+            account_id: account, // Revenue account
+            description: transactionFormData.description,
+            debit: 0,
+            credit: amount,
+          },
+        ];
+      }
     }
 
     try {
@@ -762,6 +798,7 @@ const Accounting = () => {
 
       fetchTransactions();
       fetchSummary();
+      fetchCashbook();
       handleCloseTransactionDialog();
       enqueueSnackbar("Transaction saved successfully", { variant: "success" });
     } catch (error) {
@@ -1380,6 +1417,7 @@ const Accounting = () => {
     try {
       await dispatch(postTransaction(transactionId)).unwrap();
       fetchTransactions();
+      fetchAccounts();
       enqueueSnackbar("Transaction posted successfully", {
         variant: "success",
       });
@@ -2210,7 +2248,29 @@ const Accounting = () => {
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid item xs={6}>
+              {transactionFormData.account === cashAccount?.id && (
+                <Grid item xs={6}>
+                  <FormControl fullWidth required>
+                    <InputLabel>Secondary Account</InputLabel>
+                    <Select
+                      name="secondaryAccount"
+                      value={transactionFormData.secondaryAccount || ""}
+                      label="Secondary Account"
+                      onChange={handleTransactionInputChange}
+                    >
+                      <MenuItem value="">Select Account</MenuItem>
+                      {accounts
+                        .filter((acc) => acc.id !== cashAccount?.id)
+                        .map((account) => (
+                          <MenuItem key={account.id} value={account.id}>
+                            {account.name}
+                          </MenuItem>
+                        ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+              )}
+              <Grid item xs={transactionFormData.account === cashAccount?.id ? 12 : 6}>
                 <FormControl fullWidth required>
                   <InputLabel>Payment Method</InputLabel>
                   <Select

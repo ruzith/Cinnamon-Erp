@@ -2002,8 +2002,8 @@ exports.markPurchaseAsPaid = async (req, res) => {
       });
     }
 
-    // Calculate payment amount (final_amount minus advance_payment)
-    const paymentAmount = purchase.final_amount - (purchase.advance_payment || 0);
+    // Calculate payment amount
+    const paymentAmount = purchase.final_amount;
 
     if (paymentAmount < 0) {
       await connection.rollback();
@@ -2043,7 +2043,7 @@ exports.markPurchaseAsPaid = async (req, res) => {
         ?
       )`,
       [
-        `PUR-${purchase.invoice_number}`,
+        purchase.invoice_number,
         `Purchase Payment to ${purchase.contractor_name} (${purchase.contractor_number})`,
         paymentAmount,
         userId,
